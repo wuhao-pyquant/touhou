@@ -98,9 +98,46 @@ func _verify_main_player_layout(gm: Object, root_gm: Node, main_scene: PackedSce
 	main._update_boss_entity(0.0)
 	_assert(is_equal_approx(main.boss.target_x, gm.SCREEN_W * 0.5), "Boss target_x should center on SCREEN_W")
 
+	# Viewport-aware boss HUD geometry
+	var original_w: int = main.SCREEN_W
+	var original_h: int = main.SCREEN_H
+	main.boss = {}
+	main.SCREEN_W = gm.SCREEN_W
+	main.SCREEN_H = gm.SCREEN_H
+	_verify_boss_hud_geometry(main)
+	main.SCREEN_W = 960
+	main.SCREEN_H = 1440
+	_verify_boss_hud_geometry(main)
+	main.SCREEN_W = original_w
+	main.SCREEN_H = original_h
+
 	_verify_item_boundary(gm, main)
 	_verify_gameplay_fallbacks(gm, main)
 	main.queue_free()
+
+func _verify_boss_hud_geometry(main: Node2D) -> void:
+	var base_hp: Rect2 = main._boss_hp_bar_rect()
+	var expected_hp_w: float = clampf(main.SCREEN_W * 200.0 / 720.0, 120.0, 360.0)
+	_assert(is_equal_approx(base_hp.size.x, expected_hp_w), "HP bar width should follow viewport width ratio")
+	_assert(is_equal_approx(base_hp.position.x, (main.SCREEN_W - expected_hp_w) * 0.5), "HP bar should stay centered by viewport")
+	_assert(is_equal_approx(base_hp.position.y, main.SCREEN_H * (28.0 / 960.0)), "HP bar Y should be viewport-driven")
+	_assert(is_equal_approx(base_hp.size.y, 14.0), "HP bar height should remain fixed at 14")
+
+	var base_indicator_w: float = main._boss_indicator_width()
+	var expected_indicator_w: float = clampf(main.SCREEN_W * (40.0 / 720.0), 20.0, 80.0)
+	_assert(is_equal_approx(base_indicator_w, expected_indicator_w), "Indicator width should follow viewport width ratio")
+	_assert(base_indicator_w > 0.0, "Indicator width should stay positive")
+
+	main.boss = {"x": -250.0}
+	var left_rect: Rect2 = main._boss_indicator_rect()
+	var left_target_x: float = 16.0
+	_assert(is_equal_approx(left_rect.position.x, left_target_x), "Indicator should clamp to left playfield margin")
+
+	main.boss = {"x": main.SCREEN_W + 250.0}
+	var right_rect: Rect2 = main._boss_indicator_rect()
+	_assert(is_equal_approx(right_rect.position.x, main.SCREEN_W - 16.0 - base_indicator_w), "Indicator should clamp to right playfield margin")
+	_assert(is_equal_approx(right_rect.position.y, main.SCREEN_H * (610.0 / 960.0)), "Indicator Y should be viewport-derived")
+	_assert(is_equal_approx(right_rect.size.y, main.SCREEN_H * (24.0 / 960.0)), "Indicator height should be viewport-derived")
 
 func _init() -> void:
 	call_deferred("_run")

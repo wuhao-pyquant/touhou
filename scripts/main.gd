@@ -30,6 +30,16 @@ var player_deathbomb_timer: float = 0.0
 var MAX_BULLETS: int = 12000
 const PLAYFIELD_MARGIN := 16.0
 const SHOT_NAMES_ZH := ["\u6563\u5c04", "\u8d2f\u901a", "\u8ffd\u8e2a"]
+const BOSS_HP_BAR_Y_RATIO := 28.0 / 960.0
+const BOSS_HP_BAR_H := 14.0
+const BOSS_HP_BAR_WIDTH_RATIO := 200.0 / 720.0
+const BOSS_HP_BAR_WIDTH_MIN := 120.0
+const BOSS_HP_BAR_WIDTH_MAX := 360.0
+const BOSS_INDICATOR_W_RATIO := 40.0 / 720.0
+const BOSS_INDICATOR_H_RATIO := 24.0 / 960.0
+const BOSS_INDICATOR_Y_RATIO := 610.0 / 960.0
+const BOSS_INDICATOR_W_MIN := 20.0
+const BOSS_INDICATOR_W_MAX := 80.0
 var game_manager_ref: Object = null
 var audio_manager_ref: Object = null
 var performance_monitor_ref: Node = null
@@ -71,6 +81,22 @@ func _centered_text_x(font: Font, text: String) -> float:
 func _summary_box_rect() -> Rect2:
 	var box_width: float = minf(320.0, SCREEN_W - 80.0)
 	return Rect2((SCREEN_W - box_width) * 0.5, SCREEN_H * (180.0 / 960.0), box_width, 220.0)
+
+func _boss_hp_bar_rect() -> Rect2:
+	var bar_width: float = clampf(SCREEN_W * BOSS_HP_BAR_WIDTH_RATIO, BOSS_HP_BAR_WIDTH_MIN, BOSS_HP_BAR_WIDTH_MAX)
+	return Rect2((SCREEN_W - bar_width) * 0.5, SCREEN_H * BOSS_HP_BAR_Y_RATIO, bar_width, BOSS_HP_BAR_H)
+
+func _boss_indicator_width() -> float:
+	return clampf(SCREEN_W * BOSS_INDICATOR_W_RATIO, BOSS_INDICATOR_W_MIN, BOSS_INDICATOR_W_MAX)
+
+func _boss_indicator_rect() -> Rect2:
+	var indicator_w: float = _boss_indicator_width()
+	var indicator_h: float = SCREEN_H * BOSS_INDICATOR_H_RATIO
+	var indicator_y: float = SCREEN_H * BOSS_INDICATOR_Y_RATIO
+	var center_min: float = PLAYFIELD_MARGIN + indicator_w * 0.5
+	var center_max: float = SCREEN_W - PLAYFIELD_MARGIN - indicator_w * 0.5
+	var clamped_center_x: float = clampf(boss.get("x", _screen_center_x()), center_min, center_max)
+	return Rect2(clamped_center_x - indicator_w * 0.5, indicator_y, indicator_w, indicator_h)
 
 func _init() -> void:
 	_resolve_singletons()
@@ -1077,18 +1103,15 @@ func _draw():
 		draw_circle(Vector2(ix,iy),6,Color.WHITE); draw_circle(Vector2(ix,iy),4,Color.RED)
 		# HP bar
 		var r: float = boss.hp/max(1.0,boss.max_hp)
-		draw_rect(Rect2(140,28,200,14),Color.BLACK)
-		draw_rect(Rect2(140,28,200*r,14),Color.RED if r>0.5 else Color.ORANGE)
-		draw_rect(Rect2(140,28,200,14),Color.WHITE,false,1)
+		var hp_bar: Rect2 = _boss_hp_bar_rect()
+		draw_rect(hp_bar,Color.BLACK)
+		draw_rect(Rect2(hp_bar.position.x, hp_bar.position.y, hp_bar.size.x * r, hp_bar.size.y),Color.RED if r>0.5 else Color.ORANGE)
+		draw_rect(hp_bar,Color.WHITE,false,1)
 		# Bottom-of-screen horizontal-position indicator: a red translucent
 		# band that moves left/right with the boss so the player knows where
 		# the boss is horizontally without having to look to the top.
-		# Clamped inside the playfield (x: 16..464), centered on boss.x.
-		var indicator_x: float = clampf(boss.x, 36.0, 444.0)
-		var indicator_w: float = 40.0
-		var indicator_h: float = 24.0
-		var indicator_y: float = 610.0
-		var ind_rect := Rect2(indicator_x - indicator_w/2.0, indicator_y, indicator_w, indicator_h)
+		# Clamped within screen margins and centered on boss.x.
+		var ind_rect := _boss_indicator_rect()
 		draw_rect(ind_rect, Color(0.86, 0.16, 0.16, 0.35))
 		draw_rect(ind_rect, Color(1.0, 0.4, 0.4, 0.7), false, 1)
 
