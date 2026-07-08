@@ -1,0 +1,6 @@
+.godot/
+.superpowers/
+__pycache__/
+*.pyc
+*.tmp
+*.log
