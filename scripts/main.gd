@@ -31,6 +31,7 @@ var MAX_BULLETS: int = 12000
 const PLAYFIELD_MARGIN := 16.0
 var GameManager: Object = null
 var AudioManager: Object = null
+var PerformanceMonitor: Node = null
 
 func _resolve_singletons() -> void:
 	if not GameManager:
@@ -43,6 +44,8 @@ func _resolve_singletons() -> void:
 			AudioManager = get_node_or_null("/root/AudioManager")
 		else:
 			AudioManager = null
+	if not PerformanceMonitor and is_inside_tree():
+		PerformanceMonitor = get_node_or_null("/root/PerformanceMonitor")
 
 func _init() -> void:
 	_resolve_singletons()
@@ -205,6 +208,7 @@ func _process(delta: float):
 		"paused":
 			if Input.is_action_just_pressed("pause"):
 				if gm: gm.state = "stage"
+	_update_performance_counters()
 	queue_redraw()
 
 func _update_stage(delta: float):
@@ -900,6 +904,33 @@ func _count_alive_enemies() -> int:
 	var c: int = 0
 	for e in enemies: if e.alive and not e.dying: c += 1
 	return c
+
+func _count_active_bullets_by_owner() -> Dictionary:
+	var player_count: int = 0
+	var enemy_count: int = 0
+	for b in bullet_pool:
+		if not b.active:
+			continue
+		if b.type == "player" or b.type == "bomb":
+			player_count += 1
+		elif b.type in ["circle", "rice", "arrow", "laser"]:
+			enemy_count += 1
+	return {"player": player_count, "enemy": enemy_count}
+
+func _update_performance_counters() -> void:
+	if not has_node("/root/PerformanceMonitor"):
+		return
+	var counts: Dictionary = _count_active_bullets_by_owner()
+	var monitor: Node = PerformanceMonitor if PerformanceMonitor else get_node_or_null("/root/PerformanceMonitor")
+	if not monitor:
+		return
+	monitor.reset_frame()
+	monitor.set_counter("fps", int(Engine.get_frames_per_second()))
+	monitor.set_counter("player_bullets", int(counts.player))
+	monitor.set_counter("enemy_bullets", int(counts.enemy))
+	monitor.set_counter("enemies", _count_alive_enemies())
+	monitor.set_counter("items", items.size())
+	monitor.set_counter("boss_alive", 1 if boss_alive else 0)
 
 func _check_collisions(is_boss: bool):
 	for b in bullet_pool:
