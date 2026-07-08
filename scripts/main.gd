@@ -24,9 +24,10 @@ var player_fire_cooldown: float = 0.0
 var _sfx_shoot_skip: int = 0
 var player_deathbomb_primed: bool = false
 var player_deathbomb_timer: float = 0.0
-var MAX_BULLETS: int = 5000
-var SCREEN_W: int = 480
-var SCREEN_H: int = 640
+var MAX_BULLETS: int = GameManager.MAX_BULLETS
+var SCREEN_W: int = GameManager.SCREEN_W
+var SCREEN_H: int = GameManager.SCREEN_H
+const PLAYFIELD_MARGIN := 16.0
 
 func _ready():
 	randomize()
@@ -186,7 +187,7 @@ func _update_boss(delta: float):
 			GameManager.state = "game_over"
 			if AudioManager: AudioManager.fade_bgm(-30.0, 0.8)
 	if not boss_alive:
-		if GameManager.current_stage >= 3:
+		if GameManager.current_stage >= GameManager.stage_count():
 			GameManager.state = "final_clear"
 			if AudioManager: AudioManager.fade_bgm(-30.0, 1.0)
 		else:
@@ -537,8 +538,8 @@ func _update_player(delta: float):
 	if dx != 0 and dy != 0: dx *= 0.7071; dy *= 0.7071
 	player_x += dx * speed * delta * 60.0
 	player_y += dy * speed * delta * 60.0
-	player_x = clampf(player_x, 16.0, 464.0)
-	player_y = clampf(player_y, 16.0, 624.0)
+	player_x = clampf(player_x, PLAYFIELD_MARGIN, SCREEN_W - PLAYFIELD_MARGIN)
+	player_y = clampf(player_y, PLAYFIELD_MARGIN, SCREEN_H - PLAYFIELD_MARGIN)
 
 	player_fire_cooldown -= delta
 	if Input.is_action_pressed("shoot") and player_fire_cooldown <= 0:
@@ -708,7 +709,8 @@ func _update_bullets(delta: float, target: Vector2):
 				b.vy = sin(na) * spd
 		b.x += b.vx * delta * 60.0; b.y += b.vy * delta * 60.0
 		b.age += delta * 60.0
-		if b.age > b.lifetime or b.x < -60 or b.x > 540 or b.y < -60 or b.y > 700: b.active = false
+		if b.age > b.lifetime or b.x < -60 or b.x > SCREEN_W + 60 or b.y < -60 or b.y > SCREEN_H + 60:
+			b.active = false
 
 func _update_enemies(delta: float):
 	for e in enemies:
@@ -729,8 +731,9 @@ func _update_enemies(delta: float):
 				var lim: float = e.move_data.get("move_time",90.0)
 				if e.move_timer < lim: e.x += e.vx * delta * 60.0; e.y += e.vy * delta * 60.0
 				else: e.y += sin(e.move_timer*0.03)*0.3*delta*60.0
-		e.x = clampf(e.x, 24, 456)
-		if e.y > 680: e.alive = false
+		e.x = clampf(e.x, 24, SCREEN_W - 24)
+		if e.y > SCREEN_H + 40:
+			e.alive = false
 
 		# Dead/dying enemies must never emit any bullets — the dying branch
 		# above already `continue`s, and we re-check here defensively so any
@@ -741,7 +744,7 @@ func _update_enemies(delta: float):
 		# Only fire once the enemy has entered the visible play area.
 		# `shoot_timer` is frozen while the enemy is fully off-screen,
 		# so bullets never appear "from nowhere" at the screen edge.
-		var on_screen: bool = e.y >= -2.0 and e.y <= 640.0 and e.x >= -2.0 and e.x <= 482.0
+		var on_screen: bool = e.y >= -2.0 and e.y <= SCREEN_H and e.x >= -2.0 and e.x <= SCREEN_W + 2
 		if on_screen:
 			e.shoot_timer -= delta * 60.0
 		if on_screen and not e.dying and e.shoot_timer <= 0:
@@ -786,7 +789,7 @@ func _update_items(delta: float):
 			else:
 				it.y += it.vy * delta * 60.0
 				it.x += sin(it.anim*0.06*2+it.sway)*0.5*delta*60.0
-				it.x = clampf(it.x,11,469)
+				it.x = clampf(it.x,11, SCREEN_W - 11)
 			continue
 
 		# Phase 2 — drifting at the top. A permanent "magnetized" flag turns
@@ -821,8 +824,9 @@ func _update_items(delta: float):
 
 		it.x += it.vx * delta * 60.0
 		it.y += it.vy * delta * 60.0
-		it.x = clampf(it.x,11,469)
-		if it.y > 670: it.alive = false
+		it.x = clampf(it.x, 11, SCREEN_W - 11)
+		if it.y > SCREEN_H + 30:
+			it.alive = false
 
 func _count_alive_enemies() -> int:
 	var c: int = 0
@@ -1030,4 +1034,4 @@ func _draw():
 	var bomb_w = font.get_string_size(bomb_str).x
 	draw_string(font, Vector2(468 - life_w, 20), life_str)
 	draw_string(font, Vector2(468 - bomb_w, 35), bomb_str)
-	draw_string(font,Vector2(10,625),gm.STAGE_NAMES[gm.current_stage-1])
+	draw_string(font, Vector2(10, SCREEN_H - 15), gm.STAGE_NAMES[gm.current_stage - 1])

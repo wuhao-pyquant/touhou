@@ -2,9 +2,9 @@ extends Node
 
 # Global game state and constants, accessible everywhere
 
-const SCREEN_W := 480
-const SCREEN_H := 640
-const MAX_BULLETS := 5000
+const SCREEN_W := 720
+const SCREEN_H := 960
+const MAX_BULLETS := 12000
 
 # Player
 const PLAYER_SPEED_HIGH := 5.5
@@ -38,12 +38,28 @@ const BOMB_CONFIG := [
 ]
 
 # Stages
-const STAGE_NAMES := ["Dawn Forest", "Twilight Lake", "Scarlet Night"]
+const STAGE_NAMES := [
+	"绁炵ぞ鍙傞亾",
+	"濡栨€競闆?",
+	"杩烽浘绔规灄",
+	"澶╃嫍灞遍亾",
+	"楝间箣瀹村巺",
+	"澶滅キ绁炲煙",
+]
 const STAGE_MULTS := [
 	{"enemy_hp":1.0, "boss_hp":1.0, "bullet_speed":1.0},
-	{"enemy_hp":1.6, "boss_hp":1.4, "bullet_speed":1.15},
-	{"enemy_hp":2.4, "boss_hp":1.9, "bullet_speed":1.35},
+	{"enemy_hp":1.25, "boss_hp":1.18, "bullet_speed":1.08},
+	{"enemy_hp":1.5, "boss_hp":1.36, "bullet_speed":1.16},
+	{"enemy_hp":1.8, "boss_hp":1.58, "bullet_speed":1.25},
+	{"enemy_hp":2.15, "boss_hp":1.85, "bullet_speed":1.34},
+	{"enemy_hp":2.55, "boss_hp":2.15, "bullet_speed":1.45},
 ]
+
+func playfield_rect() -> Rect2:
+	return Rect2(0, 0, SCREEN_W, SCREEN_H)
+
+func stage_count() -> int:
+	return STAGE_NAMES.size()
 
 # --- Runtime state ---
 var score: int = 0
