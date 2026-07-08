@@ -880,7 +880,7 @@ func _update_items(delta: float):
 			var drift_speed: float = 0.7
 			if it.x <= 11.0:
 				dir = 1.0
-			elif it.x >= 469.0:
+			elif it.x >= SCREEN_W - 11.0:
 				dir = -1.0
 			it["drift_dir"] = dir
 			it.vx = dir * drift_speed

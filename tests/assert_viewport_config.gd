@@ -23,9 +23,54 @@ func _verify_gameplay_fallbacks(gm: Object, main: Node2D) -> void:
 
 		main.boss = {}
 		main._load_boss_cards()
-		_assert(main.boss.has("cards"), "stage %d missing boss cards from fallback" % stage)
+		_assert(main.boss.has("cards"), "stage %d boss cards fallback is empty" % stage)
 		var cards: Array = main.boss.get("cards", [])
 		_assert(cards.size() > 0, "stage %d boss cards fallback is empty" % stage)
+
+func _verify_item_boundary(gm: Object, main: Node2D) -> void:
+	var right_limit: float = float(gm.SCREEN_W - 11)
+	var baseline_x: float = gm.SCREEN_W * 0.78
+	main.items = []
+	main.items.append({
+		"alive": true,
+		"collected": false,
+		"x": baseline_x,
+		"y": 200.0,
+		"type": "power",
+		"radius": 9.0,
+		"vy": 0.0,
+		"vx": 0.0,
+		"floating": false,
+		"target_y": 128.0,
+		"drift_dir": 1.0,
+		"sway": 0.0,
+		"birth": 0.0,
+		"anim": 0.0
+	})
+	main._update_items(1.0)
+	var it: Dictionary = main.items[0]
+	_assert(it.x > baseline_x, "Item should not reverse direction at baseline right-side x")
+	_assert(is_equal_approx(it.drift_dir, 1.0), "Item drift_dir should still be +1 before reaching SCREEN_W - 11")
+
+	main.items = []
+	main.items.append({
+		"alive": true,
+		"collected": false,
+		"x": gm.SCREEN_W - 20.0,
+		"y": 200.0,
+		"type": "power",
+		"radius": 9.0,
+		"vy": 0.0,
+		"vx": 0.0,
+		"floating": false,
+		"target_y": 128.0,
+		"drift_dir": 1.0,
+		"sway": 0.0,
+		"birth": 0.0,
+		"anim": 0.0
+	})
+	main._update_items(1.0)
+	_assert(is_equal_approx(main.items[0].x, right_limit), "Item x should clamp to SCREEN_W - 11 on right edge")
 
 func _verify_main_player_layout(gm: Object, main_scene: PackedScene) -> void:
 	var main = main_scene.instantiate()
@@ -35,6 +80,7 @@ func _verify_main_player_layout(gm: Object, main_scene: PackedScene) -> void:
 	main._reset_player()
 	_assert(main.player_y == gm.SCREEN_H * 0.5625, "Reset player_y is not viewport-scaled")
 
+	_verify_item_boundary(gm, main)
 	_verify_gameplay_fallbacks(gm, main)
 	main.queue_free()
 
