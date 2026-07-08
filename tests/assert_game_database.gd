@@ -57,5 +57,7 @@ func _init() -> void:
 		_fail("Expected 6 item types, got %d" % item_types.size())
 	for item in item_types:
 		_assert(_has_cjk(String(item.display_name)), "Item display_name should contain Chinese text: %s" % [item.display_name])
+		if String(item.id) == "bomb_fragment":
+			_assert(String(item.display_name) == "炸弹碎片", "bomb_fragment display_name should be 炸弹碎片, got %s" % [item.display_name])
 
 	quit(0)

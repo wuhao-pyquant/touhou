@@ -63,7 +63,7 @@ const BULLET_FAMILIES := [
 const ITEM_TYPES := [
 	{"id": "power", "display_name": "灵力", "role": "shot_power"},
 	{"id": "point", "display_name": "得点物", "role": "score"},
-	{"id": "bomb_fragment", "display_name": "Bomb碎片", "role": "three_make_bomb"},
+	{"id": "bomb_fragment", "display_name": "炸弹碎片", "role": "three_make_bomb"},
 	{"id": "life_fragment", "display_name": "残机碎片", "role": "five_make_life"},
 	{"id": "night_festival_seal", "display_name": "夜祭符", "role": "risk_score_bonus"},
 	{"id": "full_power", "display_name": "满火力", "role": "recovery"},

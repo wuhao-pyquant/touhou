@@ -1,6 +1,6 @@
 extends Node2D
 
-# Main game scene — all game logic in one script for simplicity
+# Main game scene - all game logic in one script for simplicity
 
 var bullet_pool: Array = []
 var enemies: Array = []
@@ -29,30 +29,55 @@ var player_deathbomb_primed: bool = false
 var player_deathbomb_timer: float = 0.0
 var MAX_BULLETS: int = 12000
 const PLAYFIELD_MARGIN := 16.0
-var GameManager: Object = null
-var AudioManager: Object = null
-var PerformanceMonitor: Node = null
+const SHOT_NAMES_ZH := ["\u6563\u5c04", "\u8d2f\u901a", "\u8ffd\u8e2a"]
+var game_manager_ref: Object = null
+var audio_manager_ref: Object = null
+var performance_monitor_ref: Node = null
 
 func _resolve_singletons() -> void:
-	if not GameManager:
-		if is_inside_tree():
-			GameManager = get_node_or_null("/root/GameManager")
-		if not GameManager:
-			GameManager = load("res://autoload/game_manager.gd").new()
-	if not AudioManager:
-		if is_inside_tree():
-			AudioManager = get_node_or_null("/root/AudioManager")
-		else:
-			AudioManager = null
-	if not PerformanceMonitor and is_inside_tree():
-		PerformanceMonitor = get_node_or_null("/root/PerformanceMonitor")
+	var tree_root: Window = get_tree().root if is_inside_tree() and get_tree() else null
+	var sibling_root: Node = get_parent() if is_inside_tree() else null
+	var root_game_manager: Object = sibling_root.get_node_or_null("GameManager") if sibling_root else null
+	if not root_game_manager and tree_root:
+		root_game_manager = tree_root.get_node_or_null("GameManager")
+	if root_game_manager:
+		game_manager_ref = root_game_manager
+	elif not game_manager_ref:
+		game_manager_ref = load("res://autoload/game_manager.gd").new()
+
+	var root_audio_manager: Object = sibling_root.get_node_or_null("AudioManager") if sibling_root else null
+	if not root_audio_manager and tree_root:
+		root_audio_manager = tree_root.get_node_or_null("AudioManager")
+	if root_audio_manager:
+		audio_manager_ref = root_audio_manager
+	elif not is_inside_tree():
+		audio_manager_ref = null
+
+	var root_monitor: Node = sibling_root.get_node_or_null("PerformanceMonitor") if sibling_root else null
+	if not root_monitor and tree_root:
+		root_monitor = tree_root.get_node_or_null("PerformanceMonitor")
+	if root_monitor:
+		performance_monitor_ref = root_monitor
+
+func _screen_center_x() -> float:
+	return SCREEN_W * 0.5
+
+func _boss_anchor_y() -> float:
+	return SCREEN_H * (130.0 / 960.0)
+
+func _centered_text_x(font: Font, text: String) -> float:
+	return maxf(0.0, (SCREEN_W - font.get_string_size(text).x) * 0.5)
+
+func _summary_box_rect() -> Rect2:
+	var box_width: float = minf(320.0, SCREEN_W - 80.0)
+	return Rect2((SCREEN_W - box_width) * 0.5, SCREEN_H * (180.0 / 960.0), box_width, 220.0)
 
 func _init() -> void:
 	_resolve_singletons()
-	if GameManager:
-		MAX_BULLETS = GameManager.MAX_BULLETS
-		SCREEN_W = GameManager.SCREEN_W
-		SCREEN_H = GameManager.SCREEN_H
+	if game_manager_ref:
+		MAX_BULLETS = game_manager_ref.MAX_BULLETS
+		SCREEN_W = game_manager_ref.SCREEN_W
+		SCREEN_H = game_manager_ref.SCREEN_H
 	else:
 		MAX_BULLETS = 12000
 		SCREEN_W = 720
@@ -60,18 +85,12 @@ func _init() -> void:
 	_apply_viewport_layout()
 
 func _active_stage() -> int:
-	var gm = null
-	if is_inside_tree():
-		gm = get_node_or_null("/root/GameManager")
-	return gm.current_stage if gm else current_stage_local
+	return game_manager_ref.current_stage if game_manager_ref else current_stage_local
 
 func _set_active_stage(stage: int) -> void:
 	current_stage_local = stage
-	var gm = null
-	if is_inside_tree():
-		gm = get_node_or_null("/root/GameManager")
-	if gm:
-		gm.current_stage = stage
+	if game_manager_ref:
+		game_manager_ref.current_stage = stage
 
 func _apply_viewport_layout() -> void:
 	player_x = SCREEN_W * 0.5
@@ -83,19 +102,21 @@ func _ready():
 	for i in range(MAX_BULLETS):
 		bullet_pool.append(_make_bullet())
 	# Ensure GameManager globals are initialized
-	GameManager.reset()
+	game_manager_ref.reset()
 	_show_title()
 
 func _make_bullet() -> Dictionary:
 	return {"active":false,"x":0.0,"y":0.0,"vx":0.0,"vy":0.0,"radius":6.0,"color":Color.RED,"type":"circle","lifetime":600.0,"age":0.0,"damage":1.0,"homing":false,"btype":-1}
 
 func _show_title():
-	GameManager.state = "title"
-	if AudioManager: AudioManager.stop_bgm()
+	_resolve_singletons()
+	game_manager_ref.state = "title"
+	if audio_manager_ref: audio_manager_ref.stop_bgm()
 
 func _start_game():
-	GameManager.reset()
-	GameManager.state = "stage"
+	_resolve_singletons()
+	game_manager_ref.reset()
+	game_manager_ref.state = "stage"
 	_set_active_stage(1)
 	stage_timer = 0.0
 	_reset_player()
@@ -103,7 +124,7 @@ func _start_game():
 	enemies.clear(); items.clear()
 	_load_stage(1)
 	boss = {}; boss_alive = false
-	if AudioManager: AudioManager.bgm_stage_mid(1)
+	if audio_manager_ref: audio_manager_ref.bgm_stage_mid(1)
 
 func _reset_player():
 	player_x = SCREEN_W * 0.5
@@ -115,15 +136,15 @@ func _reset_player():
 	player_deathbomb_primed = false; player_deathbomb_timer = 0.0
 
 func _respawn():
-	GameManager.lives -= 1
-	GameManager.bombs = GameManager.PLAYER_INITIAL_BOMBS
-	var dropped: int = int(GameManager.shared_power * GameManager.DEATH_POWER_DROP)
+	game_manager_ref.lives -= 1
+	game_manager_ref.bombs = game_manager_ref.PLAYER_INITIAL_BOMBS
+	var dropped: int = int(game_manager_ref.shared_power * game_manager_ref.DEATH_POWER_DROP)
 	for i in range(mini(50, dropped)):
 		_spawn_item(player_x+randf_range(-80,80), player_y+randf_range(-60,60), ["bullet_spread","bullet_linear","bullet_homing"][i%3])
-	GameManager.shared_power = max(0, GameManager.shared_power - dropped)
+	game_manager_ref.shared_power = max(0, game_manager_ref.shared_power - dropped)
 	_reset_player()
 	player_invincible = true
-	player_invincible_timer = GameManager.INVINCIBLE_DURATION / 60.0
+	player_invincible_timer = game_manager_ref.INVINCIBLE_DURATION / 60.0
 
 func _advance_stage():
 	_set_active_stage(_active_stage() + 1)
@@ -132,8 +153,8 @@ func _advance_stage():
 	items.clear(); enemies.clear()
 	boss = {}; boss_alive = false
 	_load_stage(_active_stage())
-	GameManager.state = "stage"
-	if AudioManager: AudioManager.bgm_stage_mid(_active_stage())
+	game_manager_ref.state = "stage"
+	if audio_manager_ref: audio_manager_ref.bgm_stage_mid(_active_stage())
 
 func _load_stage(stage: int):
 	current_stage_local = stage
@@ -191,8 +212,9 @@ func _nearest_enemy(px: float, py: float) -> Vector2:
 	return best_v
 
 func _process(delta: float):
+	_resolve_singletons()
 	delta = clampf(delta, 0.0, 0.05)
-	var gm = get_node_or_null("/root/GameManager")
+	var gm = game_manager_ref
 	var current_state: String = gm.state if gm else "title"
 	match current_state:
 		"title":
@@ -212,7 +234,7 @@ func _process(delta: float):
 	queue_redraw()
 
 func _update_stage(delta: float):
-	if Input.is_action_just_pressed("pause"): GameManager.state = "paused"; return
+	if Input.is_action_just_pressed("pause"): game_manager_ref.state = "paused"; return
 	stage_timer += delta * 60.0
 	_stage_waves(int(stage_timer))
 	if stage_timer >= stage_controller.boss_time and not stage_controller.boss_spawned:
@@ -223,43 +245,43 @@ func _update_stage(delta: float):
 	_update_items(delta)
 	_check_collisions(false)
 	if player_just_hit:
-		if GameManager.lives > 0: _respawn()
+		if game_manager_ref.lives > 0: _respawn()
 		else:
-			GameManager.state = "game_over"
-			if AudioManager: AudioManager.fade_bgm(-30.0, 0.8)
+			game_manager_ref.state = "game_over"
+			if audio_manager_ref: audio_manager_ref.fade_bgm(-30.0, 0.8)
 	if stage_controller.boss_spawned and _count_alive_enemies() == 0:
 		_enter_boss()
 
 func _update_boss(delta: float):
-	if Input.is_action_just_pressed("pause"): GameManager.state = "paused"; return
+	if Input.is_action_just_pressed("pause"): game_manager_ref.state = "paused"; return
 	_update_player(delta)
-	_update_bullets(delta, Vector2(boss.get("x",240), boss.get("y",130)) if boss_alive else Vector2.ZERO)
+	_update_bullets(delta, Vector2(boss.get("x", _screen_center_x()), boss.get("y", _boss_anchor_y())) if boss_alive else Vector2.ZERO)
 	_update_items(delta)
 	if boss_alive: _update_boss_entity(delta)
 	_check_collisions(true)
 	if player_just_hit:
-		if GameManager.lives > 0: _respawn()
+		if game_manager_ref.lives > 0: _respawn()
 		else:
-			GameManager.state = "game_over"
-			if AudioManager: AudioManager.fade_bgm(-30.0, 0.8)
+			game_manager_ref.state = "game_over"
+			if audio_manager_ref: audio_manager_ref.fade_bgm(-30.0, 0.8)
 	if not boss_alive:
-		if GameManager.current_stage >= GameManager.stage_count():
-			GameManager.state = "final_clear"
-			if AudioManager: AudioManager.fade_bgm(-30.0, 1.0)
+		if game_manager_ref.current_stage >= game_manager_ref.stage_count():
+			game_manager_ref.state = "final_clear"
+			if audio_manager_ref: audio_manager_ref.fade_bgm(-30.0, 1.0)
 		else:
-			GameManager.state = "stage_clear"
-			if AudioManager: AudioManager.fade_bgm(-12.0, 0.6)
+			game_manager_ref.state = "stage_clear"
+			if audio_manager_ref: audio_manager_ref.fade_bgm(-12.0, 0.6)
 
 func _enter_boss():
-	GameManager.state = "boss"
+	game_manager_ref.state = "boss"
 	enemies.clear()
 	for b in bullet_pool:
 		if b.active and b.type in ["circle","rice","arrow","laser"]: b.active = false
 	_init_boss()
-	if AudioManager: AudioManager.bgm_stage_boss(GameManager.current_stage)
+	if audio_manager_ref: audio_manager_ref.bgm_stage_boss(game_manager_ref.current_stage)
 
 func _init_boss():
-	boss = {"x":240.0,"y":-60.0,"hp":500.0,"max_hp":500.0,"radius":28.0,"phase":"entering","timer":0.0,"entered":false,"sway":randf_range(0,100),"declaring":false,"declare_timer":0.0,"card_name":"","cards":[],"card_idx":0,"card_hp":0.0,"card_timer":0.0,"card_shot":0.0,"flash":0.0,"rot":0.0,"anim":0.0,"alive":true}
+	boss = {"x":_screen_center_x(),"y":-60.0,"hp":500.0,"max_hp":500.0,"radius":28.0,"phase":"entering","timer":0.0,"entered":false,"sway":randf_range(0,100),"declaring":false,"declare_timer":0.0,"card_name":"","cards":[],"card_idx":0,"card_hp":0.0,"card_timer":0.0,"card_shot":0.0,"flash":0.0,"rot":0.0,"anim":0.0,"alive":true}
 	_load_boss_cards()
 	boss_alive = true
 
@@ -277,29 +299,26 @@ func _load_boss_cards():
 
 func _stage1_cards() -> Array:
 	return [
-		{"name":"月光「Moonlight Ray」","hp":600,"time":28,"pattern":"moonlight"},
-		{"name":"星符「Starfall」","hp":900,"time":32,"pattern":"starfall"},
-		{"name":"蝶符「Phantom Butterfly」","hp":1300,"time":30,"pattern":"butterfly"},
-		{"name":"神罰「Divine Punishment」","hp":1600,"time":25,"pattern":"divine"},
+		{"name":"Moonlight Ray","hp":600,"time":28,"pattern":"moonlight"},
+		{"name":"Starfall","hp":900,"time":32,"pattern":"starfall"},
+		{"name":"Phantom Butterfly","hp":1300,"time":30,"pattern":"butterfly"},
+		{"name":"Divine Punishment","hp":1600,"time":25,"pattern":"divine"},
 	]
-
 func _stage2_cards() -> Array:
 	return [
-		{"name":"水符「Ripple Shield」","hp":900,"time":28,"pattern":"ripple"},
-		{"name":"泡符「Bubble Burst」","hp":1300,"time":32,"pattern":"bubble"},
-		{"name":"霧符「Mist Labyrinth」","hp":1800,"time":30,"pattern":"mist"},
-		{"name":"湖符「Crystal Mirror」","hp":2400,"time":25,"pattern":"mirror"},
+		{"name":"Ripple Shield","hp":900,"time":28,"pattern":"ripple"},
+		{"name":"Bubble Burst","hp":1300,"time":32,"pattern":"bubble"},
+		{"name":"Mist Labyrinth","hp":1800,"time":30,"pattern":"mist"},
+		{"name":"Crystal Mirror","hp":2400,"time":25,"pattern":"mirror"},
 	]
-
 func _stage3_cards() -> Array:
 	return [
-		{"name":"紅符「Scarlet Rain」","hp":1200,"time":28,"pattern":"scarlet"},
-		{"name":"夜符「Midnight Blade」","hp":1700,"time":30,"pattern":"midnight"},
-		{"name":"血符「Blood Vortex」","hp":2300,"time":32,"pattern":"vortex"},
-		{"name":"闇符「Eternal Darkness」","hp":3000,"time":28,"pattern":"darkness"},
-		{"name":"終符「Scarlet Apocalypse」","hp":4000,"time":25,"pattern":"apocalypse"},
+		{"name":"Scarlet Rain","hp":1200,"time":28,"pattern":"scarlet"},
+		{"name":"Midnight Blade","hp":1700,"time":30,"pattern":"midnight"},
+		{"name":"Blood Vortex","hp":2300,"time":32,"pattern":"vortex"},
+		{"name":"Eternal Darkness","hp":3000,"time":28,"pattern":"darkness"},
+		{"name":"Scarlet Apocalypse","hp":4000,"time":25,"pattern":"apocalypse"},
 	]
-
 func _start_boss_card():
 	var c: Dictionary = boss.cards[boss.card_idx]
 	boss.card_name = c.name; boss.card_hp = c.hp; boss.max_hp = c.hp; boss.hp = c.hp
@@ -311,7 +330,7 @@ func _update_boss_entity(delta: float):
 	# All boss timing constants are authored in FRAMES (e.g. declare_timer=90
 	# for 1.5s, boss_enter span=120 frames for 2s, cardShot frequency uses
 	# `int(card_shot) % 12`). Convert delta to frames once, then use it
-	# everywhere below — keeping units consistent with the rest of the game.
+	# everywhere below - keeping units consistent with the rest of the game.
 	var dt: float = delta * 60.0
 	boss.anim += dt; boss.sway += dt
 	boss.flash = max(0.0, boss.flash - dt)
@@ -326,14 +345,14 @@ func _update_boss_entity(delta: float):
 		"defeated": _boss_defeated(delta)
 
 	if boss.phase in ["active","switching"] and not boss.declaring:
-		boss.target_x = 240.0 + sin(boss.sway * 0.025) * 70.0
-		boss.target_y = 130.0 + cos(boss.sway * 0.035) * 18.0
+		boss.target_x = _screen_center_x() + sin(boss.sway * 0.025) * 70.0
+		boss.target_y = _boss_anchor_y() + cos(boss.sway * 0.035) * 18.0
 
 	if boss.phase != "defeated":
 		# Frame-rate-independent lerp toward target (per-frame factor ~0.08).
 		var f: float = clampf(0.08 * dt, 0.0, 1.0)
-		boss.x = lerpf(boss.x, boss.get("target_x", 240.0), f)
-		boss.y = lerpf(boss.y, boss.get("target_y", 130.0), f)
+		boss.x = lerpf(boss.x, boss.get("target_x", _screen_center_x()), f)
+		boss.y = lerpf(boss.y, boss.get("target_y", _boss_anchor_y()), f)
 
 	if boss.entered and boss.cards.size() > 0 and boss.card_idx == 0 and boss.card_hp == 0 and boss.phase == "active":
 		_start_boss_card()
@@ -341,7 +360,8 @@ func _update_boss_entity(delta: float):
 func _boss_enter(delta: float):
 	boss.timer += delta * 60.0
 	var p: float = clampf(boss.timer / 120.0, 0.0, 1.0)
-	boss.y = -60.0 + (190.0) * (1.0 - (1.0-p)*(1.0-p))
+	var target_y := _boss_anchor_y()
+	boss.y = -60.0 + (target_y + 60.0) * (1.0 - (1.0-p)*(1.0-p))
 	if p >= 1.0:
 		boss.phase = "active"; boss.entered = true
 
@@ -361,7 +381,7 @@ func _boss_switching(delta: float):
 		boss.card_idx += 1; boss.timer = 0.0
 		# Defensive: only start next card if it exists. The card-clear logic
 		# routes "last card" straight to "defeated", so this should normally
-		# never trigger — but a stray future caller shouldn't blow up.
+		# never trigger - but a stray future caller shouldn't blow up.
 		if boss.card_idx < boss.cards.size():
 			_start_boss_card()
 		else:
@@ -376,7 +396,7 @@ func _boss_defeated(delta: float):
 func _boss_card_clear():
 	for b in bullet_pool:
 		if b.active and b.type in ["circle","rice","arrow","laser"]: b.active = false
-	# If the just-cleared card was the LAST card, the boss is dead — go to
+	# If the just-cleared card was the LAST card, the boss is dead - go to
 	# the defeat animation instead of "switching" so we never try to start
 	# a non-existent next card (which was an out-of-range index bug).
 	if boss.card_idx >= boss.cards.size() - 1:
@@ -384,22 +404,22 @@ func _boss_card_clear():
 		boss.timer = 0.0
 	else:
 		boss.phase = "switching"; boss.timer = 0.0
-	if AudioManager: AudioManager.play_sfx("kill", -5.0)
+	if audio_manager_ref: audio_manager_ref.play_sfx("kill", -5.0)
 
 func _boss_card_timeout():
 	for b in bullet_pool:
 		if b.active and b.type in ["circle","rice","arrow","laser"]: b.active = false
-	# Same as above — timeout on the last card also ends the fight.
+	# Same as above - timeout on the last card also ends the fight.
 	if boss.card_idx >= boss.cards.size() - 1:
 		boss.phase = "defeated"
 		boss.timer = 0.0
 	else:
 		boss.phase = "switching"; boss.timer = 0.0
-	if AudioManager: AudioManager.play_sfx("kill", -7.0)
+	if audio_manager_ref: audio_manager_ref.play_sfx("kill", -7.0)
 
 func _boss_fire_pattern(delta: float):
 	var c: Dictionary = boss.cards[boss.card_idx]
-	var mult: float = GameManager.STAGE_MULTS[GameManager.current_stage - 1].bullet_speed
+	var mult: float = game_manager_ref.STAGE_MULTS[game_manager_ref.current_stage - 1].bullet_speed
 	match c.pattern:
 		"moonlight": _bullets_moonlight(mult)
 		"starfall": _bullets_starfall(mult)
@@ -594,7 +614,7 @@ func _waves_s3(timer: int):
 func _update_player(delta: float):
 	if player_deathbomb_primed:
 		player_deathbomb_timer -= delta
-		if Input.is_action_just_pressed("bomb") and GameManager.bombs > 0: _start_bomb(); player_deathbomb_primed = false; player_just_hit = false; return
+		if Input.is_action_just_pressed("bomb") and game_manager_ref.bombs > 0: _start_bomb(); player_deathbomb_primed = false; player_just_hit = false; return
 		if player_deathbomb_timer <= 0: player_deathbomb_primed = false; return
 
 	if player_invincible and not player_bombing:
@@ -604,7 +624,7 @@ func _update_player(delta: float):
 	if player_bombing: _update_bomb(delta)
 
 	var focus: bool = Input.is_key_pressed(KEY_SHIFT)
-	var speed: float = GameManager.PLAYER_SPEED_LOW if focus else GameManager.PLAYER_SPEED_HIGH
+	var speed: float = game_manager_ref.PLAYER_SPEED_LOW if focus else game_manager_ref.PLAYER_SPEED_HIGH
 	var dx: float = Input.get_axis("move_left", "move_right")
 	var dy: float = Input.get_axis("move_up", "move_down")
 	if dx != 0 and dy != 0: dx *= 0.7071; dy *= 0.7071
@@ -615,24 +635,24 @@ func _update_player(delta: float):
 
 	player_fire_cooldown -= delta
 	if Input.is_action_pressed("shoot") and player_fire_cooldown <= 0:
-		player_fire_cooldown = GameManager.PLAYER_FIRE_INTERVAL / 60.0
+		player_fire_cooldown = game_manager_ref.PLAYER_FIRE_INTERVAL / 60.0
 		_shoot()
 
-	if Input.is_action_just_pressed("bomb") and GameManager.bombs > 0 and not player_deathbomb_primed and not player_bombing:
+	if Input.is_action_just_pressed("bomb") and game_manager_ref.bombs > 0 and not player_deathbomb_primed and not player_bombing:
 		_start_bomb()
 
 func _shoot():
-	var level: int = GameManager.power_level()
-	var bt: int = GameManager.bullet_type
-	var dmg_val: float = GameManager.BULLET_DMG[bt]
+	var level: int = game_manager_ref.power_level()
+	var bt: int = game_manager_ref.bullet_type
+	var dmg_val: float = game_manager_ref.BULLET_DMG[bt]
 	match bt:
-		GameManager.BulletType.SPREAD: _shoot_spread(level, dmg_val)
-		GameManager.BulletType.LINEAR: _shoot_linear(level, dmg_val)
-		GameManager.BulletType.HOMING: _shoot_homing(level, dmg_val)
+		game_manager_ref.BulletType.SPREAD: _shoot_spread(level, dmg_val)
+		game_manager_ref.BulletType.LINEAR: _shoot_linear(level, dmg_val)
+		game_manager_ref.BulletType.HOMING: _shoot_homing(level, dmg_val)
 	# Throttle shoot SFX so 20 Hz fire doesn't sound like a machine-gun
 	_sfx_shoot_skip = (_sfx_shoot_skip + 1) % 2
-	if _sfx_shoot_skip == 0 and AudioManager:
-		AudioManager.play_sfx("shoot", -12.0)
+	if _sfx_shoot_skip == 0 and audio_manager_ref:
+		audio_manager_ref.play_sfx("shoot", -12.0)
 
 func _shoot_spread(level: int, dmg_val: float):
 	var spd: float = -8.0; var r: float = 4.0; var c: Color = Color(0.71,0.31,1.0)
@@ -665,13 +685,13 @@ func _shoot_homing(level: int, dmg_val: float):
 		_: _spawn_bullet_player(player_x,player_y-20,0,spd,r,c,dmg_val,true,2)
 
 func _start_bomb():
-	if GameManager.bombs <= 0: return
-	GameManager.bombs -= 1
-	player_bomb_config = GameManager.BOMB_CONFIG[GameManager.bullet_type]
+	if game_manager_ref.bombs <= 0: return
+	game_manager_ref.bombs -= 1
+	player_bomb_config = game_manager_ref.BOMB_CONFIG[game_manager_ref.bullet_type]
 	player_bombing = true; player_bomb_timer = player_bomb_config.duration / 60.0
 	player_bomb_phase = 0; player_bomb_wave_timer = 0.0; player_bomb_radius = 0.0
 	player_invincible = true; player_invincible_timer = player_bomb_config.duration / 60.0
-	if AudioManager: AudioManager.play_sfx("bomb", -4.0)
+	if audio_manager_ref: audio_manager_ref.play_sfx("bomb", -4.0)
 
 func _update_bomb(delta: float):
 	player_bomb_timer -= delta; player_bomb_wave_timer -= delta
@@ -685,8 +705,8 @@ func _update_bomb(delta: float):
 		# is currently holding. Previously all three branches produced the
 		# same omni-directional round-bullet ring, making them look identical
 		# in the air.
-		match GameManager.bullet_type:
-			GameManager.BulletType.SPREAD:
+		match game_manager_ref.bullet_type:
+			game_manager_ref.BulletType.SPREAD:
 				# Big omni-direction flash ring of circles. Many bullets, slow,
 				# all directions. Pierces so all waves actually pass through
 				# packed enemy clusters instead of dying on the first hit.
@@ -697,7 +717,7 @@ func _update_bomb(delta: float):
 					_spawn_bullet_player(player_x, player_y,
 						cos(a)*spd, sin(a)*spd,
 						7, Color(0.78,0.39,1.0,1.0), 3.0, false, -1, true, 80.0)
-			GameManager.BulletType.LINEAR:
+			game_manager_ref.BulletType.LINEAR:
 				# Piercing spokes: a small number of long fast rods that pass
 				# straight through enemies (they don't despawn on hit). Double
 				# spokes each wave so the pattern slowly rotates.
@@ -708,7 +728,7 @@ func _update_bomb(delta: float):
 					_spawn_bullet_player(player_x, player_y,
 						cos(a)*spd, sin(a)*spd,
 						12, Color(1.0, 0.31, 0.31), bc.dmg, false, 1, true, 120.0)
-			GameManager.BulletType.HOMING:
+			game_manager_ref.BulletType.HOMING:
 				# A swarm of slow homing seekers out in a spiral. They seek the
 				# nearest enemy and nibble through HP. Distinct, lingering.
 				var n: int = bc.bullets
@@ -748,8 +768,8 @@ func _update_bullets(delta: float, target: Vector2):
 			#    simply fly up and off the top of the screen.
 			const MAX_REACH: float = 320.0     # search radius (px)
 			const REACH_AHEAD: float = 0.0      # enemy must be ABOVE bullet (e.y < b.y)
-			const TURN_RATE: float = 0.03       # rad / frame ~ 1.7°/frame
-			const MAX_DEFLECT: float = PI/3.0   # 60° cone around straight-up
+			const TURN_RATE: float = 0.03       # rad / frame ~ 1.7閹?frame
+			const MAX_DEFLECT: float = PI/3.0   # 60閹?cone around straight-up
 			var origin: Vector2 = Vector2(b.x, b.y)
 			var best_d2: float = MAX_REACH * MAX_REACH + 1.0
 			var tg: Vector2 = Vector2.ZERO
@@ -807,7 +827,7 @@ func _update_enemies(delta: float):
 		if e.y > SCREEN_H + 40:
 			e.alive = false
 
-		# Dead/dying enemies must never emit any bullets — the dying branch
+		# Dead/dying enemies must never emit any bullets - the dying branch
 		# above already `continue`s, and we re-check here defensively so any
 		# future code path that puts a dying enemy back into the loop stays
 		# consistent with that invariant.
@@ -821,7 +841,7 @@ func _update_enemies(delta: float):
 			e.shoot_timer -= delta * 60.0
 		if on_screen and not e.dying and e.shoot_timer <= 0:
 			e.shoot_timer = 60.0 * (0.7 if e.strong else 1.0); e.shoot_phase += 1
-			var mult: float = GameManager.STAGE_MULTS[GameManager.current_stage - 1].bullet_speed
+			var mult: float = game_manager_ref.STAGE_MULTS[game_manager_ref.current_stage - 1].bullet_speed
 			match e.pattern:
 				"aimed":
 					var a: float = (Vector2(player_x,player_y)-Vector2(e.x,e.y)).angle()
@@ -846,7 +866,7 @@ func _update_items(delta: float):
 		it.anim += 0.06 * delta * 60.0
 		if it.birth > 0: it.birth -= delta * 60.0
 
-		# Phase 1 — float straight up to the top 1/5 of the screen (target_y).
+		# Phase 1 - float straight up to the top 1/5 of the screen (target_y).
 		# This is reached both at spawn from enemy drops (y around e.y) and at
 		# the player's death pickups (y around player_y). Items keep a small
 		# sway for visual flavour while rising.
@@ -864,14 +884,14 @@ func _update_items(delta: float):
 				it.x = clampf(it.x,11, SCREEN_W - 11)
 			continue
 
-		# Phase 2 — drifting at the top. A permanent "magnetized" flag turns
+		# Phase 2 - drifting at the top. A permanent "magnetized" flag turns
 		# on the first time the player holds Shift in the upper area (y<128)
 		# while this item is in mid-flight. Once magnetized, the item flies
 		# toward the player EVERY subsequent frame regardless of whether
-		# Shift is still held or where the player is — exactly so the player
+		# Shift is still held or where the player is - exactly so the player
 		# can tap Shift once at the top and then dive back down to dodge
 		# while the items continue to be vacuumed up.
-		# `magnetized` is missing on legacy items (init → false).
+		# `magnetized` is missing on legacy items (init -> false).
 		if it.get("magnetized", false) == false:
 			if Input.is_key_pressed(KEY_SHIFT) and player_y < 128.0:
 				it["magnetized"] = true
@@ -921,7 +941,7 @@ func _update_performance_counters() -> void:
 	if not has_node("/root/PerformanceMonitor"):
 		return
 	var counts: Dictionary = _count_active_bullets_by_owner()
-	var monitor: Node = PerformanceMonitor if PerformanceMonitor else get_node_or_null("/root/PerformanceMonitor")
+	var monitor: Node = performance_monitor_ref if performance_monitor_ref else get_node_or_null("/root/PerformanceMonitor")
 	if not monitor:
 		return
 	monitor.reset_frame()
@@ -950,20 +970,20 @@ func _check_collisions(is_boss: bool):
 						if e.hp <= 0 and not e.dying:
 							e.dying = true; e.death_timer = 8.0
 							_drop_item(e.x,e.y,e.strong)
-							GameManager.score += 50
-							if AudioManager: AudioManager.play_sfx("kill", -6.0 if e.strong else -8.0)
+							game_manager_ref.score += 50
+							if audio_manager_ref: audio_manager_ref.play_sfx("kill", -6.0 if e.strong else -8.0)
 						break
 		elif b.type in ["circle","rice","arrow","laser"]:
-			if not player_invincible and Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < b.radius + GameManager.PLAYER_HITBOX:
-				player_deathbomb_primed = true; player_deathbomb_timer = GameManager.DEATHBOMB_WINDOW/60.0
+			if not player_invincible and Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < b.radius + game_manager_ref.PLAYER_HITBOX:
+				player_deathbomb_primed = true; player_deathbomb_timer = game_manager_ref.DEATHBOMB_WINDOW/60.0
 				player_just_hit = true; b.active = false
-				if AudioManager: AudioManager.play_sfx("hit", -2.0)
+				if audio_manager_ref: audio_manager_ref.play_sfx("hit", -2.0)
 
 	# Graze
 	for b in bullet_pool:
 		if b.active and b.type in ["circle","rice","arrow","laser"]:
-			if Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < GameManager.PLAYER_GRAZE + b.radius:
-				GameManager.graze += 1; GameManager.score += 10
+			if Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < game_manager_ref.PLAYER_GRAZE + b.radius:
+				game_manager_ref.graze += 1; game_manager_ref.score += 10
 
 	# Item collection
 	for it in items:
@@ -990,18 +1010,18 @@ func _collect(it: Dictionary):
 			var bt: int = 0
 			if it.type == "bullet_linear": bt = 1
 			elif it.type == "bullet_homing": bt = 2
-			GameManager.switch_bullet_type(bt)
-			if GameManager.add_power(): pass
-			GameManager.score += 10
+			game_manager_ref.switch_bullet_type(bt)
+			if game_manager_ref.add_power(): pass
+			game_manager_ref.score += 10
 		"power":
-			if GameManager.add_power(): pass
-			GameManager.score += 10
+			if game_manager_ref.add_power(): pass
+			game_manager_ref.score += 10
 		"point":
-			GameManager.score += 10 * (1 + GameManager.shared_power)
+			game_manager_ref.score += 10 * (1 + game_manager_ref.shared_power)
 		"bomb_refill":
-			GameManager.bombs = min(GameManager.bombs+1, 5); GameManager.score += 100
+			game_manager_ref.bombs = min(game_manager_ref.bombs+1, 5); game_manager_ref.score += 100
 		"life":
-			GameManager.lives = min(GameManager.lives+1, 6); GameManager.score += 500
+			game_manager_ref.lives = min(game_manager_ref.lives+1, 6); game_manager_ref.score += 500
 
 func _draw():
 	if not is_inside_tree(): return
@@ -1025,7 +1045,7 @@ func _draw():
 				elif it.type == "bullet_homing": bt = 2
 				var hex: PackedVector2Array = PackedVector2Array()
 				for i in range(6): hex.append(Vector2(ix+cos(TAU/6*i-PI/6)*10,iy+sin(TAU/6*i-PI/6)*10))
-				draw_colored_polygon(hex,GameManager.BULLET_COLORS[bt]); draw_polyline(hex,Color.WHITE,2,true)
+				draw_colored_polygon(hex,game_manager_ref.BULLET_COLORS[bt]); draw_polyline(hex,Color.WHITE,2,true)
 
 	# Enemies
 	for e in enemies:
@@ -1048,7 +1068,7 @@ func _draw():
 		else: draw_circle(Vector2(b.x,b.y),b.radius*1.5,Color(b.color.r,b.color.g,b.color.b,0.15)); draw_circle(Vector2(b.x,b.y),b.radius,b.color); draw_circle(Vector2(b.x,b.y),b.radius,Color.BLACK,false,1); draw_circle(Vector2(b.x,b.y),b.radius*0.4,Color.WHITE)
 
 	# Boss
-	if boss_alive and boss.phase != "defeated":
+	if boss_alive and boss.has("phase") and boss.get("phase", "") != "defeated":
 		var ix: int = int(boss.x); var iy: int = int(boss.y)
 		var col: Color = Color.WHITE if boss.flash > 0 else Color(0.86,0.24,0.24)
 		var pts: PackedVector2Array = PackedVector2Array()
@@ -1077,8 +1097,8 @@ func _draw():
 	else:
 		var ix: int = int(player_x); var iy: int = int(player_y)
 		if Input.is_key_pressed(KEY_SHIFT) and not player_bombing:
-			draw_circle(Vector2(player_x,player_y),GameManager.PLAYER_HITBOX,Color.WHITE,false,1)
-			draw_circle(Vector2(player_x,player_y),GameManager.PLAYER_GRAZE,Color(0.31,0.71,1,0.25),false,1)
+			draw_circle(Vector2(player_x,player_y),game_manager_ref.PLAYER_HITBOX,Color.WHITE,false,1)
+			draw_circle(Vector2(player_x,player_y),game_manager_ref.PLAYER_GRAZE,Color(0.31,0.71,1,0.25),false,1)
 		if player_bombing:
 			draw_circle(Vector2(player_x,player_y),player_bomb_radius,Color(player_bomb_config.color.r,player_bomb_config.color.g,player_bomb_config.color.b,0.3),false,3)
 		draw_circle(Vector2(ix,iy-12),6,Color(1,0.86,0.75))
@@ -1086,49 +1106,56 @@ func _draw():
 		draw_rect(Rect2(ix-7,iy-1,14,3),Color(0.31,0.08,0.31))
 
 	# Title screen
-	var gm_title = get_node_or_null("/root/GameManager")
+	var gm_title = game_manager_ref
 	if gm_title and gm_title.state == "title":
-		draw_circle(Vector2(240, 320), 60, Color(0.2, 0.2, 0.4, 0.5))
-		draw_string(SystemFont.new(), Vector2(140, 240), "Eastern Barrage")
-		draw_string(SystemFont.new(), Vector2(110, 270), "~ Touhou-style Danmaku ~")
-		draw_string(SystemFont.new(), Vector2(140, 380), "Press Z to Start")
-		draw_string(SystemFont.new(), Vector2(60, 500), "Arrow Keys - Move | Z - Shoot | X - Bomb")
-		draw_string(SystemFont.new(), Vector2(90, 520), "Shift - Focus | Esc - Pause")
+		var title_font := SystemFont.new()
+		draw_circle(Vector2(_screen_center_x(), SCREEN_H * (320.0 / 960.0)), SCREEN_W * (60.0 / 720.0), Color(0.2, 0.2, 0.4, 0.5))
+		var title_main := "\u4e1c\u65b9\u5f39\u5e55"
+		var title_sub := "\u4e1c\u65b9\u98ce\u5f39\u5e55\u5c04\u51fb"
+		var title_start := "\u6309 Z \u5f00\u59cb"
+		var title_controls := "\u65b9\u5411\u952e\u79fb\u52a8 | Z \u5c04\u51fb | X \u70b8\u5f39"
+		var title_focus := "Shift \u4f4e\u901f\u805a\u7126 | Esc \u6682\u505c"
+		draw_string(title_font, Vector2(_centered_text_x(title_font, title_main), SCREEN_H * (240.0 / 960.0)), title_main)
+		draw_string(title_font, Vector2(_centered_text_x(title_font, title_sub), SCREEN_H * (270.0 / 960.0)), title_sub)
+		draw_string(title_font, Vector2(_centered_text_x(title_font, title_start), SCREEN_H * (380.0 / 960.0)), title_start)
+		draw_string(title_font, Vector2(_centered_text_x(title_font, title_controls), SCREEN_H * (500.0 / 960.0)), title_controls)
+		draw_string(title_font, Vector2(_centered_text_x(title_font, title_focus), SCREEN_H * (520.0 / 960.0)), title_focus)
 		return
-	# Game-over / all-clear summary screen — shows when state is game_over
+	# Game-over / all-clear summary screen - shows when state is game_over
 	# or final_clear. Without this branch the game would render the empty
 	# Stage background forever with no UI hint at all.
 	if gm_title and gm_title.state in ["game_over", "final_clear"]:
 		var sf = SystemFont.new()
-		var banner: String = "All Stages Cleared!" if gm_title.state == "final_clear" else "Game Over"
+		var banner: String = "\u5168\u5173\u901a\u8fc7" if gm_title.state == "final_clear" else "\u6e38\u620f\u7ed3\u675f"
 		var bonus: int = gm_title.score + gm_title.graze * 10
-		var box_rect := Rect2(120, 180, 240, 220)
+		var box_rect := _summary_box_rect()
+		var text_x := box_rect.position.x + 20.0
 		draw_rect(box_rect, Color(0.05, 0.05, 0.1, 0.8))
 		draw_rect(box_rect, Color(0.86, 0.24, 0.24), false, 2)
-		draw_string(sf, Vector2(120, 230), banner)
-		draw_string(sf, Vector2(140, 280), "Score: %d" % gm_title.score)
-		draw_string(sf, Vector2(140, 310), "Graze: %d  (+%d)" % [gm_title.graze, gm_title.graze*10])
-		draw_string(sf, Vector2(140, 340), "Bonus: %d" % bonus)
-		var total_y := 380
+		draw_string(sf, Vector2(_centered_text_x(sf, banner), box_rect.position.y + 50.0), banner)
+		draw_string(sf, Vector2(text_x, box_rect.position.y + 100.0), "\u5f97\u5206: %d" % gm_title.score)
+		draw_string(sf, Vector2(text_x, box_rect.position.y + 130.0), "\u64e6\u5f39: %d  (+%d)" % [gm_title.graze, gm_title.graze*10])
+		draw_string(sf, Vector2(text_x, box_rect.position.y + 160.0), "\u5956\u52b1: %d" % bonus)
+		var total_y := box_rect.position.y + 200.0
 		if gm_title.state == "final_clear":
-			total_y = 370
-			draw_string(sf, Vector2(140, total_y), "TOTAL: %d" % bonus)
+			total_y = box_rect.position.y + 190.0
+			draw_string(sf, Vector2(text_x, total_y), "\u603b\u8ba1: %d" % bonus)
 			total_y += 30
-		draw_string(sf, Vector2(140, total_y), "Press Z to return")
+		draw_string(sf, Vector2(text_x, total_y), "\u6309 Z \u8fd4\u56de\u6807\u9898")
 		return
 
 
-	var gm = GameManager
+	var gm = game_manager_ref
 	var font = SystemFont.new()
-	draw_string(font,Vector2(10,20),"Score: %d"%gm.score)
-	draw_string(font,Vector2(10,35),"Graze: %d"%gm.graze)
-	draw_string(font,Vector2(10,50),"Shot: %s Lv.%d"%[gm.BULLET_NAMES[gm.bullet_type],gm.power_level()])
+	draw_string(font,Vector2(10,20),"\u5f97\u5206: %d"%gm.score)
+	draw_string(font,Vector2(10,35),"\u64e6\u5f39: %d"%gm.graze)
+	draw_string(font,Vector2(10,50),"\u5c04\u51fb: %s Lv.%d"%[SHOT_NAMES_ZH[gm.bullet_type],gm.power_level()])
 	# Right-aligned life/bomb indicators: heart/diamond count can grow up to
 	# 6/5, so we anchor the trailing edge 12px inside the right screen edge
-	# and let the string extend to the left as lives/bombs increase — never
+	# and let the string extend to the left as lives/bombs increase - never
 	# off the right side.
-	var life_str = "Life: "+"♥".repeat(gm.lives)
-	var bomb_str = "Bomb: "+"◆".repeat(gm.bombs)
+	var life_str = "\u6b8b\u673a: " + "\u2665".repeat(gm.lives)
+	var bomb_str = "\u70b8\u5f39: " + "\u25c6".repeat(gm.bombs)
 	var life_w = font.get_string_size(life_str).x
 	var bomb_w = font.get_string_size(bomb_str).x
 	var right_margin: float = 12.0
