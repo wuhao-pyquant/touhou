@@ -9,7 +9,10 @@ var boss: Dictionary = {}
 var boss_alive: bool = false
 var stage_controller: Dictionary = {}
 var stage_timer: float = 0.0
-var player_x: float = 240.0
+var current_stage_local: int = 1
+var SCREEN_W: int = 720
+var SCREEN_H: int = 960
+var player_x: float = 360.0
 var player_y: float = 540.0
 var player_invincible: bool = false
 var player_invincible_timer: float = 0.0
@@ -24,12 +27,55 @@ var player_fire_cooldown: float = 0.0
 var _sfx_shoot_skip: int = 0
 var player_deathbomb_primed: bool = false
 var player_deathbomb_timer: float = 0.0
-var MAX_BULLETS: int = GameManager.MAX_BULLETS
-var SCREEN_W: int = GameManager.SCREEN_W
-var SCREEN_H: int = GameManager.SCREEN_H
+var MAX_BULLETS: int = 12000
 const PLAYFIELD_MARGIN := 16.0
+var GameManager: Object = null
+var AudioManager: Object = null
+
+func _resolve_singletons() -> void:
+	if not GameManager:
+		if is_inside_tree():
+			GameManager = get_node_or_null("/root/GameManager")
+		if not GameManager:
+			GameManager = load("res://autoload/game_manager.gd").new()
+	if not AudioManager:
+		if is_inside_tree():
+			AudioManager = get_node_or_null("/root/AudioManager")
+		else:
+			AudioManager = null
+
+func _init() -> void:
+	_resolve_singletons()
+	if GameManager:
+		MAX_BULLETS = GameManager.MAX_BULLETS
+		SCREEN_W = GameManager.SCREEN_W
+		SCREEN_H = GameManager.SCREEN_H
+	else:
+		MAX_BULLETS = 12000
+		SCREEN_W = 720
+		SCREEN_H = 960
+	_apply_viewport_layout()
+
+func _active_stage() -> int:
+	var gm = null
+	if is_inside_tree():
+		gm = get_node_or_null("/root/GameManager")
+	return gm.current_stage if gm else current_stage_local
+
+func _set_active_stage(stage: int) -> void:
+	current_stage_local = stage
+	var gm = null
+	if is_inside_tree():
+		gm = get_node_or_null("/root/GameManager")
+	if gm:
+		gm.current_stage = stage
+
+func _apply_viewport_layout() -> void:
+	player_x = SCREEN_W * 0.5
+	player_y = SCREEN_H * 0.5625
 
 func _ready():
+	_resolve_singletons()
 	randomize()
 	for i in range(MAX_BULLETS):
 		bullet_pool.append(_make_bullet())
@@ -47,7 +93,7 @@ func _show_title():
 func _start_game():
 	GameManager.reset()
 	GameManager.state = "stage"
-	GameManager.current_stage = 1
+	_set_active_stage(1)
 	stage_timer = 0.0
 	_reset_player()
 	_clear_bullets()
@@ -57,7 +103,8 @@ func _start_game():
 	if AudioManager: AudioManager.bgm_stage_mid(1)
 
 func _reset_player():
-	player_x = 240.0; player_y = 540.0
+	player_x = SCREEN_W * 0.5
+	player_y = SCREEN_H * 0.5625
 	player_invincible = false; player_invincible_timer = 0.0
 	player_just_hit = false; player_bombing = false
 	player_bomb_timer = 0.0; player_bomb_radius = 0.0; player_bomb_phase = 0
@@ -76,20 +123,25 @@ func _respawn():
 	player_invincible_timer = GameManager.INVINCIBLE_DURATION / 60.0
 
 func _advance_stage():
-	GameManager.current_stage += 1
+	_set_active_stage(_active_stage() + 1)
 	stage_timer = 0.0
 	_clear_bullets()
 	items.clear(); enemies.clear()
 	boss = {}; boss_alive = false
-	_load_stage(GameManager.current_stage)
+	_load_stage(_active_stage())
 	GameManager.state = "stage"
-	if AudioManager: AudioManager.bgm_stage_mid(GameManager.current_stage)
+	if AudioManager: AudioManager.bgm_stage_mid(_active_stage())
 
 func _load_stage(stage: int):
+	current_stage_local = stage
 	match stage:
 		1: stage_controller = {"boss_time": 4500, "waves": {}}
 		2: stage_controller = {"boss_time": 4800, "waves": {}}
 		3: stage_controller = {"boss_time": 5400, "waves": {}}
+		_:
+			# FOUNDATION FALLBACK: reuse a baseline controller for stages 4-6.
+			var fallback_idx: int = _fallback_stage_index(stage)
+			stage_controller = {"boss_time": 3600 + (fallback_idx - 1) * 600, "waves": {}, "fallback_from": fallback_idx}
 	# Stage waves defined inline below
 	stage_controller["boss_spawned"] = false
 
@@ -208,10 +260,16 @@ func _init_boss():
 	boss_alive = true
 
 func _load_boss_cards():
-	match GameManager.current_stage:
+	match _active_stage():
 		1: boss.cards = _stage1_cards()
 		2: boss.cards = _stage2_cards()
 		3: boss.cards = _stage3_cards()
+		_:
+			# FOUNDATION FALLBACK: reuse cards from the baseline cycle for stages 4-6.
+			match _fallback_stage_index(_active_stage()):
+				1: boss.cards = _stage1_cards()
+				2: boss.cards = _stage2_cards()
+				_: boss.cards = _stage3_cards()
 
 func _stage1_cards() -> Array:
 	return [
@@ -451,12 +509,22 @@ func _bullets_apocalypse(mult: float):
 	if int(boss.card_shot) % (2 if boss.card_timer < 600 else 4) == 0:
 		var a: float = randf_range(0,TAU); _spawn_bullet_enemy(boss.x,boss.y,cos(a)*randf_range(3,6)*mult,sin(a)*randf_range(3,6)*mult,3,Color.WHITE)
 
+# Stage wave helpers for the foundation stage layout.
+func _fallback_stage_index(stage: int) -> int:
+	return ((stage - 1) % 3) + 1
+
 # Stage wave spawning
 func _stage_waves(timer: int):
-	match GameManager.current_stage:
+	match _active_stage():
 		1: _waves_s1(timer)
 		2: _waves_s2(timer)
 		3: _waves_s3(timer)
+		_:
+			# FOUNDATION FALLBACK: cycle through baseline waves for stages 4-6.
+			match _fallback_stage_index(_active_stage()):
+				1: _waves_s1(timer)
+				2: _waves_s2(timer)
+				_: _waves_s3(timer)
 
 func _waves_s1(timer: int):
 	var w: int = timer
@@ -1032,6 +1100,7 @@ func _draw():
 	var bomb_str = "Bomb: "+"◆".repeat(gm.bombs)
 	var life_w = font.get_string_size(life_str).x
 	var bomb_w = font.get_string_size(bomb_str).x
-	draw_string(font, Vector2(468 - life_w, 20), life_str)
-	draw_string(font, Vector2(468 - bomb_w, 35), bomb_str)
+	var right_margin: float = 12.0
+	draw_string(font, Vector2(SCREEN_W - right_margin - life_w, 20), life_str)
+	draw_string(font, Vector2(SCREEN_W - right_margin - bomb_w, 35), bomb_str)
 	draw_string(font, Vector2(10, SCREEN_H - 15), gm.STAGE_NAMES[gm.current_stage - 1])
