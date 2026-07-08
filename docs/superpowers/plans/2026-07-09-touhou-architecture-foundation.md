@@ -1040,7 +1040,10 @@ Run:
 ```powershell
 git status --short
 git add project.godot autoload scripts tests
-git commit -m "feat: establish touhou production foundation" || Write-Host "No final commit needed; previous task commits are current."
+git commit -m "feat: establish touhou production foundation"
+if ($LASTEXITCODE -ne 0) {
+	Write-Host "No final commit needed; previous task commits are current."
+}
 ```
 
 Expected: Git creates a final checkpoint commit when there are remaining staged changes, or prints that no final commit is needed.
