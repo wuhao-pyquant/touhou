@@ -19,6 +19,7 @@ run/main_scene="res://scenes/main.tscn"
 
 GameManager="*res://autoload/game_manager.gd"
 AudioManager="*res://autoload/audio_manager.gd"
+AssetRegistry="*res://autoload/asset_registry.gd"
 
 [display]
 
