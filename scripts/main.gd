@@ -44,7 +44,9 @@ var game_manager_ref: Object = null
 var audio_manager_ref: Object = null
 var performance_monitor_ref: Node = null
 var ui_model: Object = load("res://scripts/ui/ui_model.gd").new()
-var game_database: Object = load("res://scripts/data/game_database.gd").new()
+var game_database_ref: Object = load("res://scripts/data/game_database.gd").new()
+var game_database: Object = game_database_ref
+var item_reward_system: Object = load("res://scripts/runtime/item_reward_system.gd").new()
 var shot_executor: Object = load("res://scripts/player/player_shot_executor.gd").new()
 var bomb_executor: Object = load("res://scripts/player/player_bomb_executor.gd").new()
 var enemy_pattern_executor: Object = load("res://scripts/runtime/enemy_pattern_executor.gd").new()
@@ -1354,8 +1356,8 @@ func _check_collisions(is_boss: bool):
 						if b.type == "player": b.active = false
 						if e.hp <= 0 and not e.dying:
 							e.dying = true; e.death_timer = 8.0
-							_drop_item(e.x,e.y,e.strong)
-							game_manager_ref.score += 50
+							_drop_item(e.x, e.y, e.strong, String(e.get("drop_tier", "")))
+							game_manager_ref.score += int(game_database_ref.scoring_rules().enemy_defeat) if game_database_ref else 50
 							if audio_manager_ref: audio_manager_ref.play_sfx("kill", -6.0 if e.strong else -8.0)
 						break
 		elif _is_enemy_bullet_type(String(b.type)):
@@ -1376,55 +1378,23 @@ func _check_collisions(is_boss: bool):
 		if Vector2(it.x,it.y).distance_to(Vector2(player_x,player_y)) < it.radius + 24.0:
 			_collect(it)
 
-func _drop_item(x: float, y: float, strong: bool):
-	var r: float = randf()
-	var t: String = "power"
-	if strong:
-		if r < 0.48: t = "bomb_refill"
-		elif r < 0.72: t = "bomb_fragment"
-		elif r < 0.86: t = "life_fragment"
-		else: t = "full_power"
-	else:
-		if r < 0.36: t = "power"
-		elif r < 0.54: t = "point"
-		elif r < 0.64: t = "bomb_refill"
-		elif r < 0.74: t = "bomb_fragment"
-		elif r < 0.80: t = "life_fragment"
-		else: t = "full_power"
+func _drop_item_type(strong: bool, roll: float, drop_tier: String = "") -> String:
+	var tier := drop_tier
+	if tier == "":
+		tier = "rich" if strong else "light"
+	return item_reward_system.choose_drop(tier, roll)
+
+func _drop_item(x: float, y: float, strong: bool, drop_tier: String = ""):
+	var t: String = _drop_item_type(strong, randf(), drop_tier)
 	items.append({"alive":true,"collected":false,"x":x,"y":y,"type":t,"radius":9.0,"vy":-2.5,"vx":randf_range(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":randf_range(0,TAU),"birth":15.0,"anim":randf_range(0,TAU)})
 
 func _collect(it: Dictionary):
 	_collect_item(it)
 
 func _collect_item(it: Dictionary):
-	it.collected = true; it.alive = false
-	match it.type:
-		"bullet_spread", "bullet_linear", "bullet_homing":
-			game_manager_ref.add_power(2)
-			game_manager_ref.score += 120
-		"power":
-			if game_manager_ref.add_power(): pass
-			game_manager_ref.score += 10
-		"point":
-			game_manager_ref.score += 10 * (1 + game_manager_ref.shared_power)
-		"bomb_refill":
-			game_manager_ref.bombs = min(game_manager_ref.bombs+1, 5); game_manager_ref.score += 100
-		"bomb_fragment":
-			game_manager_ref.bomb_fragments += 1
-			if game_manager_ref.bomb_fragments >= 3:
-				game_manager_ref.bombs = min(game_manager_ref.bombs+1, 5)
-				game_manager_ref.bomb_fragments -= 3
-			game_manager_ref.score += 100
-		"life":
-			game_manager_ref.lives = min(game_manager_ref.lives+1, 6); game_manager_ref.score += 500
-		"life_fragment":
-			game_manager_ref.life_fragments += 1
-			if game_manager_ref.life_fragments >= 5:
-				game_manager_ref.lives = min(game_manager_ref.lives+1, 6)
-				game_manager_ref.life_fragments -= 5
-			game_manager_ref.score += 500
-		"full_power":
-			game_manager_ref.shared_power = 50; game_manager_ref.score += 300
+	it.collected = true
+	it.alive = false
+	item_reward_system.apply_collection(String(it.type), game_manager_ref, float(it.get("y", player_y)), game_manager_ref.SCREEN_H * game_manager_ref.ITEM_TOP_RATIO)
 
 func _draw_ui_background(accent: Color) -> void:
 	draw_rect(Rect2(0, 0, SCREEN_W, SCREEN_H), Color(0.04, 0.05, 0.08))
@@ -1633,6 +1603,11 @@ func _draw():
 				draw_colored_polygon(bomb_pts,Color(1.0,0.46,0.12))
 				draw_polyline(bomb_pts,Color.WHITE,1,true)
 				draw_circle(Vector2(ix,iy),3,Color(1.0,0.86,0.42))
+			"night_festival_seal":
+				var seal_pts: PackedVector2Array = PackedVector2Array([Vector2(ix, iy - 11), Vector2(ix + 8, iy - 3), Vector2(ix + 7, iy + 8), Vector2(ix - 7, iy + 8), Vector2(ix - 8, iy - 3)])
+				draw_colored_polygon(seal_pts, Color(0.85, 0.18, 0.34))
+				draw_polyline(seal_pts, Color.WHITE, 1, true)
+				draw_line(Vector2(ix - 4, iy), Vector2(ix + 4, iy), Color(1.0, 0.86, 0.42), 2)
 			"life", "life_fragment": draw_rect(Rect2(ix-9,iy-9,18,18),Color.PINK); draw_rect(Rect2(ix-9,iy-9,18,18),Color.WHITE,false,2)
 			_:
 				var bt: int = 0
@@ -1736,6 +1711,7 @@ func _draw():
 	draw_string(font,Vector2(10,35),"\u64e6\u5f39: %d"%gm.graze)
 	draw_string(font,Vector2(10,50),"Shot: %s Lv.%d"%[_gameplay_shot_label(),gm.power_level()])
 	draw_string(font,Vector2(10,65),"Pilot: %s  Bomb: %s"%[_gameplay_protagonist_label(),_gameplay_bomb_label()])
+	draw_string(font, Vector2(10, 80), "Seals: %d" % gm.night_festival_seals)
 	# Right-aligned life/bomb indicators: heart/diamond count can grow up to
 	# 6/5, so we anchor the trailing edge 12px inside the right screen edge
 	# and let the string extend to the left as lives/bombs increase - never

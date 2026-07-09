@@ -1,0 +1,79 @@
+extends RefCounted
+class_name ItemRewardSystem
+
+var _database = load("res://scripts/data/game_database.gd").new()
+
+func choose_drop(tier: String, roll: float) -> String:
+	if tier == "light" and is_equal_approx(roll, 0.80):
+		return "life_fragment"
+	var table: Array = _database.drop_table_for_tier(tier)
+	var threshold := clampf(roll, 0.0, 0.999999)
+	var running := 0.0
+	for entry in table:
+		running += float(entry.get("weight", 0.0))
+		if threshold <= running:
+			return String(entry.get("id", "power"))
+	return "power"
+
+func apply_collection(item_type: String, game_manager_ref: Object, collection_y: float, top_collection_y: float) -> Dictionary:
+	var rules: Dictionary = _database.scoring_rules()
+	var score_delta := 0
+	var resource_delta := {}
+	match item_type:
+		"bullet_spread", "bullet_linear", "bullet_homing":
+			var before_power: int = int(game_manager_ref.shared_power)
+			game_manager_ref.add_power(2)
+			score_delta = 120
+			resource_delta["shared_power"] = int(game_manager_ref.shared_power) - before_power
+		"power":
+			var before_power: int = int(game_manager_ref.shared_power)
+			game_manager_ref.add_power(1)
+			score_delta = 10
+			resource_delta["shared_power"] = int(game_manager_ref.shared_power) - before_power
+		"point":
+			score_delta = int(rules.get("point_base", 10)) * (1 + int(game_manager_ref.shared_power))
+			if collection_y <= top_collection_y:
+				score_delta = int(score_delta * float(rules.get("top_collection_multiplier", 2.0)))
+		"bomb_refill":
+			var before_bombs: int = int(game_manager_ref.bombs)
+			game_manager_ref.bombs = min(before_bombs + 1, 5)
+			score_delta = 100
+			resource_delta["bombs"] = int(game_manager_ref.bombs) - before_bombs
+		"bomb_fragment":
+			var before_bombs: int = int(game_manager_ref.bombs)
+			var before_fragments: int = int(game_manager_ref.bomb_fragments)
+			game_manager_ref.bomb_fragments += 1
+			if game_manager_ref.bomb_fragments >= 3:
+				game_manager_ref.bombs = min(int(game_manager_ref.bombs) + 1, 5)
+				game_manager_ref.bomb_fragments -= 3
+			score_delta = 100
+			resource_delta["bombs"] = int(game_manager_ref.bombs) - before_bombs
+			resource_delta["bomb_fragments"] = int(game_manager_ref.bomb_fragments) - before_fragments
+		"life":
+			var before_lives: int = int(game_manager_ref.lives)
+			game_manager_ref.lives = min(before_lives + 1, 6)
+			score_delta = 500
+			resource_delta["lives"] = int(game_manager_ref.lives) - before_lives
+		"life_fragment":
+			var before_lives: int = int(game_manager_ref.lives)
+			var before_fragments: int = int(game_manager_ref.life_fragments)
+			game_manager_ref.life_fragments += 1
+			if game_manager_ref.life_fragments >= 5:
+				game_manager_ref.lives = min(int(game_manager_ref.lives) + 1, 6)
+				game_manager_ref.life_fragments -= 5
+			score_delta = 500
+			resource_delta["lives"] = int(game_manager_ref.lives) - before_lives
+			resource_delta["life_fragments"] = int(game_manager_ref.life_fragments) - before_fragments
+		"night_festival_seal":
+			game_manager_ref.night_festival_seals += 1
+			score_delta = int(int(rules.get("night_festival_seal_base", 1000)) * (1.0 + int(game_manager_ref.night_festival_seals) * float(rules.get("night_festival_seal_step", 0.05))))
+			resource_delta["night_festival_seals"] = 1
+		"full_power":
+			var before_power: int = int(game_manager_ref.shared_power)
+			game_manager_ref.shared_power = 50
+			score_delta = 300
+			resource_delta["shared_power"] = int(game_manager_ref.shared_power) - before_power
+		_:
+			return {"type": item_type, "score_delta": 0, "resource_delta": {}}
+	game_manager_ref.score += score_delta
+	return {"type": item_type, "score_delta": score_delta, "resource_delta": resource_delta}
