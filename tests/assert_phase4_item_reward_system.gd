@@ -88,6 +88,12 @@ func _verify_reward_system() -> void:
 	_assert_equal(gm.bombs, 1, "Custom fragment goal should grant one bomb once reached.")
 	_assert_equal(gm.bomb_fragments, 0, "Custom fragment goal should consume fragments once reached.")
 	_assert_equal(int(custom_bomb_fragment_result.score_delta), 777, "Bomb fragment should use database base_score when provided.")
+	fake_database._items["point"]["base_score"] = 0
+	gm.score = 0
+	gm.shared_power = 10
+	var zero_base_point_result: Dictionary = rewards.apply_collection("point", gm, 400.0, 128.0)
+	_assert_equal(int(zero_base_point_result.score_delta), 0, "Point item should honor a present zero base_score from data.")
+	_assert_equal(int(gm.score), 0, "Point item with zero base_score should not fall back to default scoring.")
 
 	rewards._database = load("res://scripts/data/game_database.gd").new()
 
