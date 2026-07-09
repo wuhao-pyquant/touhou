@@ -100,6 +100,19 @@ func _sync_active_bgm_volume() -> void:
 	if player:
 		player.volume_db = _effective_bgm_volume_db()
 
+func _silence_inactive_bgm_players() -> void:
+	if bgm_players.is_empty():
+		return
+	var active_idx: int = clampi(_bgm_active_idx, 0, bgm_players.size() - 1)
+	for i in range(bgm_players.size()):
+		if i == active_idx:
+			continue
+		var player = bgm_players[i]
+		if player:
+			player.volume_db = MIN_VOLUME_DB
+			if player.playing:
+				player.stop()
+
 func _apply_master_volume() -> void:
 	var master_bus: int = AudioServer.get_bus_index("Master")
 	if master_bus < 0:
@@ -116,12 +129,14 @@ func apply_settings(settings: Dictionary) -> void:
 	_apply_master_volume()
 	if _bgm_fade_tween and _bgm_fade_tween.is_valid():
 		_bgm_fade_tween.kill()
+	_silence_inactive_bgm_players()
 	_sync_active_bgm_volume()
 
 func set_pause_ducked(ducked: bool) -> void:
 	_pause_ducked = ducked
 	if _bgm_fade_tween and _bgm_fade_tween.is_valid():
 		_bgm_fade_tween.kill()
+	_silence_inactive_bgm_players()
 	_sync_active_bgm_volume()
 
 func configured_bgm_volume_db() -> float:

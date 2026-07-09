@@ -2,6 +2,16 @@ extends SceneTree
 
 var failed := false
 
+class FakeBgmPlayer:
+	var volume_db: float = 0.0
+	var playing: bool = false
+
+	func play() -> void:
+		playing = true
+
+	func stop() -> void:
+		playing = false
+
 func _fail(message: String) -> void:
 	if failed:
 		return
@@ -49,7 +59,7 @@ func _free_audio_fixture(audio: Node, players: Array) -> void:
 		audio.bgm_players = []
 		audio.free()
 	for player in players:
-		if player:
+		if player is Node:
 			player.free()
 
 func _free_main_fixture(main_shell: Node, gm: Node, audio: Node = null, players: Array = []) -> void:
@@ -91,6 +101,31 @@ func _verify_audio_manager_contract() -> void:
 		return
 	audio.set_pause_ducked(false)
 	if not _assert_approx(bgm_player.volume_db, _volume_db(0.25), "Resuming should restore configured BGM volume."):
+		_free_audio_fixture(audio, players)
+		return
+	_free_audio_fixture(audio, players)
+
+func _verify_inactive_bgm_players_are_silenced_on_pause_duck() -> void:
+	var audio_script = load("res://autoload/audio_manager.gd")
+	if not _assert(audio_script != null, "Could not load audio_manager.gd for BGM fade cancellation check."):
+		return
+	var audio = audio_script.new()
+	var old_bgm_player := FakeBgmPlayer.new()
+	var active_bgm_player := FakeBgmPlayer.new()
+	var players := [old_bgm_player, active_bgm_player]
+	audio.bgm_players = players
+	audio._bgm_active_idx = 1
+	audio.apply_settings(_phase2_settings())
+	old_bgm_player.volume_db = -6.0
+	active_bgm_player.volume_db = audio.configured_bgm_volume_db()
+	old_bgm_player.play()
+	active_bgm_player.play()
+	if not _assert(old_bgm_player.playing and active_bgm_player.playing, "BGM fade cancellation fixture should start with both players playing."):
+		_free_audio_fixture(audio, players)
+		return
+
+	audio.set_pause_ducked(true)
+	if not _assert(old_bgm_player.volume_db <= -79.0 or not old_bgm_player.playing, "Pause ducking during a cancelled BGM crossfade should silence the inactive old BGM player."):
 		_free_audio_fixture(audio, players)
 		return
 	_free_audio_fixture(audio, players)
@@ -185,6 +220,9 @@ func _verify_main_settings_contract() -> void:
 
 func _init() -> void:
 	_verify_audio_manager_contract()
+	if failed:
+		return
+	_verify_inactive_bgm_players_are_silenced_on_pause_duck()
 	if failed:
 		return
 	_verify_main_settings_contract()
