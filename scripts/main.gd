@@ -169,6 +169,22 @@ func _bullet_draw_color(base: Color, alpha_override: float = -1.0) -> Color:
 func _should_show_focus_hitbox() -> bool:
 	return not player_bombing and (_settings_bool("always_show_focus_hitbox", false) or Input.is_key_pressed(KEY_SHIFT))
 
+func _player_hitbox_radius() -> float:
+	_resolve_singletons()
+	if game_manager_ref and game_manager_ref.has_method("selected_hitbox_radius"):
+		return float(game_manager_ref.selected_hitbox_radius())
+	if game_manager_ref:
+		return float(game_manager_ref.PLAYER_HITBOX)
+	return 2.0
+
+func _player_graze_radius() -> float:
+	_resolve_singletons()
+	if game_manager_ref and game_manager_ref.has_method("selected_graze_radius"):
+		return float(game_manager_ref.selected_graze_radius())
+	if game_manager_ref:
+		return float(game_manager_ref.PLAYER_GRAZE)
+	return 10.0
+
 func _should_show_performance_hud() -> bool:
 	return _settings_bool("show_performance_hud", false)
 
@@ -1305,6 +1321,8 @@ func _update_performance_counters() -> void:
 	monitor.set_counter("draw_groups", _count_bullet_draw_groups())
 
 func _check_collisions(is_boss: bool):
+	var player_hitbox_radius: float = _player_hitbox_radius()
+	var player_graze_radius: float = _player_graze_radius()
 	for b in bullet_pool:
 		if not b.active: continue
 		if b.type == "player" or b.type == "bomb":
@@ -1326,7 +1344,7 @@ func _check_collisions(is_boss: bool):
 							if audio_manager_ref: audio_manager_ref.play_sfx("kill", -6.0 if e.strong else -8.0)
 						break
 		elif b.type in ["circle","rice","arrow","laser"]:
-			if not player_invincible and Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < b.radius + game_manager_ref.PLAYER_HITBOX:
+			if not player_invincible and Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < b.radius + player_hitbox_radius:
 				player_deathbomb_primed = true; player_deathbomb_timer = game_manager_ref.DEATHBOMB_WINDOW/60.0
 				player_just_hit = true; b.active = false
 				if audio_manager_ref: audio_manager_ref.play_sfx("hit", -2.0)
@@ -1334,7 +1352,7 @@ func _check_collisions(is_boss: bool):
 	# Graze
 	for b in bullet_pool:
 		if b.active and b.type in ["circle","rice","arrow","laser"]:
-			if Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < game_manager_ref.PLAYER_GRAZE + b.radius:
+			if Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < player_graze_radius + b.radius:
 				game_manager_ref.graze += 1; game_manager_ref.score += 10
 
 	# Item collection
@@ -1663,8 +1681,8 @@ func _draw():
 	else:
 		var ix: int = int(player_x); var iy: int = int(player_y)
 		if _should_show_focus_hitbox():
-			draw_circle(Vector2(player_x,player_y),game_manager_ref.PLAYER_HITBOX,Color.WHITE,false,1)
-			draw_circle(Vector2(player_x,player_y),game_manager_ref.PLAYER_GRAZE,Color(0.31,0.71,1,0.25),false,1)
+			draw_circle(Vector2(player_x,player_y),_player_hitbox_radius(),Color.WHITE,false,1)
+			draw_circle(Vector2(player_x,player_y),_player_graze_radius(),Color(0.31,0.71,1,0.25),false,1)
 		if player_bombing:
 			draw_circle(Vector2(player_x,player_y), player_bomb_radius, _bullet_draw_color(player_bomb_config.color, 0.3), false, 3)
 		draw_circle(Vector2(ix,iy-12),6,Color(1,0.86,0.75))

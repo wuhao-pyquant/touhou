@@ -95,6 +95,28 @@ func _verify_game_manager_helpers() -> void:
 	_assert_equal(gm.bullet_type, gm.BulletType.LINEAR, "apply_selected_shot should sync legacy bullet_type for HUD/backward compatibility.")
 	gm.free()
 
+func _verify_main_radius_helpers_use_selected_profile() -> void:
+	var gm = load("res://autoload/game_manager.gd").new()
+	var main_script = load("res://scripts/main.gd")
+	if not _assert(main_script != null, "Could not load main.gd"):
+		gm.free()
+		return
+	var main_shell = main_script.new()
+	main_shell.game_manager_ref = gm
+	for method in ["_player_hitbox_radius", "_player_graze_radius"]:
+		if not _assert(main_shell.has_method(method), "Main missing selected-radius helper %s" % method):
+			main_shell.free()
+			gm.free()
+			return
+	gm.selected_protagonist_id = "swordswoman"
+	var profile: Dictionary = gm.protagonist_profile()
+	_assert_equal(main_shell._player_hitbox_radius(), float(profile.hitbox), "Main hitbox helper should use selected protagonist hitbox.")
+	_assert_equal(main_shell._player_graze_radius(), float(profile.graze_radius), "Main graze helper should use selected protagonist graze radius.")
+	_assert(main_shell._player_hitbox_radius() != gm.PLAYER_HITBOX, "Swordswoman hitbox regression should differ from legacy default constant.")
+	_assert(main_shell._player_graze_radius() != gm.PLAYER_GRAZE, "Swordswoman graze regression should differ from legacy default constant.")
+	main_shell.free()
+	gm.free()
+
 func _verify_ui_details() -> void:
 	var ui_script = load("res://scripts/ui/ui_model.gd")
 	if not _assert(ui_script != null, "Could not load ui_model.gd"):
@@ -125,6 +147,9 @@ func _init() -> void:
 	if failed:
 		return
 	_verify_game_manager_helpers()
+	if failed:
+		return
+	_verify_main_radius_helpers_use_selected_profile()
 	if failed:
 		return
 	_verify_ui_details()
