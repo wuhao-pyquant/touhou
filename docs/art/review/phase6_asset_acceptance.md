@@ -12,3 +12,15 @@
 | protagonist_shiori_gameplay_sprite | accepted | Regenerated compact version; no wide blade trail hiding bullets. | Matches original spirit-blade direction. | Avoids white bob, green uniform, and ghost-orb motifs. |
 | protagonist_shiori_portrait | accepted | Portrait detail isolated from gameplay; blade accents do not mimic collectibles. | Matches style; original blade guardian identity. | No protected swordswoman silhouette. |
 | protagonist_shiori_focus_effects | accepted | Broad slash arcs with open center; player-owned effect distinct from needle bullets. | Matches cyan spirit-blade language. | Accepted with gameplay ownership constraints. |
+| boss_01a_gameplay_sprite | accepted | Compact lantern-spirit boss silhouette; no small spark clusters or bead-like bullets. | Matches Stage 1 warm lantern style. | Regenerated compact sprite after rejecting a wider side-lantern concept. |
+| boss_01a_portrait | accepted | Portrait-only lantern detail; not used as active projectile language. | Matches hand-painted Aoi concept. | Accepted as UI/story portrait. |
+| boss_01a_spell_aura | accepted | Broad warm lantern halo; avoids tiny fire dots and bullet-like rings. | Matches Stage 1 lantern aura language. | Used behind boss only. |
+| boss_01b_gameplay_sprite | accepted | Regenerated to remove hanging diamond/item-like ornaments. | Matches Madara fox-guide style. | Compact tail and broad paper motif remain readable. |
+| boss_01b_portrait | accepted | Portrait detail allowed; no small butterfly projectile clusters. | Matches hand-painted fox-guide concept. | Accepted as UI/story portrait. |
+| boss_01b_spell_aura | accepted | Broad foxfire/paper-butterfly aura; no many small butterfly bullets. | Matches Stage 1 boss aura style. | Used behind boss only. |
+| boss_02a_gameplay_sprite | accepted | Regenerated to avoid bead rows, floating blocks, coins, and item-like shapes. | Matches Kirika counting-frame theme. | Uses broad back-frame silhouette only. |
+| boss_02a_portrait | accepted | Regenerated until bead rows and item-shaped charms were removed. | Matches hand-painted market tsukumogami concept. | Uses rectangular counting-frame language. |
+| boss_02a_spell_aura | accepted | Broad rectangular frame aura; no bead rows or coin dots. | Matches market counting magic style. | Corner plates are large non-collectible shapes. |
+| boss_02b_gameplay_sprite | accepted | Regenerated compact sprite; folded fan and no dangling item-like charms. | Matches Stage 2 oni market leader concept. | Avoids coin/gem/drop silhouettes. |
+| boss_02b_portrait | accepted | Portrait detail avoids coin clusters and small gold dots. | Matches hand-painted oni merchant-leader style. | Accepted as UI/story portrait. |
+| boss_02b_spell_aura | accepted | Broad lacquer-red/oni-mask aura; avoids coin clusters and point-item dots. | Matches Stage 2 command aura. | Used behind boss only. |

@@ -510,7 +510,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_01a_aoi_assets",
       "boss_id": "lantern_tsukumogami"
     },
@@ -524,7 +524,7 @@
       "height": 1024,
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_01a_aoi_assets",
       "boss_id": "lantern_tsukumogami"
     },
@@ -538,7 +538,7 @@
       "height": 720,
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_01a_aoi_assets",
       "boss_id": "lantern_tsukumogami"
     },
@@ -552,7 +552,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_01b_madara_assets",
       "boss_id": "festival_guide_fox"
     },
@@ -566,7 +566,7 @@
       "height": 1024,
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_01b_madara_assets",
       "boss_id": "festival_guide_fox"
     },
@@ -580,7 +580,7 @@
       "height": 720,
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_01b_madara_assets",
       "boss_id": "festival_guide_fox"
     },
@@ -594,7 +594,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_02a_kirika_assets",
       "boss_id": "abacus_tsukumogami"
     },
@@ -608,7 +608,7 @@
       "height": 1024,
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_02a_kirika_assets",
       "boss_id": "abacus_tsukumogami"
     },
@@ -622,7 +622,7 @@
       "height": 720,
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_02a_kirika_assets",
       "boss_id": "abacus_tsukumogami"
     },
@@ -636,7 +636,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_02b_yukari_assets",
       "boss_id": "oni_market_leader"
     },
@@ -650,7 +650,7 @@
       "height": 1024,
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_02b_yukari_assets",
       "boss_id": "oni_market_leader"
     },
@@ -664,7 +664,7 @@
       "height": 720,
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_02b_yukari_assets",
       "boss_id": "oni_market_leader"
     },
