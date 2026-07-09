@@ -24,7 +24,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_01_background_far",
       "stage": 1,
       "stage_id": "shrine_approach"
@@ -39,7 +39,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_01_background_mid",
       "stage": 1,
       "stage_id": "shrine_approach"
@@ -54,7 +54,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_01_background_front",
       "stage": 1,
       "stage_id": "shrine_approach"
@@ -69,7 +69,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_01_background_atmosphere",
       "stage": 1,
       "stage_id": "shrine_approach"
@@ -84,7 +84,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_02_background_set",
       "stage": 2,
       "stage_id": "yokai_market"
@@ -99,7 +99,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_02_background_set",
       "stage": 2,
       "stage_id": "yokai_market"
@@ -114,7 +114,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_02_background_set",
       "stage": 2,
       "stage_id": "yokai_market"
@@ -129,7 +129,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_02_background_set",
       "stage": 2,
       "stage_id": "yokai_market"
