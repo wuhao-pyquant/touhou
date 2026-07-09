@@ -100,6 +100,7 @@ var practice_mode: bool = false
 var pause_return_state: String = STATE_STAGE
 var settings_return_state: String = STATE_TITLE
 var settings: Dictionary = DEFAULT_SETTINGS.duplicate(true)
+var _database = load("res://scripts/data/game_database.gd").new()
 
 func power_level() -> int:
 	for i in range(POWER_THRESHOLDS.size()):
@@ -114,6 +115,49 @@ func add_power(amount: int = 1):
 
 func switch_bullet_type(bt: int):
 	bullet_type = clampi(bt, 0, 2)
+
+func protagonist_profile() -> Dictionary:
+	var profile: Dictionary = _database.protagonist_by_id(selected_protagonist_id)
+	if profile.is_empty():
+		return _database.protagonist_by_id(DEFAULT_PROTAGONIST_ID)
+	return profile
+
+func selected_shot_profile() -> Dictionary:
+	var profile: Dictionary = _database.shot_profile_by_id(selected_shot_id)
+	if profile.is_empty():
+		return _database.shot_profile_by_id(DEFAULT_SHOT_ID)
+	return profile
+
+func selected_bomb_profile() -> Dictionary:
+	var profile: Dictionary = _database.bomb_profile_for_protagonist(selected_protagonist_id)
+	if profile.is_empty():
+		return _database.bomb_profile_for_protagonist(DEFAULT_PROTAGONIST_ID)
+	return profile
+
+func selected_speed_high() -> float:
+	return float(protagonist_profile().get("speed_high", PLAYER_SPEED_HIGH))
+
+func selected_speed_low() -> float:
+	return float(protagonist_profile().get("speed_low", PLAYER_SPEED_LOW))
+
+func selected_hitbox_radius() -> float:
+	return float(protagonist_profile().get("hitbox", PLAYER_HITBOX))
+
+func selected_graze_radius() -> float:
+	return float(protagonist_profile().get("graze_radius", PLAYER_GRAZE))
+
+func selected_fire_interval_frames() -> int:
+	return int(selected_shot_profile().get("fire_interval_frames", PLAYER_FIRE_INTERVAL))
+
+func apply_selected_shot() -> void:
+	var bullet_type_name := String(selected_shot_profile().get("bullet_type", "spread"))
+	match bullet_type_name:
+		"linear":
+			bullet_type = BulletType.LINEAR
+		"homing":
+			bullet_type = BulletType.HOMING
+		_:
+			bullet_type = BulletType.SPREAD
 
 func reset_settings() -> void:
 	settings = DEFAULT_SETTINGS.duplicate(true)

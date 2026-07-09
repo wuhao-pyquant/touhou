@@ -42,6 +42,11 @@ func protagonist_entries() -> Array:
 			"id": String(protagonist.get("id", "")),
 			"label": String(protagonist.get("display_name", "")),
 			"description": _role_description(String(protagonist.get("role", ""))),
+			"detail_lines": [
+				"Speed %.1f / %.1f" % [float(protagonist.speed_high), float(protagonist.speed_low)],
+				"Bomb: %s" % String(protagonist.bomb.get("hud_name", protagonist.bomb.get("display_name", ""))),
+				"Hint: %s" % String(protagonist.get("difficulty_hint", "")),
+			],
 		})
 	return entries
 
@@ -57,6 +62,11 @@ func shot_entries(protagonist_id: String) -> Array:
 			"id": String(shot.get("id", "")),
 			"label": String(shot.get("display_name", "")),
 			"description": _shot_description(String(shot.get("style", ""))),
+			"detail_lines": [
+				"%s  Coverage: %s" % [String(shot.get("type_label", "")), String(shot.get("coverage", ""))],
+				"Focused damage: %s" % String(shot.get("focused_damage", "")),
+				"Hint: %s" % String(shot.get("difficulty_hint", "")),
+			],
 		})
 	return entries
 
