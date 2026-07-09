@@ -125,6 +125,17 @@ func reset_run_config() -> void:
 	pause_return_state = STATE_STAGE
 	settings_return_state = STATE_TITLE
 
+func enter_pause(from_state: String) -> void:
+	pause_return_state = from_state
+	state = STATE_PAUSED
+
+func resume_from_pause() -> void:
+	state = pause_return_state if pause_return_state != "" else STATE_STAGE
+
+func open_settings(return_state: String) -> void:
+	settings_return_state = return_state
+	state = STATE_SETTINGS
+
 func reset():
 	reset_settings()
 	reset_run_config()

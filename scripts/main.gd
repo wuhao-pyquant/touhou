@@ -105,8 +105,7 @@ func _set_ui_state(next_state: String) -> void:
 func _open_settings(return_state: String) -> void:
 	_resolve_singletons()
 	if game_manager_ref:
-		game_manager_ref.settings_return_state = return_state
-	_set_ui_state("settings")
+		game_manager_ref.open_settings(return_state)
 
 func _move_menu_cursor(cursor: int, delta: int, count: int) -> int:
 	if delta == 0:
@@ -288,6 +287,24 @@ func _advance_stage():
 	game_manager_ref.state = "stage"
 	if audio_manager_ref: audio_manager_ref.bgm_stage_mid(_active_stage())
 
+func _restart_current_stage() -> void:
+	_resolve_singletons()
+	if not game_manager_ref:
+		return
+	var stage: int = clampi(game_manager_ref.current_stage, 1, game_manager_ref.stage_count())
+	_set_active_stage(stage)
+	stage_timer = 0.0
+	_reset_player()
+	_clear_bullets()
+	enemies.clear()
+	items.clear()
+	boss = {}
+	boss_alive = false
+	_load_stage(stage)
+	game_manager_ref.state = game_manager_ref.STATE_STAGE
+	if audio_manager_ref:
+		audio_manager_ref.bgm_stage_mid(stage)
+
 func _load_stage(stage: int):
 	current_stage_local = stage
 	match stage:
@@ -414,6 +431,29 @@ func _update_settings_menu() -> void:
 	if _menu_confirm_pressed() and String(current_entry.get("type", "")) == "toggle":
 		game_manager_ref.settings[current_id] = not bool(game_manager_ref.settings.get(current_id, current_entry.get("value", false)))
 
+func _update_pause_menu() -> void:
+	var entries: Array = ui_model.pause_menu_entries()
+	pause_menu_cursor = clampi(pause_menu_cursor, 0, maxi(entries.size() - 1, 0))
+	pause_menu_cursor = _move_menu_cursor(pause_menu_cursor, _menu_vertical_delta(), entries.size())
+	if _menu_cancel_pressed():
+		game_manager_ref.resume_from_pause()
+		return
+	if not _menu_confirm_pressed() or entries.is_empty():
+		return
+	var selected_id: String = String(entries[pause_menu_cursor].get("id", ""))
+	match selected_id:
+		"continue":
+			game_manager_ref.resume_from_pause()
+		"restart_stage":
+			_restart_current_stage()
+		"settings":
+			settings_menu_cursor = 0
+			game_manager_ref.open_settings(game_manager_ref.STATE_PAUSED)
+		"return_to_main_menu":
+			_show_title()
+		"exit_game":
+			_quit_runtime_safe()
+
 func _process(delta: float):
 	_resolve_singletons()
 	delta = clampf(delta, 0.0, 0.05)
@@ -437,13 +477,15 @@ func _process(delta: float):
 		"final_clear", "game_over":
 			if Input.is_action_just_pressed("shoot"): _show_title()
 		"paused":
-			if Input.is_action_just_pressed("pause"):
-				if gm: gm.state = gm.pause_return_state
+			_update_pause_menu()
 	_update_performance_counters()
 	queue_redraw()
 
 func _update_stage(delta: float):
-	if Input.is_action_just_pressed("pause"): game_manager_ref.pause_return_state = "stage"; game_manager_ref.state = "paused"; return
+	if Input.is_action_just_pressed("pause"):
+		pause_menu_cursor = 0
+		game_manager_ref.enter_pause(game_manager_ref.STATE_STAGE)
+		return
 	stage_timer += delta * 60.0
 	_stage_waves(int(stage_timer))
 	if stage_timer >= stage_controller.boss_time and not stage_controller.boss_spawned:
@@ -462,7 +504,10 @@ func _update_stage(delta: float):
 		_enter_boss()
 
 func _update_boss(delta: float):
-	if Input.is_action_just_pressed("pause"): game_manager_ref.pause_return_state = "boss"; game_manager_ref.state = "paused"; return
+	if Input.is_action_just_pressed("pause"):
+		pause_menu_cursor = 0
+		game_manager_ref.enter_pause(game_manager_ref.STATE_BOSS)
+		return
 	_update_player(delta)
 	_update_bullets(delta, Vector2(boss.get("x", _screen_center_x()), boss.get("y", _boss_anchor_y())) if boss_alive else Vector2.ZERO)
 	_update_items(delta)
@@ -1322,6 +1367,33 @@ func _draw_settings_screen() -> void:
 	_draw_ui_heading(font, "\u8bbe\u7f6e", "\u5de6\u53f3\u8c03\u6574    Z \u5207\u6362    X/Esc \u8fd4\u56de", 34)
 	_draw_settings_entries(font, ui_model.settings_entries(game_manager_ref.settings), settings_menu_cursor)
 
+func _draw_pause_overlay() -> void:
+	var entries: Array = ui_model.pause_menu_entries()
+	var font := SystemFont.new()
+	draw_rect(Rect2(0, 0, SCREEN_W, SCREEN_H), Color(0.0, 0.0, 0.0, 0.56))
+	var row_height := 54.0
+	var panel_width: float = minf(420.0, SCREEN_W - 80.0)
+	var panel_height: float = 112.0 + row_height * entries.size()
+	var panel_rect := Rect2((SCREEN_W - panel_width) * 0.5, (SCREEN_H - panel_height) * 0.5, panel_width, panel_height)
+	draw_rect(panel_rect, Color(0.05, 0.06, 0.09, 0.9))
+	draw_rect(panel_rect, Color(0.88, 0.24, 0.32, 0.84), false, 2)
+	var title := "\u6682\u505c"
+	draw_string(font, Vector2(_centered_text_x_at_size(font, title, 30), panel_rect.position.y + 50.0), title, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 30, Color.WHITE)
+	var start_y := panel_rect.position.y + 102.0
+	for i in range(entries.size()):
+		var entry: Dictionary = entries[i]
+		var y: float = start_y + row_height * i
+		var selected: bool = i == pause_menu_cursor
+		var row_rect := Rect2(panel_rect.position.x + 26.0, y - 28.0, panel_width - 52.0, 44.0)
+		if selected:
+			draw_rect(row_rect, Color(0.86, 0.18, 0.28, 0.36))
+			draw_rect(row_rect, Color(1.0, 0.72, 0.78, 0.82), false, 2)
+		var marker := "\u25b6" if selected else " "
+		var label := "%s %s" % [marker, String(entry.get("label", ""))]
+		draw_string(font, Vector2(row_rect.position.x + 18.0, y), label, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 22, Color.WHITE if selected else Color(0.84, 0.88, 0.94))
+	var hint := "Z \u786e\u8ba4    X/Esc \u7ee7\u7eed"
+	draw_string(font, Vector2(_centered_text_x_at_size(font, hint, 16), panel_rect.position.y + panel_height - 24.0), hint, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color(0.68, 0.74, 0.84))
+
 func _draw():
 	if not is_inside_tree(): return
 	var gm_ui = game_manager_ref
@@ -1458,3 +1530,5 @@ func _draw():
 	draw_string(font, Vector2(SCREEN_W - right_margin - life_w, 20), life_str)
 	draw_string(font, Vector2(SCREEN_W - right_margin - bomb_w, 35), bomb_str)
 	draw_string(font, Vector2(10, SCREEN_H - 15), gm.STAGE_NAMES[gm.current_stage - 1])
+	if gm.state == gm.STATE_PAUSED:
+		_draw_pause_overlay()
