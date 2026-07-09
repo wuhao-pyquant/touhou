@@ -85,6 +85,9 @@ func _assert_settings_entry(settings_entries: Array, id: String, label: String, 
 			return
 	_fail("Settings entries missing %s" % id)
 
+func _assert_shot_mapping(main_shell: Node, shot_id: String, expected_bullet_type: int) -> void:
+	_assert_equal(main_shell._bullet_type_for_shot_id(shot_id), expected_bullet_type, "Shot id %s should map to compatible bullet type." % shot_id)
+
 func _init() -> void:
 	var gm_script = load("res://autoload/game_manager.gd")
 	if gm_script == null:
@@ -117,14 +120,16 @@ func _init() -> void:
 	if not _require_constant(constants, "STATE_GAME_OVER", "game_over"):
 		return
 
-	for property in ["selected_protagonist_id", "selected_shot_id", "pause_return_state", "settings"]:
+	for property in ["selected_protagonist_id", "selected_shot_id", "practice_mode", "pause_return_state", "settings_return_state", "settings"]:
 		if not _assert(_has_property(gm, property), "GameManager missing property %s" % property):
 			return
 
 	gm.state = "boss"
 	gm.selected_protagonist_id = "magician"
 	gm.selected_shot_id = "magic_laser"
+	gm.practice_mode = true
 	gm.pause_return_state = "boss"
+	gm.settings_return_state = "paused"
 	gm.settings = {
 		"master_volume": 0.2,
 		"bgm_volume": 0.3,
@@ -142,7 +147,11 @@ func _init() -> void:
 		return
 	if not _assert_equal(gm.selected_shot_id, "ofuda_trace", "GameManager.reset() should restore miko shot A."):
 		return
+	if not _assert_equal(gm.practice_mode, false, "GameManager.reset() should restore story mode."):
+		return
 	if not _assert_equal(gm.pause_return_state, "stage", "GameManager.reset() should restore pause return state."):
+		return
+	if not _assert_equal(gm.settings_return_state, "title", "GameManager.reset() should restore settings return state."):
 		return
 	if not _assert_equal(gm.settings, EXPECTED_DEFAULT_SETTINGS, "GameManager.reset() should restore default settings."):
 		return
@@ -186,6 +195,19 @@ func _init() -> void:
 	_assert_equal(shot_entries.size(), 2, "UiModel.shot_entries(\"miko\") should expose two shots.")
 	_assert_equal(_ids(shot_entries), ["ofuda_trace", "yin_yang_focus"], "Miko shot ids mismatch.")
 	_assert_equal(_labels(shot_entries), ["追踪御札", "阴阳玉集中"], "Miko shot labels mismatch.")
+
+	var main_script = load("res://scripts/main.gd")
+	if main_script == null:
+		_fail("Could not load main.gd")
+		return
+	var main_shell: Node = main_script.new()
+	_assert_shot_mapping(main_shell, "ofuda_trace", gm.BulletType.HOMING)
+	_assert_shot_mapping(main_shell, "yin_yang_focus", gm.BulletType.LINEAR)
+	_assert_shot_mapping(main_shell, "stardust_spread", gm.BulletType.SPREAD)
+	_assert_shot_mapping(main_shell, "magic_laser", gm.BulletType.LINEAR)
+	_assert_shot_mapping(main_shell, "sword_wave_fan", gm.BulletType.SPREAD)
+	_assert_shot_mapping(main_shell, "returning_spirit_blades", gm.BulletType.HOMING)
+	main_shell.free()
 
 	_assert_equal(ui_model.move_cursor(0, -1, 4), 3, "Cursor should wrap upward.")
 	_assert_equal(ui_model.move_cursor(3, 1, 4), 0, "Cursor should wrap downward.")

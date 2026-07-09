@@ -43,6 +43,12 @@ const BOSS_INDICATOR_W_MAX := 80.0
 var game_manager_ref: Object = null
 var audio_manager_ref: Object = null
 var performance_monitor_ref: Node = null
+var ui_model: Object = load("res://scripts/ui/ui_model.gd").new()
+var main_menu_cursor: int = 0
+var character_menu_cursor: int = 0
+var shot_menu_cursor: int = 0
+var settings_menu_cursor: int = 0
+var pause_menu_cursor: int = 0
 
 func _resolve_singletons() -> void:
 	var tree_root: Window = get_tree().root if is_inside_tree() and get_tree() else null
@@ -69,6 +75,90 @@ func _resolve_singletons() -> void:
 	if root_monitor:
 		performance_monitor_ref = root_monitor
 
+func _menu_vertical_delta() -> int:
+	var delta: int = 0
+	if Input.is_action_just_pressed("move_up"):
+		delta -= 1
+	if Input.is_action_just_pressed("move_down"):
+		delta += 1
+	return delta
+
+func _menu_horizontal_delta() -> int:
+	var delta: int = 0
+	if Input.is_action_just_pressed("move_left"):
+		delta -= 1
+	if Input.is_action_just_pressed("move_right"):
+		delta += 1
+	return delta
+
+func _menu_confirm_pressed() -> bool:
+	return Input.is_action_just_pressed("shoot")
+
+func _menu_cancel_pressed() -> bool:
+	return Input.is_action_just_pressed("bomb") or Input.is_action_just_pressed("pause")
+
+func _set_ui_state(next_state: String) -> void:
+	_resolve_singletons()
+	if game_manager_ref:
+		game_manager_ref.state = next_state
+
+func _open_settings(return_state: String) -> void:
+	_resolve_singletons()
+	if game_manager_ref:
+		game_manager_ref.settings_return_state = return_state
+	_set_ui_state("settings")
+
+func _move_menu_cursor(cursor: int, delta: int, count: int) -> int:
+	if delta == 0:
+		return cursor
+	return ui_model.move_cursor(cursor, delta, count)
+
+func _entry_index_by_id(entries: Array, id: String) -> int:
+	for i in range(entries.size()):
+		if String(entries[i].get("id", "")) == id:
+			return i
+	return 0
+
+func _entry_label_by_id(entries: Array, id: String) -> String:
+	for entry in entries:
+		if String(entry.get("id", "")) == id:
+			return String(entry.get("label", ""))
+	return ""
+
+func _bullet_type_for_shot_id(shot_id: String) -> int:
+	_resolve_singletons()
+	var spread_type: int = game_manager_ref.BulletType.SPREAD if game_manager_ref else 0
+	var linear_type: int = game_manager_ref.BulletType.LINEAR if game_manager_ref else 1
+	var homing_type: int = game_manager_ref.BulletType.HOMING if game_manager_ref else 2
+	match shot_id:
+		"yin_yang_focus", "magic_laser":
+			return linear_type
+		"ofuda_trace", "returning_spirit_blades":
+			return homing_type
+		"stardust_spread", "sword_wave_fan":
+			return spread_type
+		_:
+			return spread_type
+
+func _sync_character_cursor_to_selected() -> void:
+	if not game_manager_ref:
+		return
+	var entries: Array = ui_model.protagonist_entries()
+	character_menu_cursor = _entry_index_by_id(entries, String(game_manager_ref.selected_protagonist_id))
+
+func _sync_shot_cursor_to_selected() -> void:
+	if not game_manager_ref:
+		return
+	var entries: Array = ui_model.shot_entries(String(game_manager_ref.selected_protagonist_id))
+	shot_menu_cursor = _entry_index_by_id(entries, String(game_manager_ref.selected_shot_id))
+
+func _quit_runtime_safe() -> void:
+	if not is_inside_tree():
+		return
+	if DisplayServer.get_name() == "headless":
+		return
+	get_tree().quit()
+
 func _screen_center_x() -> float:
 	return SCREEN_W * 0.5
 
@@ -77,6 +167,9 @@ func _boss_anchor_y() -> float:
 
 func _centered_text_x(font: Font, text: String) -> float:
 	return maxf(0.0, (SCREEN_W - font.get_string_size(text).x) * 0.5)
+
+func _centered_text_x_at_size(font: Font, text: String, font_size: int) -> float:
+	return maxf(0.0, (SCREEN_W - font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x) * 0.5)
 
 func _summary_box_rect() -> Rect2:
 	var box_width: float = minf(320.0, SCREEN_W - 80.0)
@@ -137,11 +230,24 @@ func _make_bullet() -> Dictionary:
 func _show_title():
 	_resolve_singletons()
 	game_manager_ref.state = "title"
+	game_manager_ref.practice_mode = false
+	game_manager_ref.settings_return_state = "title"
+	main_menu_cursor = 0
 	if audio_manager_ref: audio_manager_ref.stop_bgm()
 
 func _start_game():
 	_resolve_singletons()
+	var selected_protagonist_id: String = String(game_manager_ref.selected_protagonist_id)
+	var selected_shot_id: String = String(game_manager_ref.selected_shot_id)
+	var selected_bullet_type: int = _bullet_type_for_shot_id(selected_shot_id)
+	var selected_practice_mode: bool = bool(game_manager_ref.practice_mode)
+	var selected_settings: Dictionary = game_manager_ref.settings.duplicate(true)
 	game_manager_ref.reset()
+	game_manager_ref.selected_protagonist_id = selected_protagonist_id
+	game_manager_ref.selected_shot_id = selected_shot_id
+	game_manager_ref.practice_mode = selected_practice_mode
+	game_manager_ref.settings = selected_settings
+	game_manager_ref.switch_bullet_type(selected_bullet_type)
 	game_manager_ref.state = "stage"
 	_set_active_stage(1)
 	stage_timer = 0.0
@@ -237,6 +343,77 @@ func _nearest_enemy(px: float, py: float) -> Vector2:
 			if d < best: best = d; best_v = Vector2(e.x, e.y)
 	return best_v
 
+func _update_title_menu() -> void:
+	var entries: Array = ui_model.main_menu_entries()
+	main_menu_cursor = _move_menu_cursor(main_menu_cursor, _menu_vertical_delta(), entries.size())
+	if not _menu_confirm_pressed() or entries.is_empty():
+		return
+	var selected_id: String = String(entries[main_menu_cursor].get("id", ""))
+	match selected_id:
+		"start":
+			game_manager_ref.practice_mode = false
+			_sync_character_cursor_to_selected()
+			_set_ui_state("character_select")
+		"practice":
+			game_manager_ref.practice_mode = true
+			_sync_character_cursor_to_selected()
+			_set_ui_state("character_select")
+		"settings":
+			_open_settings("title")
+		"exit":
+			_quit_runtime_safe()
+
+func _update_character_select_menu() -> void:
+	var entries: Array = ui_model.protagonist_entries()
+	character_menu_cursor = clampi(character_menu_cursor, 0, maxi(entries.size() - 1, 0))
+	character_menu_cursor = _move_menu_cursor(character_menu_cursor, _menu_vertical_delta(), entries.size())
+	if _menu_cancel_pressed():
+		_show_title()
+		return
+	if not _menu_confirm_pressed() or entries.is_empty():
+		return
+	game_manager_ref.selected_protagonist_id = String(entries[character_menu_cursor].get("id", ""))
+	shot_menu_cursor = 0
+	_set_ui_state("shot_select")
+
+func _update_shot_select_menu() -> void:
+	var entries: Array = ui_model.shot_entries(String(game_manager_ref.selected_protagonist_id))
+	shot_menu_cursor = clampi(shot_menu_cursor, 0, maxi(entries.size() - 1, 0))
+	shot_menu_cursor = _move_menu_cursor(shot_menu_cursor, _menu_vertical_delta(), entries.size())
+	if _menu_cancel_pressed():
+		_sync_character_cursor_to_selected()
+		_set_ui_state("character_select")
+		return
+	if not _menu_confirm_pressed() or entries.is_empty():
+		return
+	var selected_shot_id: String = String(entries[shot_menu_cursor].get("id", ""))
+	game_manager_ref.selected_shot_id = selected_shot_id
+	game_manager_ref.switch_bullet_type(_bullet_type_for_shot_id(selected_shot_id))
+	_start_game()
+
+func _update_settings_menu() -> void:
+	var entries: Array = ui_model.settings_entries(game_manager_ref.settings)
+	settings_menu_cursor = clampi(settings_menu_cursor, 0, maxi(entries.size() - 1, 0))
+	settings_menu_cursor = _move_menu_cursor(settings_menu_cursor, _menu_vertical_delta(), entries.size())
+	if _menu_cancel_pressed():
+		var return_state: String = String(game_manager_ref.settings_return_state)
+		_set_ui_state(return_state if return_state != "" else "title")
+		return
+	if entries.is_empty():
+		return
+	var current_entry: Dictionary = entries[settings_menu_cursor]
+	var current_id: String = String(current_entry.get("id", ""))
+	var horizontal_delta: int = _menu_horizontal_delta()
+	if horizontal_delta != 0 and String(current_entry.get("type", "")) == "range":
+		var step: float = float(current_entry.get("step", 0.05))
+		var minimum: float = float(current_entry.get("min", 0.0))
+		var maximum: float = float(current_entry.get("max", 1.0))
+		var current_value: float = float(game_manager_ref.settings.get(current_id, current_entry.get("value", minimum)))
+		var next_value: float = clampf(current_value + step * horizontal_delta, minimum, maximum)
+		game_manager_ref.settings[current_id] = snappedf(next_value, step)
+	if _menu_confirm_pressed() and String(current_entry.get("type", "")) == "toggle":
+		game_manager_ref.settings[current_id] = not bool(game_manager_ref.settings.get(current_id, current_entry.get("value", false)))
+
 func _process(delta: float):
 	_resolve_singletons()
 	delta = clampf(delta, 0.0, 0.05)
@@ -244,7 +421,13 @@ func _process(delta: float):
 	var current_state: String = gm.state if gm else "title"
 	match current_state:
 		"title":
-			if Input.is_action_just_pressed("shoot"): _start_game()
+			_update_title_menu()
+		"character_select":
+			_update_character_select_menu()
+		"shot_select":
+			_update_shot_select_menu()
+		"settings":
+			_update_settings_menu()
 		"stage":
 			_update_stage(delta)
 		"boss":
@@ -255,12 +438,12 @@ func _process(delta: float):
 			if Input.is_action_just_pressed("shoot"): _show_title()
 		"paused":
 			if Input.is_action_just_pressed("pause"):
-				if gm: gm.state = "stage"
+				if gm: gm.state = gm.pause_return_state
 	_update_performance_counters()
 	queue_redraw()
 
 func _update_stage(delta: float):
-	if Input.is_action_just_pressed("pause"): game_manager_ref.state = "paused"; return
+	if Input.is_action_just_pressed("pause"): game_manager_ref.pause_return_state = "stage"; game_manager_ref.state = "paused"; return
 	stage_timer += delta * 60.0
 	_stage_waves(int(stage_timer))
 	if stage_timer >= stage_controller.boss_time and not stage_controller.boss_spawned:
@@ -279,7 +462,7 @@ func _update_stage(delta: float):
 		_enter_boss()
 
 func _update_boss(delta: float):
-	if Input.is_action_just_pressed("pause"): game_manager_ref.state = "paused"; return
+	if Input.is_action_just_pressed("pause"): game_manager_ref.pause_return_state = "boss"; game_manager_ref.state = "paused"; return
 	_update_player(delta)
 	_update_bullets(delta, Vector2(boss.get("x", _screen_center_x()), boss.get("y", _boss_anchor_y())) if boss_alive else Vector2.ZERO)
 	_update_items(delta)
@@ -1049,8 +1232,113 @@ func _collect(it: Dictionary):
 		"life":
 			game_manager_ref.lives = min(game_manager_ref.lives+1, 6); game_manager_ref.score += 500
 
+func _draw_ui_background(accent: Color) -> void:
+	draw_rect(Rect2(0, 0, SCREEN_W, SCREEN_H), Color(0.04, 0.05, 0.08))
+	draw_rect(Rect2(0, 0, SCREEN_W, SCREEN_H * 0.34), Color(accent.r, accent.g, accent.b, 0.18))
+	draw_circle(Vector2(SCREEN_W * 0.5, SCREEN_H * 0.22), SCREEN_W * 0.18, Color(accent.r, accent.g, accent.b, 0.18))
+	draw_line(Vector2(84, SCREEN_H * 0.18), Vector2(SCREEN_W - 84, SCREEN_H * 0.18), Color(1, 1, 1, 0.22), 2)
+
+func _draw_ui_heading(font: Font, title: String, subtitle: String, title_size: int = 34) -> void:
+	draw_string(font, Vector2(_centered_text_x_at_size(font, title, title_size), 156), title, HORIZONTAL_ALIGNMENT_LEFT, -1.0, title_size, Color.WHITE)
+	if subtitle != "":
+		draw_string(font, Vector2(_centered_text_x_at_size(font, subtitle, 18), 190), subtitle, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 18, Color(0.82, 0.86, 0.95))
+
+func _draw_menu_entries(font: Font, entries: Array, cursor: int, start_y: float, row_height: float) -> void:
+	for i in range(entries.size()):
+		var entry: Dictionary = entries[i]
+		var y: float = start_y + row_height * i
+		var selected: bool = i == cursor
+		var row_rect := Rect2(76, y - 28.0, SCREEN_W - 152.0, 58.0)
+		if selected:
+			draw_rect(row_rect, Color(0.86, 0.18, 0.28, 0.34))
+			draw_rect(row_rect, Color(1.0, 0.72, 0.78, 0.82), false, 2)
+		var marker: String = "\u25b6" if selected else " "
+		var label: String = "%s %s" % [marker, String(entry.get("label", ""))]
+		var label_color := Color.WHITE if selected else Color(0.82, 0.86, 0.95)
+		draw_string(font, Vector2(106, y), label, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 22, label_color)
+		var description: String = String(entry.get("description", ""))
+		if description != "":
+			draw_string(font, Vector2(132, y + 24.0), description, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 15, Color(0.58, 0.65, 0.76))
+
+func _setting_value_text(entry: Dictionary) -> String:
+	match String(entry.get("type", "")):
+		"toggle":
+			return "\u5f00\u542f" if bool(entry.get("value", false)) else "\u5173\u95ed"
+		"range":
+			return "%d%%" % int(round(float(entry.get("value", 0.0)) * 100.0))
+		_:
+			return String(entry.get("value", ""))
+
+func _draw_settings_entries(font: Font, entries: Array, cursor: int) -> void:
+	var start_y: float = 254.0
+	var row_height: float = 72.0
+	for i in range(entries.size()):
+		var entry: Dictionary = entries[i]
+		var y: float = start_y + row_height * i
+		var selected: bool = i == cursor
+		var row_rect := Rect2(54, y - 30.0, SCREEN_W - 108.0, 62.0)
+		if selected:
+			draw_rect(row_rect, Color(0.18, 0.42, 0.62, 0.34))
+			draw_rect(row_rect, Color(0.68, 0.88, 1.0, 0.78), false, 2)
+		var marker: String = "\u25b6" if selected else " "
+		var label_color := Color.WHITE if selected else Color(0.84, 0.88, 0.94)
+		draw_string(font, Vector2(78, y), "%s %s" % [marker, String(entry.get("label", ""))], HORIZONTAL_ALIGNMENT_LEFT, -1.0, 20, label_color)
+		draw_string(font, Vector2(102, y + 23.0), String(entry.get("description", "")), HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14, Color(0.58, 0.65, 0.76))
+		var value_text: String = _setting_value_text(entry)
+		var value_w: float = font.get_string_size(value_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 18).x
+		draw_string(font, Vector2(SCREEN_W - 78.0 - value_w, y), value_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 18, Color(1.0, 0.92, 0.58))
+
+func _draw_title_screen() -> void:
+	var font := SystemFont.new()
+	_draw_ui_background(Color(0.55, 0.14, 0.22))
+	_draw_ui_heading(font, "\u4e1c\u65b9\u5f39\u5e55", "\u6807\u9898\u83dc\u5355", 38)
+	_draw_menu_entries(font, ui_model.main_menu_entries(), main_menu_cursor, 314.0, 76.0)
+	var hint := "\u65b9\u5411\u952e\u9009\u62e9    Z \u786e\u8ba4    X/Esc \u8fd4\u56de"
+	draw_string(font, Vector2(_centered_text_x_at_size(font, hint, 16), SCREEN_H - 78.0), hint, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color(0.68, 0.74, 0.84))
+
+func _draw_character_select_screen() -> void:
+	var font := SystemFont.new()
+	_draw_ui_background(Color(0.16, 0.38, 0.56))
+	var mode_label: String = "\u6a21\u5f0f\uff1a\u7ec3\u4e60" if game_manager_ref.practice_mode else "\u6a21\u5f0f\uff1a\u6545\u4e8b"
+	_draw_ui_heading(font, "\u89d2\u8272\u9009\u62e9", mode_label, 34)
+	_draw_menu_entries(font, ui_model.protagonist_entries(), character_menu_cursor, 304.0, 92.0)
+	var hint := "\u65b9\u5411\u952e\u9009\u62e9    Z \u786e\u8ba4    X/Esc \u8fd4\u56de\u6807\u9898"
+	draw_string(font, Vector2(_centered_text_x_at_size(font, hint, 16), SCREEN_H - 78.0), hint, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color(0.68, 0.74, 0.84))
+
+func _draw_shot_select_screen() -> void:
+	var font := SystemFont.new()
+	_draw_ui_background(Color(0.46, 0.32, 0.12))
+	var protagonists: Array = ui_model.protagonist_entries()
+	var protagonist_label: String = _entry_label_by_id(protagonists, String(game_manager_ref.selected_protagonist_id))
+	_draw_ui_heading(font, "\u5c04\u51fb\u9009\u62e9", "\u5df2\u9009\u89d2\u8272\uff1a%s" % protagonist_label, 34)
+	var shots: Array = ui_model.shot_entries(String(game_manager_ref.selected_protagonist_id))
+	_draw_menu_entries(font, shots, shot_menu_cursor, 328.0, 92.0)
+	var hint := "\u65b9\u5411\u952e\u9009\u62e9    Z \u5f00\u59cb    X/Esc \u8fd4\u56de\u89d2\u8272"
+	draw_string(font, Vector2(_centered_text_x_at_size(font, hint, 16), SCREEN_H - 78.0), hint, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color(0.68, 0.74, 0.84))
+
+func _draw_settings_screen() -> void:
+	var font := SystemFont.new()
+	_draw_ui_background(Color(0.12, 0.38, 0.44))
+	_draw_ui_heading(font, "\u8bbe\u7f6e", "\u5de6\u53f3\u8c03\u6574    Z \u5207\u6362    X/Esc \u8fd4\u56de", 34)
+	_draw_settings_entries(font, ui_model.settings_entries(game_manager_ref.settings), settings_menu_cursor)
+
 func _draw():
 	if not is_inside_tree(): return
+	var gm_ui = game_manager_ref
+	if gm_ui:
+		match gm_ui.state:
+			"title":
+				_draw_title_screen()
+				return
+			"character_select":
+				_draw_character_select_screen()
+				return
+			"shot_select":
+				_draw_shot_select_screen()
+				return
+			"settings":
+				_draw_settings_screen()
+				return
 	# Items
 	for it in items:
 		if not it.alive or it.birth > 0: continue
@@ -1128,22 +1416,7 @@ func _draw():
 		draw_rect(Rect2(ix-6,iy-4,12,16),Color(0.78,0.12,0.16)); draw_rect(Rect2(ix-6,iy-4,12,16),Color.WHITE,false,1)
 		draw_rect(Rect2(ix-7,iy-1,14,3),Color(0.31,0.08,0.31))
 
-	# Title screen
 	var gm_title = game_manager_ref
-	if gm_title and gm_title.state == "title":
-		var title_font := SystemFont.new()
-		draw_circle(Vector2(_screen_center_x(), SCREEN_H * (320.0 / 960.0)), SCREEN_W * (60.0 / 720.0), Color(0.2, 0.2, 0.4, 0.5))
-		var title_main := "\u4e1c\u65b9\u5f39\u5e55"
-		var title_sub := "\u4e1c\u65b9\u98ce\u5f39\u5e55\u5c04\u51fb"
-		var title_start := "\u6309 Z \u5f00\u59cb"
-		var title_controls := "\u65b9\u5411\u952e\u79fb\u52a8 | Z \u5c04\u51fb | X \u70b8\u5f39"
-		var title_focus := "Shift \u4f4e\u901f\u805a\u7126 | Esc \u6682\u505c"
-		draw_string(title_font, Vector2(_centered_text_x(title_font, title_main), SCREEN_H * (240.0 / 960.0)), title_main)
-		draw_string(title_font, Vector2(_centered_text_x(title_font, title_sub), SCREEN_H * (270.0 / 960.0)), title_sub)
-		draw_string(title_font, Vector2(_centered_text_x(title_font, title_start), SCREEN_H * (380.0 / 960.0)), title_start)
-		draw_string(title_font, Vector2(_centered_text_x(title_font, title_controls), SCREEN_H * (500.0 / 960.0)), title_controls)
-		draw_string(title_font, Vector2(_centered_text_x(title_font, title_focus), SCREEN_H * (520.0 / 960.0)), title_focus)
-		return
 	# Game-over / all-clear summary screen - shows when state is game_over
 	# or final_clear. Without this branch the game would render the empty
 	# Stage background forever with no UI hint at all.

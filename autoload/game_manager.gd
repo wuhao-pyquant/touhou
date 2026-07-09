@@ -96,7 +96,9 @@ var current_stage: int = 1
 var state: String = STATE_TITLE
 var selected_protagonist_id: String = DEFAULT_PROTAGONIST_ID
 var selected_shot_id: String = DEFAULT_SHOT_ID
+var practice_mode: bool = false
 var pause_return_state: String = STATE_STAGE
+var settings_return_state: String = STATE_TITLE
 var settings: Dictionary = DEFAULT_SETTINGS.duplicate(true)
 
 func power_level() -> int:
@@ -119,7 +121,9 @@ func reset_settings() -> void:
 func reset_run_config() -> void:
 	selected_protagonist_id = DEFAULT_PROTAGONIST_ID
 	selected_shot_id = DEFAULT_SHOT_ID
+	practice_mode = false
 	pause_return_state = STATE_STAGE
+	settings_return_state = STATE_TITLE
 
 func reset():
 	reset_settings()
