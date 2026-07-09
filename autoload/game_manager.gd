@@ -6,6 +6,17 @@ const SCREEN_W := 720
 const SCREEN_H := 960
 const MAX_BULLETS := 12000
 
+const STATE_TITLE := "title"
+const STATE_CHARACTER_SELECT := "character_select"
+const STATE_SHOT_SELECT := "shot_select"
+const STATE_SETTINGS := "settings"
+const STATE_PAUSED := "paused"
+const STATE_STAGE := "stage"
+const STATE_BOSS := "boss"
+const STATE_STAGE_CLEAR := "stage_clear"
+const STATE_FINAL_CLEAR := "final_clear"
+const STATE_GAME_OVER := "game_over"
+
 # Player
 const PLAYER_SPEED_HIGH := 5.5
 const PLAYER_SPEED_LOW := 2.2
@@ -39,12 +50,12 @@ const BOMB_CONFIG := [
 
 # Stages
 const STAGE_NAMES := [
-	"绁炵ぞ鍙傞亾",
-	"濡栨€競闆?",
-	"杩烽浘绔规灄",
-	"澶╃嫍灞遍亾",
-	"楝间箣瀹村巺",
-	"澶滅キ绁炲煙",
+	"神社参道",
+	"妖怪市集",
+	"迷雾竹林",
+	"天狗山道",
+	"鬼之宴厅",
+	"夜祭神域",
 ]
 const STAGE_MULTS := [
 	{"enemy_hp":1.0, "boss_hp":1.0, "bullet_speed":1.0},
@@ -54,6 +65,19 @@ const STAGE_MULTS := [
 	{"enemy_hp":2.15, "boss_hp":1.85, "bullet_speed":1.34},
 	{"enemy_hp":2.55, "boss_hp":2.15, "bullet_speed":1.45},
 ]
+
+const DEFAULT_PROTAGONIST_ID := "miko"
+const DEFAULT_SHOT_ID := "ofuda_trace"
+const DEFAULT_SETTINGS := {
+	"master_volume": 1.0,
+	"bgm_volume": 0.8,
+	"sfx_volume": 0.8,
+	"fullscreen": false,
+	"bullet_brightness": 1.0,
+	"always_show_focus_hitbox": false,
+	"show_performance_hud": false,
+	"show_input_guide": true,
+}
 
 func playfield_rect() -> Rect2:
 	return Rect2(0, 0, SCREEN_W, SCREEN_H)
@@ -69,7 +93,11 @@ var bullet_type: int = BulletType.SPREAD
 var lives: int = PLAYER_INITIAL_LIVES
 var bombs: int = PLAYER_INITIAL_BOMBS
 var current_stage: int = 1
-var state: String = "title"  # title, stage, boss, stage_clear, final_clear, game_over, paused
+var state: String = STATE_TITLE
+var selected_protagonist_id: String = DEFAULT_PROTAGONIST_ID
+var selected_shot_id: String = DEFAULT_SHOT_ID
+var pause_return_state: String = STATE_STAGE
+var settings: Dictionary = DEFAULT_SETTINGS.duplicate(true)
 
 func power_level() -> int:
 	for i in range(POWER_THRESHOLDS.size()):
@@ -85,8 +113,18 @@ func add_power(amount: int = 1):
 func switch_bullet_type(bt: int):
 	bullet_type = clampi(bt, 0, 2)
 
+func reset_settings() -> void:
+	settings = DEFAULT_SETTINGS.duplicate(true)
+
+func reset_run_config() -> void:
+	selected_protagonist_id = DEFAULT_PROTAGONIST_ID
+	selected_shot_id = DEFAULT_SHOT_ID
+	pause_return_state = STATE_STAGE
+
 func reset():
+	reset_settings()
+	reset_run_config()
 	score = 0; graze = 0; shared_power = 0
 	bullet_type = BulletType.SPREAD
 	lives = PLAYER_INITIAL_LIVES; bombs = PLAYER_INITIAL_BOMBS
-	current_stage = 1; state = "title"
+	current_stage = 1; state = STATE_TITLE
