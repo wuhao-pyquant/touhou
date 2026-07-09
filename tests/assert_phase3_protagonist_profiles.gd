@@ -99,10 +99,23 @@ func _verify_ui_details() -> void:
 	var ui_script = load("res://scripts/ui/ui_model.gd")
 	if not _assert(ui_script != null, "Could not load ui_model.gd"):
 		return
+	var db_script = load("res://scripts/data/game_database.gd")
+	if not _assert(db_script != null, "Could not load game_database.gd"):
+		return
+	var db = db_script.new()
 	var ui = ui_script.new()
 	for entry in ui.protagonist_entries():
 		_assert(entry.has("detail_lines"), "Protagonist UI entry missing detail_lines: %s" % [entry])
-		_assert(entry.detail_lines.size() >= 3, "Protagonist UI detail_lines should show speed, bomb, and hint.")
+		_assert(entry.detail_lines.size() >= 3, "Protagonist UI detail_lines should show speed, bomb behavior, and hint.")
+		var profile: Dictionary = db.protagonist_by_id(String(entry.id))
+		if not _assert(not profile.is_empty(), "Protagonist UI entry should map to a database profile: %s" % [entry]):
+			continue
+		var bomb: Dictionary = profile.get("bomb", {})
+		var bomb_name := String(bomb.get("hud_name", bomb.get("display_name", "")))
+		var bomb_description := String(bomb.get("description", ""))
+		var detail_text := "\n".join(entry.detail_lines)
+		_assert(detail_text.contains(bomb_name), "Protagonist UI detail_lines should include bomb name for %s: %s" % [String(entry.id), entry.detail_lines])
+		_assert(detail_text.contains(bomb_description), "Protagonist UI detail_lines should include bomb behavior for %s: %s" % [String(entry.id), entry.detail_lines])
 	for shot in ui.shot_entries("swordswoman"):
 		_assert(shot.has("detail_lines"), "Shot UI entry missing detail_lines: %s" % [shot])
 		_assert(shot.detail_lines.size() >= 3, "Shot UI detail_lines should show coverage, focused damage, and hint.")

@@ -44,7 +44,10 @@ func protagonist_entries() -> Array:
 			"description": _role_description(String(protagonist.get("role", ""))),
 			"detail_lines": [
 				"Speed %.1f / %.1f" % [float(protagonist.speed_high), float(protagonist.speed_low)],
-				"Bomb: %s" % String(protagonist.bomb.get("hud_name", protagonist.bomb.get("display_name", ""))),
+				"Bomb: %s - %s" % [
+					String(protagonist.bomb.get("hud_name", protagonist.bomb.get("display_name", ""))),
+					String(protagonist.bomb.get("description", "")),
+				],
 				"Hint: %s" % String(protagonist.get("difficulty_hint", "")),
 			],
 		})
