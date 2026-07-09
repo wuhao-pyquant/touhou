@@ -4,14 +4,12 @@ class_name ItemRewardSystem
 var _database = load("res://scripts/data/game_database.gd").new()
 
 func choose_drop(tier: String, roll: float) -> String:
-	if tier == "light" and is_equal_approx(roll, 0.80):
-		return "life_fragment"
 	var table: Array = _database.drop_table_for_tier(tier)
 	var threshold := clampf(roll, 0.0, 0.999999)
 	var running := 0.0
 	for entry in table:
 		running += float(entry.get("weight", 0.0))
-		if threshold <= running:
+		if threshold < running:
 			return String(entry.get("id", "power"))
 	return "power"
 

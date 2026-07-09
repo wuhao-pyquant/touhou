@@ -1384,8 +1384,9 @@ func _drop_item_type(strong: bool, roll: float, drop_tier: String = "") -> Strin
 		tier = "rich" if strong else "light"
 	return item_reward_system.choose_drop(tier, roll)
 
-func _drop_item(x: float, y: float, strong: bool, drop_tier: String = ""):
-	var t: String = _drop_item_type(strong, randf(), drop_tier)
+func _drop_item(x: float, y: float, strong: bool, drop_tier: String = "", roll_override: float = -1.0):
+	var drop_roll: float = roll_override if roll_override >= 0.0 else randf()
+	var t: String = _drop_item_type(strong, drop_roll, drop_tier)
 	items.append({"alive":true,"collected":false,"x":x,"y":y,"type":t,"radius":9.0,"vy":-2.5,"vx":randf_range(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":randf_range(0,TAU),"birth":15.0,"anim":randf_range(0,TAU)})
 
 func _collect(it: Dictionary):
