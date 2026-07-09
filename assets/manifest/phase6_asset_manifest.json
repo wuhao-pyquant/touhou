@@ -930,7 +930,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_06a_noa_assets",
       "boss_id": "festival_fox_miko"
     },
@@ -944,7 +944,7 @@
       "height": 1024,
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_06a_noa_assets",
       "boss_id": "festival_fox_miko"
     },
@@ -958,7 +958,7 @@
       "height": 720,
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_06a_noa_assets",
       "boss_id": "festival_fox_miko"
     },
@@ -972,7 +972,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_06b_astralis_assets",
       "boss_id": "hyakki_night_festival_god"
     },
@@ -986,7 +986,7 @@
       "height": 1024,
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_06b_astralis_assets",
       "boss_id": "hyakki_night_festival_god"
     },
@@ -1000,7 +1000,7 @@
       "height": 720,
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_06b_spell_aura",
       "boss_id": "hyakki_night_festival_god"
     },

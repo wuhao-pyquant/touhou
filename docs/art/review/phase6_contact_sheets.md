@@ -2,5 +2,5 @@
 
 | Sheet | Accepted assets | Output | Notes |
 | --- | ---: | --- | --- |
-| bosses | 30 | `phase6_contact_sheet_bosses.png` | ready for review |
-| gameplay_readability | 39 | `phase6_contact_sheet_gameplay_readability.png` | ready for review |
+| bosses | 36 | `phase6_contact_sheet_bosses.png` | ready for review |
+| gameplay_readability | 45 | `phase6_contact_sheet_gameplay_readability.png` | ready for review |
