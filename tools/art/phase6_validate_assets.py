@@ -29,6 +29,10 @@ VALID_STATUSES = {"pending_generation", "generated_needs_review", "accepted", "r
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
+def is_integer(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def project_path(path: str) -> Path:
     if path.startswith("res://"):
         return ROOT / path.removeprefix("res://")
@@ -45,7 +49,7 @@ def load_manifest() -> dict[str, Any]:
 
 def validate_schema(manifest: dict[str, Any]) -> list[str]:
     errors: list[str] = []
-    if not isinstance(manifest.get("version"), int):
+    if not is_integer(manifest.get("version")):
         errors.append("version must be an integer")
 
     assets = manifest.get("assets")
@@ -62,7 +66,11 @@ def validate_schema(manifest: dict[str, Any]) -> list[str]:
             if field not in asset:
                 errors.append("%s missing required field %s" % (asset_id, field))
                 continue
-            if not isinstance(asset[field], expected_type):
+            if expected_type is int:
+                valid_type = is_integer(asset[field])
+            else:
+                valid_type = isinstance(asset[field], expected_type)
+            if not valid_type:
                 errors.append("%s field %s must be %s" % (asset_id, field, expected_type.__name__))
         if isinstance(asset.get("id"), str):
             if asset["id"] in seen_ids:
@@ -72,9 +80,9 @@ def validate_schema(manifest: dict[str, Any]) -> list[str]:
             errors.append("%s has invalid status %r" % (asset_id, asset.get("status")))
         if isinstance(asset.get("final_path"), str) and not asset["final_path"].startswith("res://assets/"):
             errors.append("%s final_path must start with res://assets/" % asset_id)
-        if isinstance(asset.get("width"), int) and asset["width"] <= 0:
+        if is_integer(asset.get("width")) and asset["width"] <= 0:
             errors.append("%s width must be positive" % asset_id)
-        if isinstance(asset.get("height"), int) and asset["height"] <= 0:
+        if is_integer(asset.get("height")) and asset["height"] <= 0:
             errors.append("%s height must be positive" % asset_id)
     return errors
 
