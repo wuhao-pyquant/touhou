@@ -481,7 +481,7 @@ func _load_stage(stage: int):
 		game_manager_ref.current_stage = stage
 	stage_controller = stage_director.stage_controller(stage)
 	if stage_controller.is_empty():
-		stage_controller = {"stage_index": stage, "stage_id": "", "display_name": "", "curve_tag": "", "theme": "", "boss_time": 4500, "waves": []}
+		return
 	stage_controller["triggered_waves"] = {}
 	stage_controller["boss_spawned"] = false
 

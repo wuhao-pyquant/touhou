@@ -68,6 +68,10 @@ func _assert_stage_controller(main_shell: Node, stage_index: int) -> void:
 	_assert((controller.waves as Array).size() >= 10, "Stage %d should load authored wave data." % stage_index)
 	_assert_equal(bool(controller.boss_spawned), false, "Stage %d boss_spawned should reset false." % stage_index)
 
+func _assert_invalid_stage_does_not_fallback(main_shell: Node, stage_index: int) -> void:
+	main_shell._load_stage(stage_index)
+	_assert_equal(main_shell.stage_controller, {}, "Invalid stage %d should not create a fallback controller." % stage_index)
+
 func _assert_boss_cards(main_shell: Node, stage_index: int) -> void:
 	var gm = main_shell.game_manager_ref
 	gm.current_stage = stage_index
@@ -109,6 +113,22 @@ func _assert_stage_wave_patterns(main_shell: Node, stage_index: int, event_time:
 	main_shell._stage_waves(event_time)
 	_assert_equal(main_shell.enemies.size(), first_count, "Stage %d time %d should not spawn duplicate wave events." % [stage_index, event_time])
 
+func _assert_stage_wave_strong(main_shell: Node, stage_index: int, event_time: int, expected_pattern: String) -> void:
+	var gm = main_shell.game_manager_ref
+	gm.current_stage = stage_index
+	main_shell._load_stage(stage_index)
+	main_shell.enemies = []
+	main_shell._stage_waves(event_time)
+	var found := false
+	var found_strong := false
+	for enemy in main_shell.enemies:
+		if String(enemy.get("pattern", "")) == expected_pattern:
+			found = true
+			if bool(enemy.get("strong", false)):
+				found_strong = true
+	_assert(found, "Stage %d time %d should spawn pattern %s." % [stage_index, event_time, expected_pattern])
+	_assert(found_strong, "Stage %d time %d should include a strong %s wave." % [stage_index, event_time, expected_pattern])
+
 func _init() -> void:
 	var main_shell = _new_main()
 	for method in ["_load_stage", "_stage_waves", "_spawn_stage_wave_event", "_load_boss_cards", "_resolve_boss_pattern_id"]:
@@ -119,11 +139,16 @@ func _init() -> void:
 	for stage_index in range(1, 7):
 		_assert_stage_controller(main_shell, stage_index)
 		_assert_boss_cards(main_shell, stage_index)
+	_assert_invalid_stage_does_not_fallback(main_shell, 0)
+	_assert_invalid_stage_does_not_fallback(main_shell, 7)
 
 	_assert_stage_wave_patterns(main_shell, 4, 0, ["wind"])
 	_assert_stage_wave_patterns(main_shell, 5, 0, ["rhythm"])
 	_assert_stage_wave_patterns(main_shell, 5, 840, ["large_orb"])
 	_assert_stage_wave_patterns(main_shell, 6, 0, ["final_dense"])
+	_assert_stage_wave_strong(main_shell, 4, 1280, "wind_aimed")
+	_assert_stage_wave_strong(main_shell, 5, 840, "large_orb")
+	_assert_stage_wave_strong(main_shell, 6, 3000, "final_dense")
 
 	_assert_equal(main_shell._resolve_boss_pattern_id("s4_wind_nonspell"), "wind_aimed", "Boss pattern alias should resolve wind nonspell.")
 	_assert_equal(main_shell._resolve_boss_pattern_id("s5_large_orb_spell"), "large_orb_gate", "Boss pattern alias should resolve large orb spell.")
