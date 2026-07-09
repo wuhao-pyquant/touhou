@@ -264,7 +264,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_05_background_set",
       "stage": 5,
       "stage_id": "oni_banquet_hall"
@@ -279,7 +279,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_05_background_set",
       "stage": 5,
       "stage_id": "oni_banquet_hall"
@@ -294,7 +294,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_05_background_set",
       "stage": 5,
       "stage_id": "oni_banquet_hall"
@@ -309,7 +309,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_05_background_set",
       "stage": 5,
       "stage_id": "oni_banquet_hall"
@@ -324,7 +324,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_06_background_set",
       "stage": 6,
       "stage_id": "night_festival_divine_realm"
@@ -339,7 +339,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_06_background_set",
       "stage": 6,
       "stage_id": "night_festival_divine_realm"
@@ -354,7 +354,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_06_background_set",
       "stage": 6,
       "stage_id": "night_festival_divine_realm"
@@ -369,7 +369,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_06_background_set",
       "stage": 6,
       "stage_id": "night_festival_divine_realm"
