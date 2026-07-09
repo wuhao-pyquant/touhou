@@ -110,6 +110,7 @@ func _verify_main_spawn_contract() -> void:
 		main_shell.bullet_pool.append(main_shell._make_bullet())
 	main_shell._spawn_enemy_bullet_spec({"position": Vector2(10, 10), "velocity": Vector2(1, 2), "radius": 4.0, "color": Color.YELLOW, "family_id": "needle", "lifetime": 120.0})
 	_assert_equal(String(main_shell.bullet_pool[0].type), "needle", "Main should spawn enemy bullet by data family id.")
+	_assert(abs(float(main_shell.bullet_pool[0].radius) - 4.0) <= 0.001, "Main should preserve authored enemy bullet radius.")
 	main_shell.free()
 	gm.free()
 

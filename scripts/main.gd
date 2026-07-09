@@ -470,7 +470,7 @@ func _spawn_bullet_enemy(x: float, y: float, vx: float, vy: float, radius: float
 	for b in bullet_pool:
 		if not b.active:
 			b.active = true; b.x = x; b.y = y; b.vx = vx; b.vy = vy
-			b.radius = max(5.0, radius); b.color = color; b.type = btype
+			b.radius = maxf(0.001, radius); b.color = color; b.type = btype
 			b.lifetime = lifetime; b.age = 0; b.damage = 1.0
 			return
 
