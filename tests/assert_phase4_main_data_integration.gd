@@ -74,6 +74,16 @@ func _free_main(main_shell: Node) -> void:
 	if gm:
 		gm.free()
 
+func _activate_enemy_family_set(main_shell: Node, start_idx: int, y: float = 200.0) -> void:
+	for i in range(EXPECTED_FAMILIES.size()):
+		_activate_bullet(main_shell, start_idx + i, EXPECTED_FAMILIES[i], 200.0 + i * 8.0, y, 8.0)
+	_activate_bullet(main_shell, start_idx + EXPECTED_FAMILIES.size(), "arrow", 320.0, y, 8.0)
+
+func _assert_enemy_family_set_cleared(main_shell: Node, start_idx: int, message_prefix: String) -> void:
+	for i in range(EXPECTED_FAMILIES.size()):
+		_assert(not main_shell.bullet_pool[start_idx + i].active, "%s should clear %s bullets." % [message_prefix, EXPECTED_FAMILIES[i]])
+	_assert(not main_shell.bullet_pool[start_idx + EXPECTED_FAMILIES.size()].active, "%s should clear arrow bullets." % message_prefix)
+
 func _verify_bullet_family_contract() -> void:
 	var main_shell = _new_main_with_pool()
 	for method in ["_enemy_bullet_types", "_is_enemy_bullet_type", "_count_active_bullets_by_owner", "_check_collisions"]:
@@ -120,11 +130,61 @@ func _verify_collision_uses_all_enemy_bullet_families() -> void:
 	_assert_equal(gm.score, 37, "Graze should use scoring data for large orb bullets.")
 	_free_main(main_shell)
 
+func _verify_clearing_paths_use_all_enemy_bullet_families() -> void:
+	var boss_entry_shell = _new_main_with_pool()
+	_activate_enemy_family_set(boss_entry_shell, 0, 180.0)
+	_activate_bullet(boss_entry_shell, 12, "player", 400.0, 180.0, 6.0)
+	boss_entry_shell._enter_boss()
+	_assert_equal(boss_entry_shell.game_manager_ref.state, "boss", "Boss entry should switch main state to boss.")
+	_assert_enemy_family_set_cleared(boss_entry_shell, 0, "Boss entry")
+	_assert(boss_entry_shell.bullet_pool[12].active, "Boss entry should not clear player bullets.")
+	_free_main(boss_entry_shell)
+
+	var boss_card_clear_shell = _new_main_with_pool()
+	_activate_enemy_family_set(boss_card_clear_shell, 0, 220.0)
+	_activate_bullet(boss_card_clear_shell, 12, "bomb", 420.0, 220.0, 6.0)
+	boss_card_clear_shell.boss = {"cards":[{"name":"test"}], "card_idx":0, "phase":"active", "timer":12.0}
+	boss_card_clear_shell._boss_card_clear()
+	_assert_enemy_family_set_cleared(boss_card_clear_shell, 0, "Boss card clear")
+	_assert(boss_card_clear_shell.bullet_pool[12].active, "Boss card clear should not clear bomb bullets.")
+	_assert_equal(String(boss_card_clear_shell.boss.phase), "defeated", "Last-card clear should move boss to defeated.")
+	_free_main(boss_card_clear_shell)
+
+	var boss_timeout_shell = _new_main_with_pool()
+	_activate_enemy_family_set(boss_timeout_shell, 0, 260.0)
+	_activate_bullet(boss_timeout_shell, 12, "player", 440.0, 260.0, 6.0)
+	boss_timeout_shell.boss = {"cards":[{"name":"test"}], "card_idx":0, "phase":"active", "timer":6.0}
+	boss_timeout_shell._boss_card_timeout()
+	_assert_enemy_family_set_cleared(boss_timeout_shell, 0, "Boss timeout")
+	_assert(boss_timeout_shell.bullet_pool[12].active, "Boss timeout should not clear player bullets.")
+	_assert_equal(String(boss_timeout_shell.boss.phase), "defeated", "Last-card timeout should move boss to defeated.")
+	_free_main(boss_timeout_shell)
+
+	var bomb_clear_shell = _new_main_with_pool()
+	bomb_clear_shell.player_x = 360.0
+	bomb_clear_shell.player_y = 540.0
+	bomb_clear_shell.player_bombing = true
+	bomb_clear_shell.player_bomb_timer = 1.0
+	bomb_clear_shell.player_bomb_wave_timer = 0.0
+	bomb_clear_shell.player_bomb_phase = 0
+	bomb_clear_shell.player_bomb_config = {"clear_radius": 200.0, "duration": 1, "waves": 1, "persist_waves": false, "color": Color.WHITE}
+	for i in range(EXPECTED_FAMILIES.size()):
+		_activate_bullet(bomb_clear_shell, i, EXPECTED_FAMILIES[i], 360.0 + float(i), 540.0, 8.0)
+	_activate_bullet(bomb_clear_shell, EXPECTED_FAMILIES.size(), "arrow", 352.0, 540.0, 8.0)
+	_activate_bullet(bomb_clear_shell, 12, "player", 360.0, 420.0, 6.0)
+	bomb_clear_shell._update_bomb(1.0 / 60.0)
+	_assert_enemy_family_set_cleared(bomb_clear_shell, 0, "Bomb clear")
+	_assert(bomb_clear_shell.bullet_pool[12].active, "Bomb clear should not clear player bullets.")
+	_free_main(bomb_clear_shell)
+
 func _init() -> void:
 	_verify_bullet_family_contract()
 	if failed:
 		return
 	_verify_collision_uses_all_enemy_bullet_families()
+	if failed:
+		return
+	_verify_clearing_paths_use_all_enemy_bullet_families()
 	if failed:
 		return
 	quit(0)
