@@ -22,6 +22,15 @@ class FakeGameDatabase:
 	func scoring_rules() -> Dictionary:
 		return {"graze": graze_value, "enemy_defeat": 50}
 
+class CountingGameDatabase:
+	extends FakeGameDatabase
+
+	var bullet_families_calls: int = 0
+
+	func bullet_families() -> Array:
+		bullet_families_calls += 1
+		return super.bullet_families()
+
 func _fail(message: String) -> void:
 	if failed:
 		return
@@ -107,6 +116,22 @@ func _verify_bullet_family_contract() -> void:
 	_assert_equal(int(counts.player), 0, "No player bullets should be active.")
 	_free_main(main_shell)
 
+func _verify_enemy_bullet_type_cache() -> void:
+	var main_shell = _new_main_with_pool()
+	var fake_db := CountingGameDatabase.new(37, EXPECTED_FAMILIES)
+	main_shell.game_database_ref = fake_db
+	main_shell.game_database = fake_db
+
+	var type_ids: Array = main_shell._enemy_bullet_types()
+	_assert_equal(fake_db.bullet_families_calls, 1, "Enemy bullet type cache should build from bullet_families once.")
+	_assert(type_ids.has("arrow"), "Enemy bullet cache should include arrow.")
+	for type_id in EXPECTED_FAMILIES:
+		_assert(main_shell._is_enemy_bullet_type(type_id), "Cached enemy bullet lookup should recognize %s." % type_id)
+	_assert(main_shell._is_enemy_bullet_type("arrow"), "Cached enemy bullet lookup should recognize arrow.")
+	_assert(not main_shell._is_enemy_bullet_type("player"), "Cached enemy bullet lookup should reject player bullets.")
+	_assert_equal(fake_db.bullet_families_calls, 1, "_is_enemy_bullet_type should not rebuild enemy bullet families after cache warmup.")
+	_free_main(main_shell)
+
 func _verify_collision_uses_all_enemy_bullet_families() -> void:
 	var main_shell = _new_main_with_pool()
 	var gm = main_shell.game_manager_ref
@@ -179,6 +204,9 @@ func _verify_clearing_paths_use_all_enemy_bullet_families() -> void:
 
 func _init() -> void:
 	_verify_bullet_family_contract()
+	if failed:
+		return
+	_verify_enemy_bullet_type_cache()
 	if failed:
 		return
 	_verify_collision_uses_all_enemy_bullet_families()

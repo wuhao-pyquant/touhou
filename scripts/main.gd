@@ -50,6 +50,9 @@ var item_reward_system: Object = load("res://scripts/runtime/item_reward_system.
 var shot_executor: Object = load("res://scripts/player/player_shot_executor.gd").new()
 var bomb_executor: Object = load("res://scripts/player/player_bomb_executor.gd").new()
 var enemy_pattern_executor: Object = load("res://scripts/runtime/enemy_pattern_executor.gd").new()
+var _enemy_bullet_type_ids_cache: Array = []
+var _enemy_bullet_type_lookup_cache: Dictionary = {}
+var _enemy_bullet_type_cache_source: Object = null
 var player_last_move_dir: Vector2 = Vector2(0, -1)
 var main_menu_cursor: int = 0
 var character_menu_cursor: int = 0
@@ -233,19 +236,30 @@ func _selected_bomb_profile() -> Dictionary:
 	return {}
 
 func _enemy_bullet_types() -> Array:
+	if _enemy_bullet_type_cache_source != game_database_ref or _enemy_bullet_type_ids_cache.is_empty():
+		_rebuild_enemy_bullet_type_cache()
+	return _enemy_bullet_type_ids_cache.duplicate()
+
+func _rebuild_enemy_bullet_type_cache() -> void:
 	var ids: Array = ["arrow"]
+	var lookup := {"arrow": true}
 	if game_database_ref:
 		for family in game_database_ref.bullet_families():
 			var family_id := String(family.get("id", ""))
 			if family_id != "" and not ids.has(family_id):
 				ids.append(family_id)
-	return ids
+				lookup[family_id] = true
+	_enemy_bullet_type_ids_cache = ids
+	_enemy_bullet_type_lookup_cache = lookup
+	_enemy_bullet_type_cache_source = game_database_ref
 
 func _enemy_bullet_type_ids() -> Array:
 	return _enemy_bullet_types()
 
 func _is_enemy_bullet_type(type_id: String) -> bool:
-	return _enemy_bullet_types().has(type_id)
+	if _enemy_bullet_type_cache_source != game_database_ref or _enemy_bullet_type_lookup_cache.is_empty():
+		_rebuild_enemy_bullet_type_cache()
+	return _enemy_bullet_type_lookup_cache.has(type_id)
 
 func _score_value(rule_id: String, fallback: int) -> int:
 	if game_database_ref:

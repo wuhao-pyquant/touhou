@@ -2,6 +2,34 @@ extends SceneTree
 
 var failed := false
 
+class FakeItemRewardDatabase:
+	extends RefCounted
+
+	var _items := {
+		"bomb_fragment": {"id": "bomb_fragment", "base_score": 777, "fragment_goal": 2, "collect_behavior": "bomb_fragment"},
+		"point": {"id": "point", "base_score": 10, "collect_behavior": "point"},
+		"power": {"id": "power", "base_score": 10, "collect_behavior": "power"},
+		"bomb_refill": {"id": "bomb_refill", "base_score": 100, "collect_behavior": "bomb_refill"},
+		"life": {"id": "life", "base_score": 500, "collect_behavior": "life"},
+		"life_fragment": {"id": "life_fragment", "base_score": 500, "fragment_goal": 5, "collect_behavior": "life_fragment"},
+		"night_festival_seal": {"id": "night_festival_seal", "base_score": 1000, "collect_behavior": "night_festival_seal"},
+		"full_power": {"id": "full_power", "base_score": 300, "collect_behavior": "full_power"},
+		"bullet_linear": {"id": "bullet_linear", "base_score": 120, "collect_behavior": "bullet_linear"},
+		"bullet_spread": {"id": "bullet_spread", "base_score": 120, "collect_behavior": "bullet_spread"},
+		"bullet_homing": {"id": "bullet_homing", "base_score": 120, "collect_behavior": "bullet_homing"},
+	}
+
+	func drop_table_for_tier(tier: String) -> Array:
+		var db = load("res://scripts/data/game_database.gd").new()
+		return db.drop_table_for_tier(tier)
+
+	func scoring_rules() -> Dictionary:
+		var db = load("res://scripts/data/game_database.gd").new()
+		return db.scoring_rules()
+
+	func item_type_by_id(id: String) -> Dictionary:
+		return _items.get(id, {})
+
 func _fail(message: String) -> void:
 	if failed:
 		return
@@ -52,11 +80,16 @@ func _verify_reward_system() -> void:
 	_assert_equal(String(point_result.type), "point", "Point result type mismatch.")
 	_assert_equal(int(gm.score), 220, "Top-collected point item should use power scaling and top multiplier.")
 
+	var fake_database := FakeItemRewardDatabase.new()
+	rewards._database = fake_database
 	gm.bombs = 0
-	gm.bomb_fragments = 2
-	rewards.apply_collection("bomb_fragment", gm, 400.0, 128.0)
-	_assert_equal(gm.bombs, 1, "Third bomb fragment should grant one bomb.")
-	_assert_equal(gm.bomb_fragments, 0, "Third bomb fragment should consume fragments.")
+	gm.bomb_fragments = 1
+	var custom_bomb_fragment_result: Dictionary = rewards.apply_collection("bomb_fragment", gm, 400.0, 128.0)
+	_assert_equal(gm.bombs, 1, "Custom fragment goal should grant one bomb once reached.")
+	_assert_equal(gm.bomb_fragments, 0, "Custom fragment goal should consume fragments once reached.")
+	_assert_equal(int(custom_bomb_fragment_result.score_delta), 777, "Bomb fragment should use database base_score when provided.")
+
+	rewards._database = load("res://scripts/data/game_database.gd").new()
 
 	gm.bombs = 4
 	var bomb_refill_result: Dictionary = rewards.apply_collection("bomb_refill", gm, 400.0, 128.0)
