@@ -622,7 +622,7 @@ All gameplay clarity entries are `accepted`, validation passes, and the readabil
 
 **Files**
 
-- Update `main.gd`
+- Update `scripts/main.gd`
 - Update `autoload/asset_registry.gd` only if additional getters are needed
 - Add focused tests if runtime helpers are extracted
 
@@ -630,7 +630,7 @@ All gameplay clarity entries are `accepted`, validation passes, and the readabil
 
 Integrate accepted assets without destabilizing gameplay:
 
-1. Add a texture cache helper in `main.gd`:
+1. Add a texture cache helper in `scripts/main.gd`:
 
 ```gdscript
 var asset_texture_cache: Dictionary = {}
@@ -734,7 +734,7 @@ Visually inspect:
 **Commit and integrate**
 
 ```powershell
-git add docs/art assets autoload/asset_registry.gd main.gd tools/art tests docs/superpowers/plans/2026-07-09-art-production-phase6.md
+git add docs/art assets autoload/asset_registry.gd scripts/main.gd tools/art tests docs/superpowers/plans/2026-07-09-art-production-phase6.md
 git commit -m "feat: add phase 6 hand-painted art asset pipeline"
 git checkout master
 git merge --no-ff feature/art-production-phase6
@@ -749,7 +749,7 @@ Use subagents/workers for independent parts:
 
 1. **Documentation worker:** style bible, prompt matrix, acceptance checklist.
 2. **Registry/tooling worker:** manifest builder, validation, contact sheet scripts, tests.
-3. **Runtime integration worker:** `AssetRegistry` and `main.gd` fallback-aware rendering.
+3. **Runtime integration worker:** `AssetRegistry` and `scripts/main.gd` fallback-aware rendering.
 4. **Asset production lead in main session:** image generation, visual review, acceptance decisions, and final gameplay-readability gate. Keep image generation in the main session unless the available subagent environment explicitly exposes the same `imagegen` capability.
 
 The main session must keep final approval authority for style consistency and gameplay readability.
