@@ -678,7 +678,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_03a_sena_assets",
       "boss_id": "lost_rabbit_yokai"
     },
@@ -692,7 +692,7 @@
       "height": 1024,
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_03a_sena_assets",
       "boss_id": "lost_rabbit_yokai"
     },
@@ -706,7 +706,7 @@
       "height": 720,
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_03a_sena_assets",
       "boss_id": "lost_rabbit_yokai"
     },
@@ -720,7 +720,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_03b_oboro_assets",
       "boss_id": "bamboo_illusionist"
     },
@@ -734,7 +734,7 @@
       "height": 1024,
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_03b_oboro_assets",
       "boss_id": "bamboo_illusionist"
     },
@@ -748,7 +748,7 @@
       "height": 720,
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_03b_oboro_assets",
       "boss_id": "bamboo_illusionist"
     },
