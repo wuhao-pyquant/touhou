@@ -8,14 +8,17 @@ func _assert(condition: bool, message: String) -> void:
 	if not condition:
 		_fail(message)
 
-func _verify_gameplay_fallbacks(gm: Object, main: Node2D) -> void:
-	for stage in [4, 5, 6]:
+func _verify_explicit_stage_content(gm: Object, main: Node2D) -> void:
+	for stage in [1, 2, 3, 4, 5, 6]:
 		gm.current_stage = stage
 		main._load_stage(stage)
 		_assert(main.stage_controller.has("boss_time"), "stage %d missing boss_time" % stage)
 		_assert(main.stage_controller.has("waves"), "stage %d missing waves table" % stage)
 		_assert(main.stage_controller.has("boss_spawned"), "stage %d missing boss_spawned flag" % stage)
-		_assert(main.stage_controller.has("fallback_from"), "stage %d missing fallback marker" % stage)
+		_assert(main.stage_controller.has("stage_id"), "stage %d missing stage_id" % stage)
+		_assert(main.stage_controller.has("curve_tag"), "stage %d missing curve_tag" % stage)
+		_assert(not main.stage_controller.has("fallback_from"), "stage %d should not use fallback marker after Phase 5" % stage)
+		_assert((main.stage_controller.waves as Array).size() >= 10, "stage %d should expose explicit wave content" % stage)
 
 		main._stage_waves(0)
 		main._stage_waves(120)
@@ -23,9 +26,10 @@ func _verify_gameplay_fallbacks(gm: Object, main: Node2D) -> void:
 
 		main.boss = {}
 		main._load_boss_cards()
-		_assert(main.boss.has("cards"), "stage %d boss cards fallback is empty" % stage)
+		_assert(main.boss.has("cards"), "stage %d boss cards are empty" % stage)
 		var cards: Array = main.boss.get("cards", [])
-		_assert(cards.size() > 0, "stage %d boss cards fallback is empty" % stage)
+		var expected_cards := 4 if stage <= 4 else 6
+		_assert(cards.size() == expected_cards, "stage %d boss cards should be %d, got %d" % [stage, expected_cards, cards.size()])
 
 func _verify_item_boundary(gm: Object, main: Node2D) -> void:
 	var right_limit: float = float(gm.SCREEN_W - 11)
@@ -112,7 +116,7 @@ func _verify_main_player_layout(gm: Object, root_gm: Node, main_scene: PackedSce
 	main.SCREEN_H = original_h
 
 	_verify_item_boundary(gm, main)
-	_verify_gameplay_fallbacks(gm, main)
+	_verify_explicit_stage_content(gm, main)
 	main.queue_free()
 
 func _verify_boss_hud_geometry(main: Node2D) -> void:

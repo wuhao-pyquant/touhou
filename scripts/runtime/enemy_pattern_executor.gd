@@ -10,12 +10,20 @@ func family_id_for_pattern(pattern: String, strong: bool = false) -> String:
 	match pattern:
 		"downward":
 			return "fast_attacker"
+		"wind", "wind_aimed":
+			return "fast_attacker"
 		"spread", "ring":
+			return "formation_shooter"
+		"mist_delay":
 			return "formation_shooter"
 		"double_spread":
 			return "elite_yokai"
 		"wave":
 			return "mechanism"
+		"rhythm":
+			return "mechanism"
+		"large_orb", "final_dense":
+			return "elite_yokai"
 		"spiral":
 			return "elite_yokai"
 		_:
@@ -72,6 +80,49 @@ func bullet_specs(enemy: Dictionary, player_position: Vector2, stage_bullet_spee
 				var wave_position := position + Vector2(i * 10.0 - 20.0, 0.0)
 				wave_specs.append(_make_spec(wave_position, _velocity_for("rice", wave_angle, 2.0, stage_bullet_speed), "rice"))
 			return wave_specs
+		"mist_delay":
+			var mist_specs: Array = []
+			for i in range(6):
+				var mist_angle := PI / 2.0 + sin(shoot_phase * 0.1 + i * 0.9) * 0.65
+				mist_specs.append(_make_spec(position + Vector2((i - 2.5) * 9.0, 0.0), _velocity_for("butterfly", mist_angle, 1.65, stage_bullet_speed), "butterfly"))
+			return mist_specs
+		"wind":
+			var wind_specs: Array = []
+			for i in range(4):
+				var wind_angle := PI / 2.0 + sin(shoot_phase * 0.22 + i) * 0.45
+				wind_specs.append(_make_spec(position + Vector2((i - 1.5) * 12.0, 0.0), _velocity_for("needle", wind_angle, 2.8, stage_bullet_speed), "needle"))
+			return wind_specs
+		"wind_aimed":
+			var wind_aim := (player_position - position).angle()
+			var wind_aimed_specs: Array = []
+			for off in [-0.24, -0.08, 0.08, 0.24]:
+				wind_aimed_specs.append(_make_spec(position, _velocity_for("needle", wind_aim + off, 3.0, stage_bullet_speed), "needle"))
+			return wind_aimed_specs
+		"rhythm":
+			var rhythm_specs: Array = []
+			var rhythm_count := 8 if shoot_phase % 2 == 0 else 12
+			for i in range(rhythm_count):
+				var rhythm_angle := TAU / float(rhythm_count) * i + shoot_phase * 0.18
+				var rhythm_family := "star" if shoot_phase % 2 == 0 else "rice"
+				rhythm_specs.append(_make_spec(position, _velocity_for(rhythm_family, rhythm_angle, 2.05, stage_bullet_speed), rhythm_family))
+			return rhythm_specs
+		"large_orb":
+			var orb_specs: Array = []
+			var orb_angle := (player_position - position).angle()
+			for off in [-0.38, 0.0, 0.38]:
+				orb_specs.append(_make_spec(position, _velocity_for("large_orb", orb_angle + off, 1.9, stage_bullet_speed), "large_orb"))
+			return orb_specs
+		"final_dense":
+			var final_specs: Array = []
+			for i in range(10):
+				var final_angle := TAU / 10.0 * i + shoot_phase * 0.17
+				var final_family := "talisman" if i % 2 == 0 else "star"
+				final_specs.append(_make_spec(position, _velocity_for(final_family, final_angle, 2.35, stage_bullet_speed), final_family))
+			if shoot_phase % 3 == 0:
+				var aimed_angle := (player_position - position).angle()
+				for off in [-0.18, 0.0, 0.18]:
+					final_specs.append(_make_spec(position, _velocity_for("needle", aimed_angle + off, 3.0, stage_bullet_speed), "needle"))
+			return final_specs
 		"spiral":
 			var spiral_specs: Array = []
 			for i in range(8):

@@ -50,6 +50,7 @@ var item_reward_system: Object = load("res://scripts/runtime/item_reward_system.
 var shot_executor: Object = load("res://scripts/player/player_shot_executor.gd").new()
 var bomb_executor: Object = load("res://scripts/player/player_bomb_executor.gd").new()
 var enemy_pattern_executor: Object = load("res://scripts/runtime/enemy_pattern_executor.gd").new()
+var stage_director: Object = load("res://scripts/runtime/stage_director.gd").new()
 var _enemy_bullet_type_ids_cache: Array = []
 var _enemy_bullet_type_lookup_cache: Dictionary = {}
 var _enemy_bullet_type_cache_source: Object = null
@@ -476,15 +477,12 @@ func _restart_current_stage() -> void:
 
 func _load_stage(stage: int):
 	current_stage_local = stage
-	match stage:
-		1: stage_controller = {"boss_time": 4500, "waves": {}}
-		2: stage_controller = {"boss_time": 4800, "waves": {}}
-		3: stage_controller = {"boss_time": 5400, "waves": {}}
-		_:
-			# FOUNDATION FALLBACK: reuse a baseline controller for stages 4-6.
-			var fallback_idx: int = _fallback_stage_index(stage)
-			stage_controller = {"boss_time": 3600 + (fallback_idx - 1) * 600, "waves": {}, "fallback_from": fallback_idx}
-	# Stage waves defined inline below
+	if game_manager_ref:
+		game_manager_ref.current_stage = stage
+	stage_controller = stage_director.stage_controller(stage)
+	if stage_controller.is_empty():
+		stage_controller = {"stage_index": stage, "stage_id": "", "display_name": "", "curve_tag": "", "theme": "", "boss_time": 4500, "waves": []}
+	stage_controller["triggered_waves"] = {}
 	stage_controller["boss_spawned"] = false
 
 func _clear_bullets():
@@ -732,16 +730,27 @@ func _init_boss():
 	boss_alive = true
 
 func _load_boss_cards():
-	match _active_stage():
-		1: boss.cards = _stage1_cards()
-		2: boss.cards = _stage2_cards()
-		3: boss.cards = _stage3_cards()
-		_:
-			# FOUNDATION FALLBACK: reuse cards from the baseline cycle for stages 4-6.
-			match _fallback_stage_index(_active_stage()):
-				1: boss.cards = _stage1_cards()
-				2: boss.cards = _stage2_cards()
-				_: boss.cards = _stage3_cards()
+	var stage_index: int = _active_stage()
+	var source_cards: Array = stage_director.boss_cards(stage_index)
+	var boss_def: Dictionary = stage_director.boss_definition(stage_index)
+	var boss_id := String(boss_def.get("id", ""))
+	var hp_mult := 1.0
+	if game_manager_ref and stage_index >= 1 and stage_index <= game_manager_ref.STAGE_MULTS.size():
+		hp_mult = float(game_manager_ref.STAGE_MULTS[stage_index - 1].boss_hp)
+	boss.cards = []
+	for source_card in source_cards:
+		var card: Dictionary = source_card.duplicate(true)
+		var base_hp := float(card.get("hp", 500.0))
+		card["base_hp"] = base_hp
+		card["hp"] = base_hp * hp_mult
+		card["stage_index"] = stage_index
+		card["boss_id"] = boss_id
+		card["pattern"] = _resolve_boss_pattern_id(String(card.get("pattern", "moonlight")))
+		boss.cards.append(card)
+
+func _resolve_boss_pattern_id(pattern_id: String) -> String:
+	var aliases: Dictionary = stage_director.pattern_aliases()
+	return String(aliases.get(pattern_id, pattern_id))
 
 func _stage1_cards() -> Array:
 	return [
@@ -880,6 +889,11 @@ func _boss_fire_pattern(delta: float):
 		"vortex": _bullets_vortex(mult)
 		"darkness": _bullets_darkness(mult)
 		"apocalypse": _bullets_apocalypse(mult)
+		"wind_aimed": _bullets_wind_aimed(mult)
+		"wind_lattice": _bullets_wind_lattice(mult)
+		"rhythm_drum": _bullets_rhythm_drum(mult)
+		"large_orb_gate": _bullets_large_orb_gate(mult)
+		"final_lantern": _bullets_final_lantern(mult)
 
 # Boss spell patterns (compact but varied)
 func _bullets_moonlight(mult: float):
@@ -979,22 +993,86 @@ func _bullets_apocalypse(mult: float):
 	if int(boss.card_shot) % (2 if boss.card_timer < 600 else 4) == 0:
 		var a: float = randf_range(0,TAU); _spawn_bullet_enemy(boss.x,boss.y,cos(a)*randf_range(3,6)*mult,sin(a)*randf_range(3,6)*mult,3,Color.WHITE)
 
-# Stage wave helpers for the foundation stage layout.
-func _fallback_stage_index(stage: int) -> int:
-	return ((stage - 1) % 3) + 1
+func _bullets_wind_aimed(mult: float):
+	if int(boss.card_shot) % 6 == 0:
+		var a: float = (Vector2(player_x, player_y) - Vector2(boss.x, boss.y)).angle()
+		for off in [-0.3, -0.12, 0.12, 0.3]:
+			_spawn_bullet_enemy(boss.x, boss.y, cos(a + off) * 3.4 * mult, sin(a + off) * 3.4 * mult, 4, Color(1.0, 0.72, 0.2), "needle", 290)
+	if int(boss.card_shot) % 36 == 0:
+		for i in range(14):
+			var w: float = TAU / 14.0 * i + boss.card_shot * 0.015
+			_spawn_bullet_enemy(boss.x, boss.y, cos(w) * 2.1 * mult, sin(w) * 2.1 * mult, 3, Color(0.16, 0.86, 0.94), "rice", 360)
+
+func _bullets_wind_lattice(mult: float):
+	if int(boss.card_shot) % 8 == 0:
+		for lane in [-2, -1, 0, 1, 2]:
+			var a1: float = PI * 0.5 + lane * 0.12 + sin(boss.card_shot * 0.02) * 0.2
+			var a2: float = PI * 0.5 - lane * 0.12 - sin(boss.card_shot * 0.02) * 0.2
+			_spawn_bullet_enemy(boss.x - 56 + lane * 28, boss.y, cos(a1) * 2.7 * mult, sin(a1) * 2.7 * mult, 4, Color(1.0, 0.72, 0.2), "needle", 330)
+			_spawn_bullet_enemy(boss.x + 56 - lane * 28, boss.y, cos(a2) * 2.7 * mult, sin(a2) * 2.7 * mult, 4, Color(0.45, 0.66, 1.0), "star", 330)
+	if int(boss.card_shot) % 42 == 0:
+		var aimed: float = (Vector2(player_x, player_y) - Vector2(boss.x, boss.y)).angle()
+		for off in [-0.2, 0.0, 0.2]:
+			_spawn_bullet_enemy(boss.x, boss.y, cos(aimed + off) * 3.2 * mult, sin(aimed + off) * 3.2 * mult, 5, Color(0.95, 0.22, 0.25), "talisman", 320)
+
+func _bullets_rhythm_drum(mult: float):
+	if int(boss.card_shot) % 12 == 0:
+		var count := 10 if int(boss.card_shot / 12.0) % 2 == 0 else 14
+		for i in range(count):
+			var a: float = TAU / float(count) * i + boss.card_shot * 0.018
+			var family := "star" if count == 10 else "rice"
+			_spawn_bullet_enemy(boss.x, boss.y, cos(a) * 2.25 * mult, sin(a) * 2.25 * mult, 4, Color(0.45, 0.66, 1.0) if family == "star" else Color(0.16, 0.86, 0.94), family, 360)
+	if int(boss.card_shot) % 48 == 0:
+		var aimed: float = (Vector2(player_x, player_y) - Vector2(boss.x, boss.y)).angle()
+		for off in [-0.32, -0.16, 0.0, 0.16, 0.32]:
+			_spawn_bullet_enemy(boss.x, boss.y, cos(aimed + off) * 3.0 * mult, sin(aimed + off) * 3.0 * mult, 5, Color(0.95, 0.22, 0.25), "talisman", 320)
+
+func _bullets_large_orb_gate(mult: float):
+	if int(boss.card_shot) % 38 == 0:
+		var aimed: float = (Vector2(player_x, player_y) - Vector2(boss.x, boss.y)).angle()
+		for off in [-0.44, 0.0, 0.44]:
+			_spawn_bullet_enemy(boss.x, boss.y, cos(aimed + off) * 1.55 * mult, sin(aimed + off) * 1.55 * mult, 10, Color(0.62, 0.38, 1.0), "large_orb", 520)
+	if int(boss.card_shot) % 9 == 0:
+		for i in range(8):
+			var a: float = TAU / 8.0 * i + boss.card_shot * 0.025
+			_spawn_bullet_enemy(boss.x, boss.y, cos(a) * 2.35 * mult, sin(a) * 2.35 * mult, 4, Color(0.16, 0.86, 0.94), "rice", 360)
+
+func _bullets_final_lantern(mult: float):
+	if int(boss.card_shot) % 5 == 0:
+		for i in range(18):
+			var a: float = TAU / 18.0 * i + boss.card_shot * 0.016
+			var family := "talisman" if i % 2 == 0 else "star"
+			var color := Color(0.95, 0.22, 0.25) if family == "talisman" else Color(0.45, 0.66, 1.0)
+			_spawn_bullet_enemy(boss.x, boss.y, cos(a) * 2.2 * mult, sin(a) * 2.2 * mult, 3, color, family, 380)
+	if int(boss.card_shot) % 28 == 0:
+		var aimed: float = (Vector2(player_x, player_y) - Vector2(boss.x, boss.y)).angle()
+		for off in [-0.42, -0.21, 0.0, 0.21, 0.42]:
+			_spawn_bullet_enemy(boss.x, boss.y, cos(aimed + off) * 3.6 * mult, sin(aimed + off) * 3.6 * mult, 5, Color(1.0, 0.42, 0.18), "laser", 300)
+	if int(boss.card_shot) % 70 == 0:
+		for off in [-0.5, 0.5]:
+			_spawn_bullet_enemy(boss.x + off * 80.0, boss.y, off * 0.8 * mult, 1.5 * mult, 10, Color(0.62, 0.38, 1.0), "large_orb", 520)
 
 # Stage wave spawning
 func _stage_waves(timer: int):
-	match _active_stage():
-		1: _waves_s1(timer)
-		2: _waves_s2(timer)
-		3: _waves_s3(timer)
-		_:
-			# FOUNDATION FALLBACK: cycle through baseline waves for stages 4-6.
-			match _fallback_stage_index(_active_stage()):
-				1: _waves_s1(timer)
-				2: _waves_s2(timer)
-				_: _waves_s3(timer)
+	if stage_controller.is_empty():
+		return
+	var triggered: Dictionary = stage_controller.get("triggered_waves", {})
+	for event in stage_director.due_wave_events(_active_stage(), timer, triggered):
+		_spawn_stage_wave_event(event)
+	stage_controller["triggered_waves"] = triggered
+
+func _spawn_stage_wave_event(event: Dictionary) -> void:
+	_spawn_enemy(
+		float(event.get("x", 0.0)),
+		float(event.get("y", -20.0)),
+		float(event.get("hp", 5.0)),
+		String(event.get("pattern", "aimed")),
+		String(event.get("move", "straight")),
+		float(event.get("vx", 0.0)),
+		float(event.get("vy", 1.5)),
+		event.get("move_data", {}),
+		bool(event.get("strong", false))
+	)
 
 func _waves_s1(timer: int):
 	var w: int = timer
