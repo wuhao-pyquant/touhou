@@ -103,7 +103,7 @@ func _verify_main_radius_helpers_use_selected_profile() -> void:
 		return
 	var main_shell = main_script.new()
 	main_shell.game_manager_ref = gm
-	for method in ["_player_hitbox_radius", "_player_graze_radius"]:
+	for method in ["_player_hitbox_radius", "_player_graze_radius", "_check_collisions"]:
 		if not _assert(main_shell.has_method(method), "Main missing selected-radius helper %s" % method):
 			main_shell.free()
 			gm.free()
@@ -114,6 +114,32 @@ func _verify_main_radius_helpers_use_selected_profile() -> void:
 	_assert_equal(main_shell._player_graze_radius(), float(profile.graze_radius), "Main graze helper should use selected protagonist graze radius.")
 	_assert(main_shell._player_hitbox_radius() != gm.PLAYER_HITBOX, "Swordswoman hitbox regression should differ from legacy default constant.")
 	_assert(main_shell._player_graze_radius() != gm.PLAYER_GRAZE, "Swordswoman graze regression should differ from legacy default constant.")
+
+	gm.selected_protagonist_id = "magician"
+	profile = gm.protagonist_profile()
+	var bullet_radius := 5.0
+	var hit_distance: float = float(gm.PLAYER_HITBOX) + bullet_radius + 0.05
+	_assert(hit_distance > gm.PLAYER_HITBOX + bullet_radius, "Hitbox regression setup should sit outside the legacy hitbox.")
+	_assert(hit_distance < float(profile.hitbox) + bullet_radius, "Hitbox regression setup should sit inside Magician hitbox.")
+	main_shell.player_x = 240.0
+	main_shell.player_y = 320.0
+	main_shell.player_invincible = false
+	main_shell.player_just_hit = false
+	main_shell.player_deathbomb_primed = false
+	main_shell.bullet_pool = [{"active": true, "type": "circle", "x": main_shell.player_x + hit_distance, "y": main_shell.player_y, "radius": bullet_radius}]
+	main_shell._check_collisions(false)
+	_assert(main_shell.player_just_hit or not bool(main_shell.bullet_pool[0].active), "_check_collisions should use selected protagonist hitbox, not PLAYER_HITBOX.")
+
+	gm.graze = 0
+	gm.score = 0
+	main_shell.player_just_hit = false
+	main_shell.player_deathbomb_primed = false
+	var graze_distance: float = float(gm.PLAYER_GRAZE) + bullet_radius + 0.25
+	_assert(graze_distance > gm.PLAYER_GRAZE + bullet_radius, "Graze regression setup should sit outside the legacy graze radius.")
+	_assert(graze_distance < float(profile.graze_radius) + bullet_radius, "Graze regression setup should sit inside Magician graze radius.")
+	main_shell.bullet_pool = [{"active": true, "type": "circle", "x": main_shell.player_x + graze_distance, "y": main_shell.player_y, "radius": bullet_radius}]
+	main_shell._check_collisions(false)
+	_assert_equal(gm.graze, 1, "_check_collisions should use selected protagonist graze radius, not PLAYER_GRAZE.")
 	main_shell.free()
 	gm.free()
 
