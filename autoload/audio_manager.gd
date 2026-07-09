@@ -4,6 +4,8 @@ extends Node
 # Handles BGM (looping 3-min music tracks) and pooled SFX playback.
 
 const SFX_POOL_SIZE := 8
+const MIN_VOLUME_DB := -80.0
+const PAUSE_BGM_DUCK_DB := -12.0
 
 # Two BGM players are used for seamless crossfade between tracks. Swapping
 # `stream` on the SAME player mid-play can cause a single-frame hiccup as
@@ -19,12 +21,17 @@ var _sfx_pool: Array = []
 var _sfx_cursor: int = 0
 var _bgm_fade_tween: Tween = null
 var _bgm_volume_db: float = -3.0
+var _sfx_volume_db: float = -3.0
+var _master_volume: float = 1.0
+var _bgm_volume: float = 0.8
+var _sfx_volume: float = 0.8
+var _pause_ducked: bool = false
 
 func _ready() -> void:
 	for i in range(2):
 		var p = AudioStreamPlayer.new()
 		p.bus = "Master"
-		p.volume_db = -80.0  # silent until we use it
+		p.volume_db = MIN_VOLUME_DB  # silent until we use it
 		add_child(p)
 		bgm_players[i] = p
 	# Preload and *prime* every BGM stream: assign it to a muted player, call
@@ -44,11 +51,11 @@ func _ready() -> void:
 		_bgm_cache[key] = s
 		# Prime the stream to pre-decode (uses bgm_players[1] as scratch).
 		bgm_players[1].stream = s
-		bgm_players[1].volume_db = -80.0
+		bgm_players[1].volume_db = MIN_VOLUME_DB
 		bgm_players[1].play()
 		bgm_players[1].stop()
 	bgm_players[1].stream = null
-	bgm_players[1].volume_db = -80.0
+	bgm_players[1].volume_db = MIN_VOLUME_DB
 	# Preload SFX streams (one-shot).
 	var sfx_paths := {
 		"shoot": "res://audio/sfx/sfx_shoot.wav",
@@ -64,6 +71,66 @@ func _ready() -> void:
 		pl.bus = "Master"
 		add_child(pl)
 		_sfx_pool.append(pl)
+	apply_settings({
+		"master_volume": _master_volume,
+		"bgm_volume": _bgm_volume,
+		"sfx_volume": _sfx_volume,
+	})
+
+func _volume_to_db(volume: float) -> float:
+	if volume <= 0.0:
+		return MIN_VOLUME_DB
+	return linear_to_db(clampf(volume, 0.0, 1.0))
+
+func _settings_volume(settings: Dictionary, id: String, fallback: float) -> float:
+	return clampf(float(settings.get(id, fallback)), 0.0, 1.0)
+
+func _effective_bgm_volume_db() -> float:
+	if _bgm_volume_db <= MIN_VOLUME_DB:
+		return MIN_VOLUME_DB
+	if _pause_ducked:
+		return maxf(MIN_VOLUME_DB, _bgm_volume_db + PAUSE_BGM_DUCK_DB)
+	return _bgm_volume_db
+
+func _sync_active_bgm_volume() -> void:
+	if bgm_players.is_empty():
+		return
+	var idx: int = clampi(_bgm_active_idx, 0, bgm_players.size() - 1)
+	var player = bgm_players[idx]
+	if player:
+		player.volume_db = _effective_bgm_volume_db()
+
+func _apply_master_volume() -> void:
+	var master_bus: int = AudioServer.get_bus_index("Master")
+	if master_bus < 0:
+		return
+	AudioServer.set_bus_mute(master_bus, false)
+	AudioServer.set_bus_volume_db(master_bus, _volume_to_db(_master_volume))
+
+func apply_settings(settings: Dictionary) -> void:
+	_master_volume = _settings_volume(settings, "master_volume", _master_volume)
+	_bgm_volume = _settings_volume(settings, "bgm_volume", _bgm_volume)
+	_sfx_volume = _settings_volume(settings, "sfx_volume", _sfx_volume)
+	_bgm_volume_db = _volume_to_db(_bgm_volume)
+	_sfx_volume_db = _volume_to_db(_sfx_volume)
+	_apply_master_volume()
+	if _bgm_fade_tween and _bgm_fade_tween.is_valid():
+		_bgm_fade_tween.kill()
+	_sync_active_bgm_volume()
+
+func set_pause_ducked(ducked: bool) -> void:
+	_pause_ducked = ducked
+	if _bgm_fade_tween and _bgm_fade_tween.is_valid():
+		_bgm_fade_tween.kill()
+	_sync_active_bgm_volume()
+
+func configured_bgm_volume_db() -> float:
+	return _bgm_volume_db
+
+func effective_sfx_volume_db(volume_db: float = 0.0) -> float:
+	if _sfx_volume_db <= MIN_VOLUME_DB:
+		return MIN_VOLUME_DB
+	return maxf(MIN_VOLUME_DB, _sfx_volume_db + volume_db)
 
 func play_bgm(key: String) -> void:
 	var stream = _bgm_cache.get(key, null)
@@ -80,14 +147,14 @@ func play_bgm(key: String) -> void:
 	var old = bgm_players[_bgm_active_idx]
 	var new_p = bgm_players[next_idx]
 	new_p.stream = stream
-	new_p.volume_db = -80.0
+	new_p.volume_db = MIN_VOLUME_DB
 	new_p.play()
 	if _bgm_fade_tween and _bgm_fade_tween.is_valid():
 		_bgm_fade_tween.kill()
 	_bgm_fade_tween = create_tween()
 	_bgm_fade_tween.set_parallel(true)
-	_bgm_fade_tween.tween_property(new_p, "volume_db", _bgm_volume_db, 0.4)
-	_bgm_fade_tween.tween_property(old, "volume_db", -80.0, 0.4)
+	_bgm_fade_tween.tween_property(new_p, "volume_db", _effective_bgm_volume_db(), 0.4)
+	_bgm_fade_tween.tween_property(old, "volume_db", MIN_VOLUME_DB, 0.4)
 	_bgm_fade_tween.chain().tween_callback(func(): old.stop())
 	_bgm_active_idx = next_idx
 
@@ -110,7 +177,7 @@ func play_sfx(name: String, volume_db: float = 0.0) -> void:
 	var pl = _sfx_pool[_sfx_cursor]
 	_sfx_cursor = (_sfx_cursor + 1) % SFX_POOL_SIZE
 	pl.stream = stream
-	pl.volume_db = volume_db
+	pl.volume_db = effective_sfx_volume_db(volume_db)
 	pl.stop()
 	pl.play()
 

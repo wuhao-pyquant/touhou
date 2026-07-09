@@ -66,7 +66,7 @@ func _resolve_singletons() -> void:
 		root_audio_manager = tree_root.get_node_or_null("AudioManager")
 	if root_audio_manager:
 		audio_manager_ref = root_audio_manager
-	elif not is_inside_tree():
+	elif not audio_manager_ref and not is_inside_tree():
 		audio_manager_ref = null
 
 	var root_monitor: Node = sibling_root.get_node_or_null("PerformanceMonitor") if sibling_root else null
@@ -106,6 +106,71 @@ func _open_settings(return_state: String) -> void:
 	_resolve_singletons()
 	if game_manager_ref:
 		game_manager_ref.open_settings(return_state)
+
+func _settings_dictionary() -> Dictionary:
+	if game_manager_ref:
+		var settings_value = game_manager_ref.get("settings")
+		if settings_value is Dictionary:
+			return settings_value
+	return {}
+
+func _settings_float(id: String, fallback: float) -> float:
+	return float(_settings_dictionary().get(id, fallback))
+
+func _settings_bool(id: String, fallback: bool) -> bool:
+	return bool(_settings_dictionary().get(id, fallback))
+
+func _apply_runtime_settings(settings_override: Dictionary = {}) -> void:
+	_resolve_singletons()
+	var runtime_settings: Dictionary = settings_override if not settings_override.is_empty() else _settings_dictionary()
+	if audio_manager_ref and audio_manager_ref.has_method("apply_settings"):
+		audio_manager_ref.apply_settings(runtime_settings)
+	_apply_fullscreen_setting(bool(runtime_settings.get("fullscreen", false)))
+
+func _apply_fullscreen_setting(fullscreen: bool) -> bool:
+	if DisplayServer.get_name() == "headless":
+		return false
+	var target_mode: int = DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
+	if DisplayServer.window_get_mode() != target_mode:
+		DisplayServer.window_set_mode(target_mode)
+	return true
+
+func _set_pause_audio(ducked: bool) -> void:
+	_resolve_singletons()
+	if audio_manager_ref and audio_manager_ref.has_method("set_pause_ducked"):
+		audio_manager_ref.set_pause_ducked(ducked)
+
+func _pause_gameplay(from_state: String) -> void:
+	_resolve_singletons()
+	if game_manager_ref:
+		game_manager_ref.enter_pause(from_state)
+	_set_pause_audio(true)
+
+func _resume_gameplay() -> void:
+	_resolve_singletons()
+	if game_manager_ref:
+		game_manager_ref.resume_from_pause()
+	_set_pause_audio(false)
+
+func _bullet_draw_color(base: Color, alpha_override: float = -1.0) -> Color:
+	var brightness: float = clampf(_settings_float("bullet_brightness", 1.0), 0.5, 1.5)
+	var alpha: float = base.a if alpha_override < 0.0 else alpha_override
+	var adjusted := Color(base.r, base.g, base.b, alpha)
+	if brightness < 1.0:
+		adjusted = Color(base.r * brightness, base.g * brightness, base.b * brightness, alpha)
+	elif brightness > 1.0:
+		var lighten_amount: float = brightness - 1.0
+		adjusted = Color(base.r, base.g, base.b, alpha).lerp(Color(1.0, 1.0, 1.0, alpha), lighten_amount)
+	return Color(clampf(adjusted.r, 0.0, 1.0), clampf(adjusted.g, 0.0, 1.0), clampf(adjusted.b, 0.0, 1.0), alpha)
+
+func _should_show_focus_hitbox() -> bool:
+	return not player_bombing and (_settings_bool("always_show_focus_hitbox", false) or Input.is_key_pressed(KEY_SHIFT))
+
+func _should_show_performance_hud() -> bool:
+	return _settings_bool("show_performance_hud", false)
+
+func _should_show_input_guide() -> bool:
+	return _settings_bool("show_input_guide", true)
 
 func _move_menu_cursor(cursor: int, delta: int, count: int) -> int:
 	if delta == 0:
@@ -221,6 +286,7 @@ func _ready():
 		bullet_pool.append(_make_bullet())
 	# Ensure GameManager globals are initialized
 	game_manager_ref.reset()
+	_apply_runtime_settings()
 	_show_title()
 
 func _make_bullet() -> Dictionary:
@@ -232,6 +298,7 @@ func _show_title():
 	game_manager_ref.practice_mode = false
 	game_manager_ref.settings_return_state = "title"
 	main_menu_cursor = 0
+	_set_pause_audio(false)
 	if audio_manager_ref: audio_manager_ref.stop_bgm()
 
 func _start_game():
@@ -247,6 +314,7 @@ func _start_game():
 	game_manager_ref.practice_mode = selected_practice_mode
 	game_manager_ref.settings = selected_settings
 	game_manager_ref.switch_bullet_type(selected_bullet_type)
+	_apply_runtime_settings()
 	game_manager_ref.state = "stage"
 	_set_active_stage(1)
 	stage_timer = 0.0
@@ -302,6 +370,7 @@ func _restart_current_stage() -> void:
 	boss_alive = false
 	_load_stage(stage)
 	game_manager_ref.state = game_manager_ref.STATE_STAGE
+	_set_pause_audio(false)
 	if audio_manager_ref:
 		audio_manager_ref.bgm_stage_mid(stage)
 
@@ -414,6 +483,8 @@ func _update_settings_menu() -> void:
 	settings_menu_cursor = _move_menu_cursor(settings_menu_cursor, _menu_vertical_delta(), entries.size())
 	if _menu_cancel_pressed():
 		var return_state: String = String(game_manager_ref.settings_return_state)
+		if return_state != game_manager_ref.STATE_PAUSED:
+			_set_pause_audio(false)
 		_set_ui_state(return_state if return_state != "" else "title")
 		return
 	if entries.is_empty():
@@ -421,6 +492,7 @@ func _update_settings_menu() -> void:
 	var current_entry: Dictionary = entries[settings_menu_cursor]
 	var current_id: String = String(current_entry.get("id", ""))
 	var horizontal_delta: int = _menu_horizontal_delta()
+	var changed: bool = false
 	if horizontal_delta != 0 and String(current_entry.get("type", "")) == "range":
 		var step: float = float(current_entry.get("step", 0.05))
 		var minimum: float = float(current_entry.get("min", 0.0))
@@ -428,22 +500,26 @@ func _update_settings_menu() -> void:
 		var current_value: float = float(game_manager_ref.settings.get(current_id, current_entry.get("value", minimum)))
 		var next_value: float = clampf(current_value + step * horizontal_delta, minimum, maximum)
 		game_manager_ref.settings[current_id] = snappedf(next_value, step)
+		changed = true
 	if _menu_confirm_pressed() and String(current_entry.get("type", "")) == "toggle":
 		game_manager_ref.settings[current_id] = not bool(game_manager_ref.settings.get(current_id, current_entry.get("value", false)))
+		changed = true
+	if changed:
+		_apply_runtime_settings()
 
 func _update_pause_menu() -> void:
 	var entries: Array = ui_model.pause_menu_entries()
 	pause_menu_cursor = clampi(pause_menu_cursor, 0, maxi(entries.size() - 1, 0))
 	pause_menu_cursor = _move_menu_cursor(pause_menu_cursor, _menu_vertical_delta(), entries.size())
 	if _menu_cancel_pressed():
-		game_manager_ref.resume_from_pause()
+		_resume_gameplay()
 		return
 	if not _menu_confirm_pressed() or entries.is_empty():
 		return
 	var selected_id: String = String(entries[pause_menu_cursor].get("id", ""))
 	match selected_id:
 		"continue":
-			game_manager_ref.resume_from_pause()
+			_resume_gameplay()
 		"restart_stage":
 			_restart_current_stage()
 		"settings":
@@ -484,7 +560,7 @@ func _process(delta: float):
 func _update_stage(delta: float):
 	if Input.is_action_just_pressed("pause"):
 		pause_menu_cursor = 0
-		game_manager_ref.enter_pause(game_manager_ref.STATE_STAGE)
+		_pause_gameplay(game_manager_ref.STATE_STAGE)
 		return
 	stage_timer += delta * 60.0
 	_stage_waves(int(stage_timer))
@@ -506,7 +582,7 @@ func _update_stage(delta: float):
 func _update_boss(delta: float):
 	if Input.is_action_just_pressed("pause"):
 		pause_menu_cursor = 0
-		game_manager_ref.enter_pause(game_manager_ref.STATE_BOSS)
+		_pause_gameplay(game_manager_ref.STATE_BOSS)
 		return
 	_update_player(delta)
 	_update_bullets(delta, Vector2(boss.get("x", _screen_center_x()), boss.get("y", _boss_anchor_y())) if boss_alive else Vector2.ZERO)
@@ -1191,9 +1267,15 @@ func _count_active_bullets_by_owner() -> Dictionary:
 			enemy_count += 1
 	return {"player": player_count, "enemy": enemy_count}
 
+func _count_bullet_draw_groups() -> int:
+	var groups: Dictionary = {}
+	for b in bullet_pool:
+		if not b.active:
+			continue
+		groups["%s:%s" % [String(b.type), String(b.get("btype", ""))]] = true
+	return groups.size()
+
 func _update_performance_counters() -> void:
-	if not has_node("/root/PerformanceMonitor"):
-		return
 	var counts: Dictionary = _count_active_bullets_by_owner()
 	var monitor: Node = performance_monitor_ref if performance_monitor_ref else get_node_or_null("/root/PerformanceMonitor")
 	if not monitor:
@@ -1205,6 +1287,7 @@ func _update_performance_counters() -> void:
 	monitor.set_counter("enemies", _count_alive_enemies())
 	monitor.set_counter("items", items.size())
 	monitor.set_counter("boss_alive", 1 if boss_alive else 0)
+	monitor.set_counter("draw_groups", _count_bullet_draw_groups())
 
 func _check_collisions(is_boss: bool):
 	for b in bullet_pool:
@@ -1333,13 +1416,54 @@ func _draw_settings_entries(font: Font, entries: Array, cursor: int) -> void:
 		var value_w: float = font.get_string_size(value_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 18).x
 		draw_string(font, Vector2(SCREEN_W - 78.0 - value_w, y), value_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 18, Color(1.0, 0.92, 0.58))
 
+func _draw_control_hint(font: Font, hint: String, y: float, font_size: int = 16, color: Color = Color(0.68, 0.74, 0.84)) -> void:
+	if not _should_show_input_guide():
+		return
+	draw_string(font, Vector2(_centered_text_x_at_size(font, hint, font_size), y), hint, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size, color)
+
+func _performance_monitor_node() -> Node:
+	if performance_monitor_ref:
+		return performance_monitor_ref
+	if is_inside_tree() and has_node("/root/PerformanceMonitor"):
+		return get_node_or_null("/root/PerformanceMonitor")
+	return null
+
+func _draw_performance_hud(font: Font) -> void:
+	if not _should_show_performance_hud():
+		return
+	var monitor: Node = _performance_monitor_node()
+	var snapshot: Dictionary = monitor.snapshot() if monitor and monitor.has_method("snapshot") else {}
+	var fps_value: int = int(snapshot.get("fps", Engine.get_frames_per_second()))
+	var player_bullets: int = int(snapshot.get("player_bullets", 0))
+	var enemy_bullets: int = int(snapshot.get("enemy_bullets", 0))
+	var enemy_count: int = int(snapshot.get("enemies", 0))
+	var item_count: int = int(snapshot.get("items", 0))
+	var draw_groups: int = int(snapshot.get("draw_groups", 0))
+	var lines := [
+		"FPS %d" % fps_value,
+		"P %d  E %d" % [player_bullets, enemy_bullets],
+		"EN %d  I %d  G %d" % [enemy_count, item_count, draw_groups],
+	]
+	var box_rect := Rect2(8.0, 64.0, 152.0, 64.0)
+	draw_rect(box_rect, Color(0.0, 0.0, 0.0, 0.58))
+	draw_rect(box_rect, Color(0.7, 0.9, 1.0, 0.46), false, 1)
+	for i in range(lines.size()):
+		draw_string(font, Vector2(box_rect.position.x + 8.0, box_rect.position.y + 18.0 + 18.0 * i), lines[i], HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13, Color(0.84, 0.95, 1.0))
+
+func _draw_gameplay_input_guide(font: Font) -> void:
+	if not _should_show_input_guide():
+		return
+	var hint := "Shift \u4f4e\u901f/\u5224\u5b9a\u70b9    Z \u5c04\u51fb    X \u70b8\u5f39    Esc \u6682\u505c"
+	var text_w: float = font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14).x
+	draw_string(font, Vector2(maxf(10.0, SCREEN_W - 12.0 - text_w), SCREEN_H - 36.0), hint, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14, Color(0.68, 0.74, 0.84))
+
 func _draw_title_screen() -> void:
 	var font := SystemFont.new()
 	_draw_ui_background(Color(0.55, 0.14, 0.22))
 	_draw_ui_heading(font, "\u4e1c\u65b9\u5f39\u5e55", "\u6807\u9898\u83dc\u5355", 38)
 	_draw_menu_entries(font, ui_model.main_menu_entries(), main_menu_cursor, 314.0, 76.0)
 	var hint := "\u65b9\u5411\u952e\u9009\u62e9    Z \u786e\u8ba4    X/Esc \u8fd4\u56de"
-	draw_string(font, Vector2(_centered_text_x_at_size(font, hint, 16), SCREEN_H - 78.0), hint, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color(0.68, 0.74, 0.84))
+	_draw_control_hint(font, hint, SCREEN_H - 78.0)
 
 func _draw_character_select_screen() -> void:
 	var font := SystemFont.new()
@@ -1348,7 +1472,7 @@ func _draw_character_select_screen() -> void:
 	_draw_ui_heading(font, "\u89d2\u8272\u9009\u62e9", mode_label, 34)
 	_draw_menu_entries(font, ui_model.protagonist_entries(), character_menu_cursor, 304.0, 92.0)
 	var hint := "\u65b9\u5411\u952e\u9009\u62e9    Z \u786e\u8ba4    X/Esc \u8fd4\u56de\u6807\u9898"
-	draw_string(font, Vector2(_centered_text_x_at_size(font, hint, 16), SCREEN_H - 78.0), hint, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color(0.68, 0.74, 0.84))
+	_draw_control_hint(font, hint, SCREEN_H - 78.0)
 
 func _draw_shot_select_screen() -> void:
 	var font := SystemFont.new()
@@ -1359,12 +1483,13 @@ func _draw_shot_select_screen() -> void:
 	var shots: Array = ui_model.shot_entries(String(game_manager_ref.selected_protagonist_id))
 	_draw_menu_entries(font, shots, shot_menu_cursor, 328.0, 92.0)
 	var hint := "\u65b9\u5411\u952e\u9009\u62e9    Z \u5f00\u59cb    X/Esc \u8fd4\u56de\u89d2\u8272"
-	draw_string(font, Vector2(_centered_text_x_at_size(font, hint, 16), SCREEN_H - 78.0), hint, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color(0.68, 0.74, 0.84))
+	_draw_control_hint(font, hint, SCREEN_H - 78.0)
 
 func _draw_settings_screen() -> void:
 	var font := SystemFont.new()
 	_draw_ui_background(Color(0.12, 0.38, 0.44))
-	_draw_ui_heading(font, "\u8bbe\u7f6e", "\u5de6\u53f3\u8c03\u6574    Z \u5207\u6362    X/Esc \u8fd4\u56de", 34)
+	var subtitle := "\u5de6\u53f3\u8c03\u6574    Z \u5207\u6362    X/Esc \u8fd4\u56de" if _should_show_input_guide() else ""
+	_draw_ui_heading(font, "\u8bbe\u7f6e", subtitle, 34)
 	_draw_settings_entries(font, ui_model.settings_entries(game_manager_ref.settings), settings_menu_cursor)
 
 func _draw_pause_overlay() -> void:
@@ -1392,7 +1517,7 @@ func _draw_pause_overlay() -> void:
 		var label := "%s %s" % [marker, String(entry.get("label", ""))]
 		draw_string(font, Vector2(row_rect.position.x + 18.0, y), label, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 22, Color.WHITE if selected else Color(0.84, 0.88, 0.94))
 	var hint := "Z \u786e\u8ba4    X/Esc \u7ee7\u7eed"
-	draw_string(font, Vector2(_centered_text_x_at_size(font, hint, 16), panel_rect.position.y + panel_height - 24.0), hint, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color(0.68, 0.74, 0.84))
+	_draw_control_hint(font, hint, panel_rect.position.y + panel_height - 24.0)
 
 func _draw():
 	if not is_inside_tree(): return
@@ -1449,9 +1574,16 @@ func _draw():
 	# Bullets
 	for b in bullet_pool:
 		if not b.active: continue
-		if b.type == "player": draw_circle(Vector2(b.x,b.y),b.radius,Color(b.color.r,b.color.g,b.color.b,0.5)); draw_circle(Vector2(b.x,b.y),b.radius*0.5,Color.WHITE)
-		elif b.type == "bomb": draw_circle(Vector2(b.x,b.y),b.radius,Color(b.color.r,b.color.g,b.color.b,0.5))
-		else: draw_circle(Vector2(b.x,b.y),b.radius*1.5,Color(b.color.r,b.color.g,b.color.b,0.15)); draw_circle(Vector2(b.x,b.y),b.radius,b.color); draw_circle(Vector2(b.x,b.y),b.radius,Color.BLACK,false,1); draw_circle(Vector2(b.x,b.y),b.radius*0.4,Color.WHITE)
+		if b.type == "player":
+			draw_circle(Vector2(b.x,b.y), b.radius, _bullet_draw_color(b.color, 0.5))
+			draw_circle(Vector2(b.x,b.y), b.radius * 0.5, _bullet_draw_color(Color.WHITE))
+		elif b.type == "bomb":
+			draw_circle(Vector2(b.x,b.y), b.radius, _bullet_draw_color(b.color, 0.5))
+		else:
+			draw_circle(Vector2(b.x,b.y), b.radius * 1.5, _bullet_draw_color(b.color, 0.15))
+			draw_circle(Vector2(b.x,b.y), b.radius, _bullet_draw_color(b.color))
+			draw_circle(Vector2(b.x,b.y), b.radius, Color.BLACK, false, 1)
+			draw_circle(Vector2(b.x,b.y), b.radius * 0.4, _bullet_draw_color(Color.WHITE))
 
 	# Boss
 	if boss_alive and boss.has("phase") and boss.get("phase", "") != "defeated":
@@ -1479,11 +1611,11 @@ func _draw():
 	if player_invincible and not player_bombing and int(player_invincible_timer*60)%10<5: pass
 	else:
 		var ix: int = int(player_x); var iy: int = int(player_y)
-		if Input.is_key_pressed(KEY_SHIFT) and not player_bombing:
+		if _should_show_focus_hitbox():
 			draw_circle(Vector2(player_x,player_y),game_manager_ref.PLAYER_HITBOX,Color.WHITE,false,1)
 			draw_circle(Vector2(player_x,player_y),game_manager_ref.PLAYER_GRAZE,Color(0.31,0.71,1,0.25),false,1)
 		if player_bombing:
-			draw_circle(Vector2(player_x,player_y),player_bomb_radius,Color(player_bomb_config.color.r,player_bomb_config.color.g,player_bomb_config.color.b,0.3),false,3)
+			draw_circle(Vector2(player_x,player_y), player_bomb_radius, _bullet_draw_color(player_bomb_config.color, 0.3), false, 3)
 		draw_circle(Vector2(ix,iy-12),6,Color(1,0.86,0.75))
 		draw_rect(Rect2(ix-6,iy-4,12,16),Color(0.78,0.12,0.16)); draw_rect(Rect2(ix-6,iy-4,12,16),Color.WHITE,false,1)
 		draw_rect(Rect2(ix-7,iy-1,14,3),Color(0.31,0.08,0.31))
@@ -1509,7 +1641,8 @@ func _draw():
 			total_y = box_rect.position.y + 190.0
 			draw_string(sf, Vector2(text_x, total_y), "\u603b\u8ba1: %d" % bonus)
 			total_y += 30
-		draw_string(sf, Vector2(text_x, total_y), "\u6309 Z \u8fd4\u56de\u6807\u9898")
+		if _should_show_input_guide():
+			draw_string(sf, Vector2(text_x, total_y), "\u6309 Z \u8fd4\u56de\u6807\u9898")
 		return
 
 
@@ -1530,5 +1663,7 @@ func _draw():
 	draw_string(font, Vector2(SCREEN_W - right_margin - life_w, 20), life_str)
 	draw_string(font, Vector2(SCREEN_W - right_margin - bomb_w, 35), bomb_str)
 	draw_string(font, Vector2(10, SCREEN_H - 15), gm.STAGE_NAMES[gm.current_stage - 1])
+	_draw_gameplay_input_guide(font)
+	_draw_performance_hud(font)
 	if gm.state == gm.STATE_PAUSED:
 		_draw_pause_overlay()
