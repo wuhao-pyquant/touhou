@@ -182,8 +182,10 @@ func stop_bgm() -> void:
 func fade_bgm(target_db: float, time_sec: float = 0.6) -> void:
 	if _bgm_fade_tween and _bgm_fade_tween.is_valid():
 		_bgm_fade_tween.kill()
+		_silence_inactive_bgm_players()
+	var capped_target_db: float = minf(target_db, _effective_bgm_volume_db())
 	_bgm_fade_tween = create_tween()
-	_bgm_fade_tween.tween_property(bgm_players[_bgm_active_idx], "volume_db", target_db, time_sec)
+	_bgm_fade_tween.tween_property(bgm_players[_bgm_active_idx], "volume_db", capped_target_db, time_sec)
 
 func play_sfx(name: String, volume_db: float = 0.0) -> void:
 	var stream = _sfx_streams.get(name, null)

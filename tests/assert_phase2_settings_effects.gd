@@ -56,6 +56,8 @@ func _phase2_settings() -> Dictionary:
 
 func _free_audio_fixture(audio: Node, players: Array) -> void:
 	if audio:
+		if audio._bgm_fade_tween and audio._bgm_fade_tween.is_valid():
+			audio._bgm_fade_tween.kill()
 		audio.bgm_players = []
 		audio.free()
 	for player in players:
@@ -129,6 +131,66 @@ func _verify_inactive_bgm_players_are_silenced_on_pause_duck() -> void:
 		_free_audio_fixture(audio, players)
 		return
 	_free_audio_fixture(audio, players)
+
+func _verify_fade_bgm_silences_inactive_cancelled_crossfade() -> void:
+	var audio_script = load("res://autoload/audio_manager.gd")
+	if not _assert(audio_script != null, "Could not load audio_manager.gd for fade_bgm cancellation check."):
+		return
+	var audio = audio_script.new()
+	get_root().add_child(audio)
+	var old_bgm_player := FakeBgmPlayer.new()
+	var active_bgm_player := FakeBgmPlayer.new()
+	var players := [old_bgm_player, active_bgm_player]
+	audio.bgm_players = players
+	audio._bgm_active_idx = 1
+	audio.apply_settings(_phase2_settings())
+	old_bgm_player.volume_db = -6.0
+	active_bgm_player.volume_db = audio.configured_bgm_volume_db()
+	old_bgm_player.play()
+	active_bgm_player.play()
+	audio._bgm_fade_tween = audio.create_tween()
+	audio._bgm_fade_tween.tween_interval(1.0)
+	if not _assert(audio._bgm_fade_tween.is_valid(), "fade_bgm cancellation fixture should start with a valid tween."):
+		_free_audio_fixture(audio, players)
+		return
+
+	audio.fade_bgm(-30.0, 0.1)
+	if not _assert(old_bgm_player.volume_db <= -79.0 or not old_bgm_player.playing, "fade_bgm() cancelling a crossfade should silence the inactive old BGM player."):
+		_free_audio_fixture(audio, players)
+		return
+	_free_audio_fixture(audio, players)
+
+func _verify_fade_bgm_respects_effective_bgm_volume_cap() -> void:
+	var audio_script = load("res://autoload/audio_manager.gd")
+	if not _assert(audio_script != null, "Could not load audio_manager.gd for fade_bgm volume cap check."):
+		return
+	var cases := [
+		{"bgm_volume": 0.0, "target_db": -12.0, "pause_ducked": false},
+		{"bgm_volume": 0.01, "target_db": -30.0, "pause_ducked": false},
+		{"bgm_volume": 0.25, "target_db": -12.0, "pause_ducked": true},
+	]
+	for case in cases:
+		var audio = audio_script.new()
+		get_root().add_child(audio)
+		var active_bgm_player := AudioStreamPlayer.new()
+		var inactive_bgm_player := AudioStreamPlayer.new()
+		var players := [active_bgm_player, inactive_bgm_player]
+		audio.bgm_players = players
+		audio._bgm_active_idx = 0
+		var settings := _phase2_settings()
+		settings["bgm_volume"] = case.bgm_volume
+		audio.apply_settings(settings)
+		audio.set_pause_ducked(case.pause_ducked)
+		var effective_cap: float = active_bgm_player.volume_db
+		audio.fade_bgm(case.target_db, 0.1)
+		if not _assert(audio._bgm_fade_tween.is_valid(), "fade_bgm volume cap check should create a valid tween."):
+			_free_audio_fixture(audio, players)
+			return
+		audio._bgm_fade_tween.custom_step(1.0)
+		if not _assert(active_bgm_player.volume_db <= effective_cap + 0.01, "fade_bgm() should not raise active BGM above the configured/effective cap."):
+			_free_audio_fixture(audio, players)
+			return
+		_free_audio_fixture(audio, players)
 
 func _verify_main_settings_contract() -> void:
 	var gm_script = load("res://autoload/game_manager.gd")
@@ -219,10 +281,19 @@ func _verify_main_settings_contract() -> void:
 	_free_main_fixture(main_shell, gm, audio, players)
 
 func _init() -> void:
+	call_deferred("_run")
+
+func _run() -> void:
 	_verify_audio_manager_contract()
 	if failed:
 		return
 	_verify_inactive_bgm_players_are_silenced_on_pause_duck()
+	if failed:
+		return
+	_verify_fade_bgm_silences_inactive_cancelled_crossfade()
+	if failed:
+		return
+	_verify_fade_bgm_respects_effective_bgm_volume_cap()
 	if failed:
 		return
 	_verify_main_settings_contract()
