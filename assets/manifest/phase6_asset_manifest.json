@@ -11,7 +11,7 @@
       "height": 1024,
       "transparent": false,
       "readability_role": "visual anchor for the original night-festival danmaku style and readability baseline",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "style_reference_night_festival"
     },
     {
@@ -384,7 +384,7 @@
       "height": 384,
       "transparent": true,
       "readability_role": "small readable player silhouette that cannot mimic enemy bullets or item drops",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_mika_gameplay_sprite",
       "protagonist_id": "miko"
     },
@@ -398,7 +398,7 @@
       "height": 768,
       "transparent": true,
       "readability_role": "character portrait with original motifs and clear UI/dialogue recognition",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_mika_portrait",
       "protagonist_id": "miko"
     },
@@ -412,7 +412,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "player-owned option and focus effects distinct from hostile bullets and collectibles",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_mika_shot_and_bomb",
       "protagonist_id": "miko"
     },
@@ -426,7 +426,7 @@
       "height": 384,
       "transparent": true,
       "readability_role": "small readable player silhouette that cannot mimic enemy bullets or item drops",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_ren_assets",
       "protagonist_id": "magician"
     },
@@ -440,7 +440,7 @@
       "height": 768,
       "transparent": true,
       "readability_role": "character portrait with original motifs and clear UI/dialogue recognition",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_ren_assets",
       "protagonist_id": "magician"
     },
@@ -454,7 +454,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "player-owned option and focus effects distinct from hostile bullets and collectibles",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_ren_assets",
       "protagonist_id": "magician"
     },
@@ -468,7 +468,7 @@
       "height": 384,
       "transparent": true,
       "readability_role": "small readable player silhouette that cannot mimic enemy bullets or item drops",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_shiori_assets",
       "protagonist_id": "swordswoman"
     },
@@ -482,7 +482,7 @@
       "height": 768,
       "transparent": true,
       "readability_role": "character portrait with original motifs and clear UI/dialogue recognition",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_shiori_assets",
       "protagonist_id": "swordswoman"
     },
@@ -496,7 +496,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "player-owned option and focus effects distinct from hostile bullets and collectibles",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_shiori_assets",
       "protagonist_id": "swordswoman"
     },
