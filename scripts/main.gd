@@ -232,16 +232,25 @@ func _selected_bomb_profile() -> Dictionary:
 		return game_manager_ref.selected_bomb_profile()
 	return {}
 
-func _enemy_bullet_type_ids() -> Array:
+func _enemy_bullet_types() -> Array:
 	var ids: Array = ["arrow"]
-	for family in game_database.bullet_families():
-		var family_id := String(family.get("id", ""))
-		if family_id != "" and not ids.has(family_id):
-			ids.append(family_id)
+	if game_database_ref:
+		for family in game_database_ref.bullet_families():
+			var family_id := String(family.get("id", ""))
+			if family_id != "" and not ids.has(family_id):
+				ids.append(family_id)
 	return ids
 
+func _enemy_bullet_type_ids() -> Array:
+	return _enemy_bullet_types()
+
 func _is_enemy_bullet_type(type_id: String) -> bool:
-	return _enemy_bullet_type_ids().has(type_id)
+	return _enemy_bullet_types().has(type_id)
+
+func _score_value(rule_id: String, fallback: int) -> int:
+	if game_database_ref:
+		return int(game_database_ref.scoring_rules().get(rule_id, fallback))
+	return fallback
 
 func _gameplay_shot_label() -> String:
 	var shot := _selected_shot_profile()
@@ -1370,7 +1379,7 @@ func _check_collisions(is_boss: bool):
 	for b in bullet_pool:
 		if b.active and _is_enemy_bullet_type(String(b.type)):
 			if Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < player_graze_radius + b.radius:
-				game_manager_ref.graze += 1; game_manager_ref.score += 10
+				game_manager_ref.graze += 1; game_manager_ref.score += _score_value("graze", 10)
 
 	# Item collection
 	for it in items:
