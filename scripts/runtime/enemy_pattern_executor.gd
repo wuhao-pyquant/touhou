@@ -1,0 +1,102 @@
+extends RefCounted
+class_name EnemyPatternExecutor
+
+var _database = load("res://scripts/data/game_database.gd").new()
+var _scoring_rules: Dictionary = _database.scoring_rules()
+
+func family_id_for_pattern(pattern: String, strong: bool = false) -> String:
+	if strong:
+		return "elite_yokai"
+	match pattern:
+		"downward":
+			return "fast_attacker"
+		"spread", "ring":
+			return "formation_shooter"
+		"double_spread":
+			return "elite_yokai"
+		"wave":
+			return "mechanism"
+		"spiral":
+			return "elite_yokai"
+		_:
+			return "low_yokai"
+
+func spawn_config(pattern: String, base_hp: float, stage_hp_mult: float, strong: bool = false) -> Dictionary:
+	var family_id := family_id_for_pattern(pattern, strong)
+	var family: Dictionary = _database.enemy_family_by_id(family_id)
+	if family.is_empty():
+		family = _database.enemy_family_by_id("low_yokai")
+	var hp := base_hp * 2.0 * maxf(0.1, stage_hp_mult)
+	var shoot_interval := maxf(24.0, float(family.get("shoot_interval", 60.0)) * (0.8 if strong else 1.0))
+	return {
+		"family_id": family_id,
+		"hp": hp,
+		"radius": float(family.get("radius", 14.0)),
+		"drop_tier": String(family.get("drop_tier", "standard")),
+		"shoot_interval": shoot_interval,
+	}
+
+func bullet_specs(enemy: Dictionary, player_position: Vector2, stage_bullet_speed: float) -> Array:
+	var pattern := String(enemy.get("pattern", "aimed"))
+	var position := Vector2(float(enemy.get("x", 0.0)), float(enemy.get("y", 0.0)))
+	var shoot_phase := int(enemy.get("shoot_phase", 0))
+	match pattern:
+		"aimed":
+			var aimed_angle := (player_position - position).angle()
+			return [_make_spec(position, _velocity_for("circle", aimed_angle, 2.5, stage_bullet_speed), "circle")]
+		"spread":
+			var spread_specs: Array = []
+			var spread_angle := (player_position - position).angle()
+			for off in [-0.3, 0.0, 0.3]:
+				spread_specs.append(_make_spec(position, _velocity_for("circle", spread_angle + off, 2.5, stage_bullet_speed), "circle"))
+			return spread_specs
+		"ring":
+			var ring_specs: Array = []
+			for i in range(12):
+				var ring_angle := TAU / 12.0 * i + shoot_phase * 0.3
+				ring_specs.append(_make_spec(position, _velocity_for("star", ring_angle, 2.0, stage_bullet_speed), "star"))
+			return ring_specs
+		"double_spread":
+			var double_specs: Array = []
+			var double_angle := (player_position - position).angle()
+			for off in [-0.5, -0.25, 0.0, 0.25, 0.5]:
+				double_specs.append(_make_spec(position, _velocity_for("talisman", double_angle + off, 2.2, stage_bullet_speed), "talisman"))
+			return double_specs
+		"downward":
+			var downward_velocity := Vector2(0.0, 3.5 * stage_bullet_speed * _speed_multiplier_for("needle"))
+			return [_make_spec(position, downward_velocity, "needle")]
+		"wave":
+			var wave_specs: Array = []
+			for i in range(5):
+				var wave_angle := PI / 2.0 + sin(shoot_phase * 0.15 + i * 0.6) * 0.8
+				var wave_position := position + Vector2(i * 10.0 - 20.0, 0.0)
+				wave_specs.append(_make_spec(wave_position, _velocity_for("rice", wave_angle, 2.0, stage_bullet_speed), "rice"))
+			return wave_specs
+		"spiral":
+			var spiral_specs: Array = []
+			for i in range(8):
+				var spiral_angle := shoot_phase * 0.12 + TAU / 8.0 * i
+				spiral_specs.append(_make_spec(position, _velocity_for("butterfly", spiral_angle, 2.5, stage_bullet_speed), "butterfly"))
+			return spiral_specs
+		_:
+			var fallback_angle := (player_position - position).angle()
+			return [_make_spec(position, _velocity_for("circle", fallback_angle, 2.5, stage_bullet_speed), "circle")]
+
+func _make_spec(position: Vector2, velocity: Vector2, family_id: String) -> Dictionary:
+	var family: Dictionary = _database.bullet_family_by_id(family_id)
+	return {
+		"position": position,
+		"velocity": velocity,
+		"radius": float(family.get("radius", 5.0)),
+		"color": family.get("color", Color.RED),
+		"family_id": family_id,
+		"lifetime": 350.0,
+	}
+
+func _velocity_for(family_id: String, angle: float, base_speed: float, stage_bullet_speed: float) -> Vector2:
+	var speed := base_speed * stage_bullet_speed * _speed_multiplier_for(family_id)
+	return Vector2(cos(angle), sin(angle)) * speed
+
+func _speed_multiplier_for(family_id: String) -> float:
+	var family: Dictionary = _database.bullet_family_by_id(family_id)
+	return float(family.get("speed_multiplier", 1.0))

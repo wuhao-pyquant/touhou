@@ -46,6 +46,7 @@ var performance_monitor_ref: Node = null
 var ui_model: Object = load("res://scripts/ui/ui_model.gd").new()
 var shot_executor: Object = load("res://scripts/player/player_shot_executor.gd").new()
 var bomb_executor: Object = load("res://scripts/player/player_bomb_executor.gd").new()
+var enemy_pattern_executor: Object = load("res://scripts/runtime/enemy_pattern_executor.gd").new()
 var player_last_move_dir: Vector2 = Vector2(0, -1)
 var main_menu_cursor: int = 0
 var character_menu_cursor: int = 0
@@ -473,15 +474,31 @@ func _spawn_bullet_enemy(x: float, y: float, vx: float, vy: float, radius: float
 			b.lifetime = lifetime; b.age = 0; b.damage = 1.0
 			return
 
+func _stage_enemy_hp_mult() -> float:
+	_resolve_singletons()
+	if game_manager_ref and game_manager_ref.current_stage >= 1 and game_manager_ref.current_stage <= game_manager_ref.STAGE_MULTS.size():
+		return float(game_manager_ref.STAGE_MULTS[game_manager_ref.current_stage - 1].enemy_hp)
+	return 1.0
+
+func _spawn_enemy_bullet_spec(spec: Dictionary) -> void:
+	_spawn_bullet_enemy(
+		float(spec.position.x),
+		float(spec.position.y),
+		float(spec.velocity.x),
+		float(spec.velocity.y),
+		float(spec.radius),
+		spec.get("color", Color.RED),
+		String(spec.family_id),
+		float(spec.get("lifetime", 350.0))
+	)
+
 func _spawn_item(x: float, y: float, item_type: String = "power"):
 	items.append({"alive":true,"collected":false,"x":x,"y":y,"type":item_type,"radius":9.0,"vy":-2.5,"vx":randf_range(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":randf_range(0,TAU),"birth":15.0,"anim":randf_range(0,TAU)})
 
 func _spawn_enemy(x: float, y: float, hp: float = 5.0, pattern: String = "aimed", move: String = "straight", vx: float = 0.0, vy: float = 1.5, move_data: Dictionary = {}, strong: bool = false):
-	# All non-boss enemy HP is doubled from the wave-scripted values so that
-	# every regular enemy takes 2x as long to clear. Strong flag remains
-	# purely visual/loot-tier and is not affected.
-	var ehp: float = hp * 2.0
-	enemies.append({"alive":true,"x":x,"y":y,"hp":ehp,"max_hp":ehp,"radius":18.0 if strong else 14.0,"vx":vx,"vy":vy,"move_timer":0.0,"move":move,"move_data":move_data,"pattern":pattern,"shoot_timer":randf_range(0,30),"shoot_phase":0,"strong":strong,"dying":false,"death_timer":0.0})
+	var cfg: Dictionary = enemy_pattern_executor.spawn_config(pattern, hp, _stage_enemy_hp_mult(), strong)
+	var ehp: float = float(cfg.hp)
+	enemies.append({"alive":true,"x":x,"y":y,"hp":ehp,"max_hp":ehp,"radius":float(cfg.radius),"vx":vx,"vy":vy,"move_timer":0.0,"move":move,"move_data":move_data,"pattern":pattern,"shoot_timer":randf_range(0,30),"shoot_phase":0,"strong":strong,"dying":false,"death_timer":0.0,"family_id":String(cfg.family_id),"drop_tier":String(cfg.drop_tier),"shoot_interval":float(cfg.shoot_interval)})
 
 func _nearest_enemy(px: float, py: float) -> Vector2:
 	var best: float = 99999.0; var best_v: Vector2 = Vector2(px, py - 100)
@@ -1201,25 +1218,11 @@ func _update_enemies(delta: float):
 		if on_screen:
 			e.shoot_timer -= delta * 60.0
 		if on_screen and not e.dying and e.shoot_timer <= 0:
-			e.shoot_timer = 60.0 * (0.7 if e.strong else 1.0); e.shoot_phase += 1
+			e.shoot_timer = float(e.get("shoot_interval", 60.0))
+			e.shoot_phase += 1
 			var mult: float = game_manager_ref.STAGE_MULTS[game_manager_ref.current_stage - 1].bullet_speed
-			match e.pattern:
-				"aimed":
-					var a: float = (Vector2(player_x,player_y)-Vector2(e.x,e.y)).angle()
-					_spawn_bullet_enemy(e.x,e.y,cos(a)*2.5*mult,sin(a)*2.5*mult,5,Color.PURPLE)
-				"spread":
-					var a: float = (Vector2(player_x,player_y)-Vector2(e.x,e.y)).angle()
-					for off in [-0.3,0,0.3]: _spawn_bullet_enemy(e.x,e.y,cos(a+off)*2.5*mult,sin(a+off)*2.5*mult,4,Color.ORANGE)
-				"ring":
-					for i in range(12): _spawn_bullet_enemy(e.x,e.y,cos(TAU/12*i+e.shoot_phase*0.3)*2.0*mult,sin(TAU/12*i+e.shoot_phase*0.3)*2.0*mult,4,Color.GREEN)
-				"double_spread":
-					var a: float = (Vector2(player_x,player_y)-Vector2(e.x,e.y)).angle()
-					for off in [-0.5,-0.25,0,0.25,0.5]: _spawn_bullet_enemy(e.x,e.y,cos(a+off)*2.2*mult,sin(a+off)*2.2*mult,4,Color.ORANGE)
-				"downward": _spawn_bullet_enemy(e.x,e.y,0,3.5*mult,5,Color.RED)
-				"wave":
-					for i in range(5): _spawn_bullet_enemy(e.x+i*10-20,e.y,cos(PI/2+sin(e.shoot_phase*0.15+i*0.6)*0.8)*2.0*mult,sin(PI/2+sin(e.shoot_phase*0.15+i*0.6)*0.8)*2.0*mult,4,Color.CYAN,"rice")
-				"spiral":
-					for i in range(8): _spawn_bullet_enemy(e.x,e.y,cos(e.shoot_phase*0.12+TAU/8*i)*2.5*mult,sin(e.shoot_phase*0.12+TAU/8*i)*2.5*mult,4,Color.MAGENTA)
+			for spec in enemy_pattern_executor.bullet_specs(e, Vector2(player_x, player_y), mult):
+				_spawn_enemy_bullet_spec(spec)
 
 func _update_items(delta: float):
 	for it in items:
