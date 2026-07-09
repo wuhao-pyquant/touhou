@@ -846,7 +846,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_05a_rei_assets",
       "boss_id": "little_oni_drummer"
     },
@@ -860,7 +860,7 @@
       "height": 1024,
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_05a_rei_assets",
       "boss_id": "little_oni_drummer"
     },
@@ -874,7 +874,7 @@
       "height": 720,
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_05a_rei_assets",
       "boss_id": "little_oni_drummer"
     },
@@ -888,7 +888,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_05b_tsukiko_assets",
       "boss_id": "banquet_oni_princess"
     },
@@ -902,7 +902,7 @@
       "height": 1024,
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_05b_tsukiko_assets",
       "boss_id": "banquet_oni_princess"
     },
@@ -916,7 +916,7 @@
       "height": 720,
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_05b_tsukiko_assets",
       "boss_id": "banquet_oni_princess"
     },
