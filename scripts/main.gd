@@ -44,6 +44,7 @@ var game_manager_ref: Object = null
 var audio_manager_ref: Object = null
 var performance_monitor_ref: Node = null
 var ui_model: Object = load("res://scripts/ui/ui_model.gd").new()
+var game_database: Object = load("res://scripts/data/game_database.gd").new()
 var shot_executor: Object = load("res://scripts/player/player_shot_executor.gd").new()
 var bomb_executor: Object = load("res://scripts/player/player_bomb_executor.gd").new()
 var enemy_pattern_executor: Object = load("res://scripts/runtime/enemy_pattern_executor.gd").new()
@@ -228,6 +229,17 @@ func _selected_bomb_profile() -> Dictionary:
 	if game_manager_ref and game_manager_ref.has_method("selected_bomb_profile"):
 		return game_manager_ref.selected_bomb_profile()
 	return {}
+
+func _enemy_bullet_type_ids() -> Array:
+	var ids: Array = ["arrow"]
+	for family in game_database.bullet_families():
+		var family_id := String(family.get("id", ""))
+		if family_id != "" and not ids.has(family_id):
+			ids.append(family_id)
+	return ids
+
+func _is_enemy_bullet_type(type_id: String) -> bool:
+	return _enemy_bullet_type_ids().has(type_id)
 
 func _gameplay_shot_label() -> String:
 	var shot := _selected_shot_profile()
@@ -685,7 +697,7 @@ func _enter_boss():
 	game_manager_ref.state = "boss"
 	enemies.clear()
 	for b in bullet_pool:
-		if b.active and b.type in ["circle","rice","arrow","laser"]: b.active = false
+		if b.active and _is_enemy_bullet_type(String(b.type)): b.active = false
 	_init_boss()
 	if audio_manager_ref: audio_manager_ref.bgm_stage_boss(game_manager_ref.current_stage)
 
@@ -804,7 +816,7 @@ func _boss_defeated(delta: float):
 
 func _boss_card_clear():
 	for b in bullet_pool:
-		if b.active and b.type in ["circle","rice","arrow","laser"]: b.active = false
+		if b.active and _is_enemy_bullet_type(String(b.type)): b.active = false
 	# If the just-cleared card was the LAST card, the boss is dead - go to
 	# the defeat animation instead of "switching" so we never try to start
 	# a non-existent next card (which was an out-of-range index bug).
@@ -817,7 +829,7 @@ func _boss_card_clear():
 
 func _boss_card_timeout():
 	for b in bullet_pool:
-		if b.active and b.type in ["circle","rice","arrow","laser"]: b.active = false
+		if b.active and _is_enemy_bullet_type(String(b.type)): b.active = false
 	# Same as above - timeout on the last card also ends the fight.
 	if boss.card_idx >= boss.cards.size() - 1:
 		boss.phase = "defeated"
@@ -1117,7 +1129,7 @@ func _update_bomb(delta: float):
 			_spawn_player_bullet_spec(spec)
 		player_bomb_phase += 1
 	for b in bullet_pool:
-		if b.active and b.type in ["circle","rice","arrow","laser"]:
+		if b.active and _is_enemy_bullet_type(String(b.type)):
 			if bomb_executor.should_clear_enemy_bullet(bc, b, Vector2(player_x, player_y)):
 				b.active = false
 	if player_bomb_timer <= 0:
@@ -1297,7 +1309,7 @@ func _count_active_bullets_by_owner() -> Dictionary:
 			continue
 		if b.type == "player" or b.type == "bomb":
 			player_count += 1
-		elif b.type in ["circle", "rice", "arrow", "laser"]:
+		elif _is_enemy_bullet_type(String(b.type)):
 			enemy_count += 1
 	return {"player": player_count, "enemy": enemy_count}
 
@@ -1346,7 +1358,7 @@ func _check_collisions(is_boss: bool):
 							game_manager_ref.score += 50
 							if audio_manager_ref: audio_manager_ref.play_sfx("kill", -6.0 if e.strong else -8.0)
 						break
-		elif b.type in ["circle","rice","arrow","laser"]:
+		elif _is_enemy_bullet_type(String(b.type)):
 			if not player_invincible and Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < b.radius + player_hitbox_radius:
 				player_deathbomb_primed = true; player_deathbomb_timer = game_manager_ref.DEATHBOMB_WINDOW/60.0
 				player_just_hit = true; b.active = false
@@ -1354,7 +1366,7 @@ func _check_collisions(is_boss: bool):
 
 	# Graze
 	for b in bullet_pool:
-		if b.active and b.type in ["circle","rice","arrow","laser"]:
+		if b.active and _is_enemy_bullet_type(String(b.type)):
 			if Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < player_graze_radius + b.radius:
 				game_manager_ref.graze += 1; game_manager_ref.score += 10
 

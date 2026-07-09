@@ -114,11 +114,58 @@ func _verify_main_spawn_contract() -> void:
 	main_shell.free()
 	gm.free()
 
+func _verify_main_collision_contract() -> void:
+	var gm = load("res://autoload/game_manager.gd").new()
+	var main_script = load("res://scripts/main.gd")
+	if not _assert(main_script != null, "Could not load main.gd"):
+		gm.free()
+		return
+	var main_shell = main_script.new()
+	main_shell.game_manager_ref = gm
+	main_shell.audio_manager_ref = null
+	main_shell.enemies = []
+	main_shell.items = []
+	main_shell.player_x = 120.0
+	main_shell.player_y = 200.0
+	main_shell.player_invincible = false
+	main_shell.player_just_hit = false
+	main_shell.player_deathbomb_primed = false
+	main_shell.player_deathbomb_timer = 0.0
+	main_shell.bullet_pool = []
+	for i in range(4):
+		main_shell.bullet_pool.append(main_shell._make_bullet())
+
+	main_shell._spawn_enemy_bullet_spec({"position": Vector2(120.0, 200.0), "velocity": Vector2.ZERO, "radius": 4.0, "color": Color.YELLOW, "family_id": "needle", "lifetime": 120.0})
+	main_shell._check_collisions(false)
+	_assert(main_shell.player_just_hit, "Needle bullets should trigger player hit collision.")
+	_assert(main_shell.player_deathbomb_primed, "Needle bullets should arm deathbomb state.")
+	_assert(not bool(main_shell.bullet_pool[0].active), "Needle hit bullet should be consumed.")
+
+	gm.graze = 0
+	gm.score = 0
+	main_shell.player_just_hit = false
+	main_shell.player_deathbomb_primed = false
+	main_shell.player_deathbomb_timer = 0.0
+	main_shell.player_invincible = false
+	main_shell.bullet_pool[0] = main_shell._make_bullet()
+	main_shell._spawn_enemy_bullet_spec({"position": Vector2(132.0, 200.0), "velocity": Vector2.ZERO, "radius": 5.0, "color": Color(0.45, 0.66, 1.0), "family_id": "star", "lifetime": 120.0})
+	main_shell._check_collisions(false)
+	_assert_equal(gm.graze, 1, "Star bullets should be eligible for graze.")
+	_assert_equal(gm.score, 10, "Graze should award graze score for star bullets.")
+	_assert(not main_shell.player_just_hit, "Star graze setup should not count as a hit.")
+	_assert(bool(main_shell.bullet_pool[0].active), "Star graze bullet should remain active.")
+
+	main_shell.free()
+	gm.free()
+
 func _init() -> void:
 	_verify_executor()
 	if failed:
 		return
 	_verify_main_spawn_contract()
+	if failed:
+		return
+	_verify_main_collision_contract()
 	if failed:
 		return
 	quit(0)
