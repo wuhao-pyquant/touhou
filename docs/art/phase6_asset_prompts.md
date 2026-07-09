@@ -6,6 +6,15 @@ Global positive language: hand-painted Japanese night-festival fantasy for an or
 
 Global negative language: no copyrighted Touhou character, no protected character likeness, no exact costume from existing games, no protected names, no logos, no music references, no unreadable silhouettes, no muddy low-contrast gameplay shapes.
 
+## style_reference_night_festival
+
+Target: `res://assets/source/phase6/style/night_festival_style_reference.png`
+Gameplay role: Master visual anchor for the whole Phase 6 hand-painted asset library.
+Positive prompt: Global positive language, premium hand-painted game key art showing the original night-festival world, one heroine-scale silhouette, one boss-scale silhouette, distant shrine lanterns, layered danmaku arcs with clear projectile centers, painterly ink-and-gouache texture, strong separation between background, characters, bullets, bombs, items, and UI-safe space.
+Negative prompt: Global negative language, no copyrighted Touhou character, no protected character likeness, no exact costume from existing games, no bullet-like background dots, no UI text baked into gameplay art, no unreadable dark-on-dark silhouette, no low-resolution pixel art, no muddy blur, no heavy bloom hiding projectile centers.
+Readability constraints: Establish beautiful hand-painted rendering while proving the style can keep bullet centers, item icons, enemy silhouettes, and player-owned effects visually separate at 720x960.
+Review composite: Use as the style reference beside later protagonist, boss, background, bullet, bomb, item, and UI contact sheets.
+
 ## stage_01_background_far
 
 Target: `res://assets/backgrounds/stage1_shrine_approach_far.png`
@@ -248,6 +257,15 @@ Positive prompt: Global positive language, Astralis final spell aura, sacred lan
 Negative prompt: Global negative language, no bullet-like background dots, no small bead rings, no dense foreground sparkles, no protected spell names, no copied symbols.
 Readability constraints: Aura stays behind the boss and below enemy bullets in visual priority; no small dots or rings that read as bullets.
 Review composite: Test with Astralis sprite, Stage 6 background, final boss bullet density, and spell-card UI.
+
+## enemy_family_sprites
+
+Target: `res://assets/enemies/enemy_low_yokai.png`, `enemy_fast_attacker.png`, `enemy_formation_shooter.png`, `enemy_elite_yokai.png`, `enemy_mechanism.png`, `enemy_lantern_wisp.png`, `enemy_market_tool.png`, `enemy_festival_spirit.png`
+Gameplay role: Small enemy family sprites used during stage waves.
+Positive prompt: Global positive language, original night-festival enemy family sprites, clear family silhouettes, darker body masses than bullets and items, readable at 256x256 source and small gameplay scale, transparent background, no tiny projectile-like ornaments.
+Negative prompt: Global negative language, no copyrighted Touhou character, no protected character likeness, no exact costume from existing games, no bullet-like background dots, no UI text baked into gameplay art, no unreadable dark-on-dark silhouette, no low-resolution pixel art, no muddy blur, no heavy bloom hiding projectile centers, no small glowing beads on the body.
+Readability constraints: Enemy bodies must read as targets, not projectiles or collectibles; silhouettes should stay distinct from hostile bullets, player shots, item icons, and boss aura fragments.
+Review composite: Test every enemy family over all six stage backgrounds with enemy bullets, player shots, and item drops visible at gameplay scale.
 
 ## bullet_family_atlases
 

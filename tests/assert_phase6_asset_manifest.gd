@@ -8,6 +8,7 @@ func _init() -> void:
 	assert(parsed.has("version"))
 	assert(parsed.has("assets"))
 	assert(parsed["assets"].size() >= 98)
+	var prompt_headings := _prompt_headings(FileAccess.get_file_as_string("res://docs/art/phase6_asset_prompts.md"))
 
 	var accepted_statuses := {"pending_generation": true, "generated_needs_review": true, "accepted": true, "rejected": true}
 	var ids := {}
@@ -22,6 +23,10 @@ func _init() -> void:
 		assert(asset.has("status") and accepted_statuses.has(asset["status"]))
 		assert(asset.has("readability_role") and str(asset["readability_role"]).length() >= 24)
 		assert(asset.has("prompt_id") and str(asset["prompt_id"]).length() > 0)
+		var prompt_id := str(asset["prompt_id"])
+		if not prompt_headings.has(prompt_id):
+			_fail("manifest prompt_id missing from prompt matrix: %s" % prompt_id)
+			return
 
 	assert(ids.has("stage_01_background_far"))
 	assert(ids.has("stage_06_background_spell"))
@@ -30,3 +35,15 @@ func _init() -> void:
 	assert(ids.has("enemy_bullet_lotus_core"))
 	assert(ids.has("item_power_large"))
 	quit(0)
+
+func _prompt_headings(content: String) -> Dictionary:
+	var headings := {}
+	for line in content.split("\n"):
+		var stripped := line.strip_edges()
+		if stripped.begins_with("## "):
+			headings[stripped.substr(3)] = true
+	return headings
+
+func _fail(message: String) -> void:
+	push_error(message)
+	quit(1)

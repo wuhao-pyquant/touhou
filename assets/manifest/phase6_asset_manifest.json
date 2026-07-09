@@ -12,7 +12,7 @@
       "transparent": false,
       "readability_role": "visual anchor for the original night-festival danmaku style and readability baseline",
       "status": "pending_generation",
-      "prompt_id": "ui_key_art"
+      "prompt_id": "style_reference_night_festival"
     },
     {
       "id": "stage_01_background_far",
@@ -70,7 +70,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_01_background_set",
+      "prompt_id": "stage_01_background_atmosphere",
       "stage": 1,
       "stage_id": "shrine_approach"
     },
@@ -85,7 +85,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_02_background_far",
+      "prompt_id": "stage_02_background_set",
       "stage": 2,
       "stage_id": "yokai_market"
     },
@@ -100,7 +100,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_02_background_mid",
+      "prompt_id": "stage_02_background_set",
       "stage": 2,
       "stage_id": "yokai_market"
     },
@@ -115,7 +115,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_02_background_front",
+      "prompt_id": "stage_02_background_set",
       "stage": 2,
       "stage_id": "yokai_market"
     },
@@ -145,7 +145,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_03_background_far",
+      "prompt_id": "stage_03_background_set",
       "stage": 3,
       "stage_id": "mist_bamboo_grove"
     },
@@ -160,7 +160,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_03_background_mid",
+      "prompt_id": "stage_03_background_set",
       "stage": 3,
       "stage_id": "mist_bamboo_grove"
     },
@@ -175,7 +175,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_03_background_front",
+      "prompt_id": "stage_03_background_set",
       "stage": 3,
       "stage_id": "mist_bamboo_grove"
     },
@@ -205,7 +205,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_04_background_far",
+      "prompt_id": "stage_04_background_set",
       "stage": 4,
       "stage_id": "tengu_mountain_path"
     },
@@ -220,7 +220,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_04_background_mid",
+      "prompt_id": "stage_04_background_set",
       "stage": 4,
       "stage_id": "tengu_mountain_path"
     },
@@ -235,7 +235,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_04_background_front",
+      "prompt_id": "stage_04_background_set",
       "stage": 4,
       "stage_id": "tengu_mountain_path"
     },
@@ -265,7 +265,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_05_background_far",
+      "prompt_id": "stage_05_background_set",
       "stage": 5,
       "stage_id": "oni_banquet_hall"
     },
@@ -280,7 +280,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_05_background_mid",
+      "prompt_id": "stage_05_background_set",
       "stage": 5,
       "stage_id": "oni_banquet_hall"
     },
@@ -295,7 +295,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_05_background_front",
+      "prompt_id": "stage_05_background_set",
       "stage": 5,
       "stage_id": "oni_banquet_hall"
     },
@@ -325,7 +325,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_06_background_far",
+      "prompt_id": "stage_06_background_set",
       "stage": 6,
       "stage_id": "night_festival_divine_realm"
     },
@@ -340,7 +340,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_06_background_mid",
+      "prompt_id": "stage_06_background_set",
       "stage": 6,
       "stage_id": "night_festival_divine_realm"
     },
@@ -355,7 +355,7 @@
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
       "status": "pending_generation",
-      "prompt_id": "stage_06_background_front",
+      "prompt_id": "stage_06_background_set",
       "stage": 6,
       "stage_id": "night_festival_divine_realm"
     },
@@ -511,7 +511,7 @@
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
       "status": "pending_generation",
-      "prompt_id": "boss_01a_assets",
+      "prompt_id": "boss_01a_aoi_assets",
       "boss_id": "lantern_tsukumogami"
     },
     {
@@ -525,7 +525,7 @@
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
       "status": "pending_generation",
-      "prompt_id": "boss_01a_assets",
+      "prompt_id": "boss_01a_aoi_assets",
       "boss_id": "lantern_tsukumogami"
     },
     {
@@ -539,7 +539,7 @@
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
       "status": "pending_generation",
-      "prompt_id": "boss_01a_assets",
+      "prompt_id": "boss_01a_aoi_assets",
       "boss_id": "lantern_tsukumogami"
     },
     {
@@ -553,7 +553,7 @@
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
       "status": "pending_generation",
-      "prompt_id": "boss_01b_assets",
+      "prompt_id": "boss_01b_madara_assets",
       "boss_id": "festival_guide_fox"
     },
     {
@@ -567,7 +567,7 @@
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
       "status": "pending_generation",
-      "prompt_id": "boss_01b_assets",
+      "prompt_id": "boss_01b_madara_assets",
       "boss_id": "festival_guide_fox"
     },
     {
@@ -581,7 +581,7 @@
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
       "status": "pending_generation",
-      "prompt_id": "boss_01b_assets",
+      "prompt_id": "boss_01b_madara_assets",
       "boss_id": "festival_guide_fox"
     },
     {
@@ -595,7 +595,7 @@
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
       "status": "pending_generation",
-      "prompt_id": "boss_02a_assets",
+      "prompt_id": "boss_02a_kirika_assets",
       "boss_id": "abacus_tsukumogami"
     },
     {
@@ -609,7 +609,7 @@
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
       "status": "pending_generation",
-      "prompt_id": "boss_02a_assets",
+      "prompt_id": "boss_02a_kirika_assets",
       "boss_id": "abacus_tsukumogami"
     },
     {
@@ -623,7 +623,7 @@
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
       "status": "pending_generation",
-      "prompt_id": "boss_02a_assets",
+      "prompt_id": "boss_02a_kirika_assets",
       "boss_id": "abacus_tsukumogami"
     },
     {
@@ -637,7 +637,7 @@
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
       "status": "pending_generation",
-      "prompt_id": "boss_02b_assets",
+      "prompt_id": "boss_02b_yukari_assets",
       "boss_id": "oni_market_leader"
     },
     {
@@ -651,7 +651,7 @@
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
       "status": "pending_generation",
-      "prompt_id": "boss_02b_assets",
+      "prompt_id": "boss_02b_yukari_assets",
       "boss_id": "oni_market_leader"
     },
     {
@@ -665,7 +665,7 @@
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
       "status": "pending_generation",
-      "prompt_id": "boss_02b_assets",
+      "prompt_id": "boss_02b_yukari_assets",
       "boss_id": "oni_market_leader"
     },
     {
@@ -679,7 +679,7 @@
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
       "status": "pending_generation",
-      "prompt_id": "boss_03a_assets",
+      "prompt_id": "boss_03a_sena_assets",
       "boss_id": "lost_rabbit_yokai"
     },
     {
@@ -693,7 +693,7 @@
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
       "status": "pending_generation",
-      "prompt_id": "boss_03a_assets",
+      "prompt_id": "boss_03a_sena_assets",
       "boss_id": "lost_rabbit_yokai"
     },
     {
@@ -707,7 +707,7 @@
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
       "status": "pending_generation",
-      "prompt_id": "boss_03a_assets",
+      "prompt_id": "boss_03a_sena_assets",
       "boss_id": "lost_rabbit_yokai"
     },
     {
@@ -721,7 +721,7 @@
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
       "status": "pending_generation",
-      "prompt_id": "boss_03b_assets",
+      "prompt_id": "boss_03b_oboro_assets",
       "boss_id": "bamboo_illusionist"
     },
     {
@@ -735,7 +735,7 @@
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
       "status": "pending_generation",
-      "prompt_id": "boss_03b_assets",
+      "prompt_id": "boss_03b_oboro_assets",
       "boss_id": "bamboo_illusionist"
     },
     {
@@ -749,7 +749,7 @@
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
       "status": "pending_generation",
-      "prompt_id": "boss_03b_assets",
+      "prompt_id": "boss_03b_oboro_assets",
       "boss_id": "bamboo_illusionist"
     },
     {
@@ -763,7 +763,7 @@
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
       "status": "pending_generation",
-      "prompt_id": "boss_04a_assets",
+      "prompt_id": "boss_04a_hina_assets",
       "boss_id": "rookie_crow_tengu"
     },
     {
@@ -777,7 +777,7 @@
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
       "status": "pending_generation",
-      "prompt_id": "boss_04a_assets",
+      "prompt_id": "boss_04a_hina_assets",
       "boss_id": "rookie_crow_tengu"
     },
     {
@@ -791,7 +791,7 @@
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
       "status": "pending_generation",
-      "prompt_id": "boss_04a_assets",
+      "prompt_id": "boss_04a_hina_assets",
       "boss_id": "rookie_crow_tengu"
     },
     {
@@ -805,7 +805,7 @@
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
       "status": "pending_generation",
-      "prompt_id": "boss_04b_assets",
+      "prompt_id": "boss_04b_kasumi_assets",
       "boss_id": "mountain_wind_tengu"
     },
     {
@@ -819,7 +819,7 @@
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
       "status": "pending_generation",
-      "prompt_id": "boss_04b_assets",
+      "prompt_id": "boss_04b_kasumi_assets",
       "boss_id": "mountain_wind_tengu"
     },
     {
@@ -833,7 +833,7 @@
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
       "status": "pending_generation",
-      "prompt_id": "boss_04b_assets",
+      "prompt_id": "boss_04b_kasumi_assets",
       "boss_id": "mountain_wind_tengu"
     },
     {
@@ -847,7 +847,7 @@
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
       "status": "pending_generation",
-      "prompt_id": "boss_05a_assets",
+      "prompt_id": "boss_05a_rei_assets",
       "boss_id": "little_oni_drummer"
     },
     {
@@ -861,7 +861,7 @@
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
       "status": "pending_generation",
-      "prompt_id": "boss_05a_assets",
+      "prompt_id": "boss_05a_rei_assets",
       "boss_id": "little_oni_drummer"
     },
     {
@@ -875,7 +875,7 @@
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
       "status": "pending_generation",
-      "prompt_id": "boss_05a_assets",
+      "prompt_id": "boss_05a_rei_assets",
       "boss_id": "little_oni_drummer"
     },
     {
@@ -889,7 +889,7 @@
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
       "status": "pending_generation",
-      "prompt_id": "boss_05b_assets",
+      "prompt_id": "boss_05b_tsukiko_assets",
       "boss_id": "banquet_oni_princess"
     },
     {
@@ -903,7 +903,7 @@
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
       "status": "pending_generation",
-      "prompt_id": "boss_05b_assets",
+      "prompt_id": "boss_05b_tsukiko_assets",
       "boss_id": "banquet_oni_princess"
     },
     {
@@ -917,7 +917,7 @@
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
       "status": "pending_generation",
-      "prompt_id": "boss_05b_assets",
+      "prompt_id": "boss_05b_tsukiko_assets",
       "boss_id": "banquet_oni_princess"
     },
     {
@@ -931,7 +931,7 @@
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
       "status": "pending_generation",
-      "prompt_id": "boss_06a_assets",
+      "prompt_id": "boss_06a_noa_assets",
       "boss_id": "festival_fox_miko"
     },
     {
@@ -945,7 +945,7 @@
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
       "status": "pending_generation",
-      "prompt_id": "boss_06a_assets",
+      "prompt_id": "boss_06a_noa_assets",
       "boss_id": "festival_fox_miko"
     },
     {
@@ -959,7 +959,7 @@
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
       "status": "pending_generation",
-      "prompt_id": "boss_06a_assets",
+      "prompt_id": "boss_06a_noa_assets",
       "boss_id": "festival_fox_miko"
     },
     {
@@ -973,7 +973,7 @@
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
       "status": "pending_generation",
-      "prompt_id": "boss_06b_assets",
+      "prompt_id": "boss_06b_astralis_assets",
       "boss_id": "hyakki_night_festival_god"
     },
     {
@@ -987,7 +987,7 @@
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
       "status": "pending_generation",
-      "prompt_id": "boss_06b_assets",
+      "prompt_id": "boss_06b_astralis_assets",
       "boss_id": "hyakki_night_festival_god"
     },
     {
@@ -1015,7 +1015,7 @@
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
       "status": "pending_generation",
-      "prompt_id": "bullet_family_atlases"
+      "prompt_id": "enemy_family_sprites"
     },
     {
       "id": "enemy_fast_attacker",
@@ -1028,7 +1028,7 @@
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
       "status": "pending_generation",
-      "prompt_id": "bullet_family_atlases"
+      "prompt_id": "enemy_family_sprites"
     },
     {
       "id": "enemy_formation_shooter",
@@ -1041,7 +1041,7 @@
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
       "status": "pending_generation",
-      "prompt_id": "bullet_family_atlases"
+      "prompt_id": "enemy_family_sprites"
     },
     {
       "id": "enemy_elite_yokai",
@@ -1054,7 +1054,7 @@
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
       "status": "pending_generation",
-      "prompt_id": "bullet_family_atlases"
+      "prompt_id": "enemy_family_sprites"
     },
     {
       "id": "enemy_mechanism",
@@ -1067,7 +1067,7 @@
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
       "status": "pending_generation",
-      "prompt_id": "bullet_family_atlases"
+      "prompt_id": "enemy_family_sprites"
     },
     {
       "id": "enemy_lantern_wisp",
@@ -1080,7 +1080,7 @@
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
       "status": "pending_generation",
-      "prompt_id": "bullet_family_atlases"
+      "prompt_id": "enemy_family_sprites"
     },
     {
       "id": "enemy_market_tool",
@@ -1093,7 +1093,7 @@
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
       "status": "pending_generation",
-      "prompt_id": "bullet_family_atlases"
+      "prompt_id": "enemy_family_sprites"
     },
     {
       "id": "enemy_festival_spirit",
@@ -1106,7 +1106,7 @@
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
       "status": "pending_generation",
-      "prompt_id": "bullet_family_atlases"
+      "prompt_id": "enemy_family_sprites"
     },
     {
       "id": "enemy_bullet_lotus_core",

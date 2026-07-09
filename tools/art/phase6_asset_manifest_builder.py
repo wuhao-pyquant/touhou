@@ -41,6 +41,21 @@ BOSSES = {
     "06b": "hyakki_night_festival_god",
 }
 
+BOSS_PROMPT_IDS = {
+    "01a": "boss_01a_aoi_assets",
+    "01b": "boss_01b_madara_assets",
+    "02a": "boss_02a_kirika_assets",
+    "02b": "boss_02b_yukari_assets",
+    "03a": "boss_03a_sena_assets",
+    "03b": "boss_03b_oboro_assets",
+    "04a": "boss_04a_hina_assets",
+    "04b": "boss_04b_kasumi_assets",
+    "05a": "boss_05a_rei_assets",
+    "05b": "boss_05b_tsukiko_assets",
+    "06a": "boss_06a_noa_assets",
+    "06b": "boss_06b_astralis_assets",
+}
+
 ENEMY_FAMILIES = [
     "enemy_low_yokai",
     "enemy_fast_attacker",
@@ -155,16 +170,20 @@ def build_manifest() -> dict[str, object]:
             1024,
             False,
             "visual anchor for the original night-festival danmaku style and readability baseline",
-            "ui_key_art",
+            "style_reference_night_festival",
         )
     )
 
     for stage, stage_name in STAGES.items():
         for layer in ["far", "mid", "near", "spell"]:
-            prompt_id = "stage_%02d_background_%s" % (stage, layer)
-            if layer == "near":
-                prompt_id = "stage_%02d_background_front" % stage
-            elif layer == "spell":
+            if stage == 1:
+                prompt_id = {
+                    "far": "stage_01_background_far",
+                    "mid": "stage_01_background_mid",
+                    "near": "stage_01_background_front",
+                    "spell": "stage_01_background_atmosphere",
+                }[layer]
+            else:
                 prompt_id = "stage_%02d_background_set" % stage
             assets.append(
                 entry(
@@ -236,7 +255,7 @@ def build_manifest() -> dict[str, object]:
                     512,
                     True,
                     "boss sprite silhouette remains readable and never hides live bullet shapes",
-                    "boss_%s_assets" % boss_code,
+                    BOSS_PROMPT_IDS[boss_code],
                     boss_id=runtime_id,
                 ),
                 entry(
@@ -248,7 +267,7 @@ def build_manifest() -> dict[str, object]:
                     1024,
                     True,
                     "boss portrait supports story and spell-card UI without protected likenesses",
-                    "boss_%s_assets" % boss_code,
+                    BOSS_PROMPT_IDS[boss_code],
                     boss_id=runtime_id,
                 ),
                 entry(
@@ -260,7 +279,7 @@ def build_manifest() -> dict[str, object]:
                     720,
                     True,
                     "spell aura stays behind boss and below enemy bullets in visual priority",
-                    "boss_%s_spell_aura" % boss_code if boss_code == "06b" else "boss_%s_assets" % boss_code,
+                    "boss_%s_spell_aura" % boss_code if boss_code == "06b" else BOSS_PROMPT_IDS[boss_code],
                     boss_id=runtime_id,
                 ),
             ]
@@ -277,7 +296,7 @@ def build_manifest() -> dict[str, object]:
                 256,
                 True,
                 "enemy family silhouette is distinct from bullets, items, and player-owned effects",
-                "bullet_family_atlases",
+                "enemy_family_sprites",
             )
         )
 
