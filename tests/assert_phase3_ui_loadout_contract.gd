@@ -58,6 +58,26 @@ func _verify_main_fixed_loadout_contract() -> void:
 	main_shell._collect_item(legacy_item)
 	_assert_equal(gm.bullet_type, original_bullet_type, "Legacy bullet-switch item should not change fixed selected shot.")
 	_assert_equal(gm.selected_shot_id, "returning_spirit_blades", "Legacy bullet-switch item should not change selected_shot_id.")
+	gm.lives = 3
+	gm.bombs = 1
+	gm.life_fragments = 0
+	gm.bomb_fragments = 0
+	var life_fragment := {"alive": true, "collected": false, "type": "life_fragment", "x": 0.0, "y": 0.0}
+	main_shell._collect_item(life_fragment)
+	_assert_equal(gm.lives, 3, "One life_fragment should not grant a full life.")
+	_assert_equal(gm.life_fragments, 1, "One life_fragment should be tracked as one fragment.")
+	for i in range(4):
+		main_shell._collect_item({"alive": true, "collected": false, "type": "life_fragment", "x": 0.0, "y": 0.0})
+	_assert_equal(gm.lives, 4, "Five life_fragments should grant one life.")
+	_assert_equal(gm.life_fragments, 0, "Five life_fragments should consume the fragment counter.")
+	var bomb_fragment := {"alive": true, "collected": false, "type": "bomb_fragment", "x": 0.0, "y": 0.0}
+	main_shell._collect_item(bomb_fragment)
+	_assert_equal(gm.bombs, 1, "One bomb_fragment should not grant a full bomb.")
+	_assert_equal(gm.bomb_fragments, 1, "One bomb_fragment should be tracked as one fragment.")
+	for i in range(2):
+		main_shell._collect_item({"alive": true, "collected": false, "type": "bomb_fragment", "x": 0.0, "y": 0.0})
+	_assert_equal(gm.bombs, 2, "Three bomb_fragments should grant one bomb.")
+	_assert_equal(gm.bomb_fragments, 0, "Three bomb_fragments should consume the fragment counter.")
 	main_shell.items = []
 	for i in range(80):
 		main_shell._drop_item(200.0, 120.0, i % 5 == 0)

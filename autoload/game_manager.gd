@@ -92,6 +92,8 @@ var shared_power: int = 0
 var bullet_type: int = BulletType.SPREAD
 var lives: int = PLAYER_INITIAL_LIVES
 var bombs: int = PLAYER_INITIAL_BOMBS
+var life_fragments: int = 0
+var bomb_fragments: int = 0
 var current_stage: int = 1
 var state: String = STATE_TITLE
 var selected_protagonist_id: String = DEFAULT_PROTAGONIST_ID
@@ -186,4 +188,5 @@ func reset():
 	score = 0; graze = 0; shared_power = 0
 	bullet_type = BulletType.SPREAD
 	lives = PLAYER_INITIAL_LIVES; bombs = PLAYER_INITIAL_BOMBS
+	life_fragments = 0; bomb_fragments = 0
 	current_stage = 1; state = STATE_TITLE

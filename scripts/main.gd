@@ -1365,8 +1365,20 @@ func _collect_item(it: Dictionary):
 			game_manager_ref.score += 10 * (1 + game_manager_ref.shared_power)
 		"bomb_refill":
 			game_manager_ref.bombs = min(game_manager_ref.bombs+1, 5); game_manager_ref.score += 100
-		"life", "life_fragment":
+		"bomb_fragment":
+			game_manager_ref.bomb_fragments += 1
+			if game_manager_ref.bomb_fragments >= 3:
+				game_manager_ref.bombs = min(game_manager_ref.bombs+1, 5)
+				game_manager_ref.bomb_fragments -= 3
+			game_manager_ref.score += 100
+		"life":
 			game_manager_ref.lives = min(game_manager_ref.lives+1, 6); game_manager_ref.score += 500
+		"life_fragment":
+			game_manager_ref.life_fragments += 1
+			if game_manager_ref.life_fragments >= 5:
+				game_manager_ref.lives = min(game_manager_ref.lives+1, 6)
+				game_manager_ref.life_fragments -= 5
+			game_manager_ref.score += 500
 		"full_power":
 			game_manager_ref.shared_power = 50; game_manager_ref.score += 300
 
