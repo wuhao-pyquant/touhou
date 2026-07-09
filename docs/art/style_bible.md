@@ -2,17 +2,24 @@
 
 This document locks the art direction for the original night-festival danmaku game. All Phase 6 image prompts, imports, contact sheets, and QA decisions must follow this contract before an asset can be accepted into the project.
 
-## Style Target
+## Project Identity
 
-High-detail hand-painted Japanese night-festival fantasy. The image language should feel like a richly painted festival route at night: shrine lanterns, yokai market stalls, bamboo fog, tengu mountain wind, oni banquet firelight, and a divine lantern realm.
+The game is an original night-festival danmaku game about shrine paths, yokai markets, mist bamboo, tengu mountain wind, oni banquet heat, and a divine lantern realm. It is not a Touhou Project work, crossover, remake, or clone.
 
-Rendering rules:
+## Style Pillars
 
+- Hand-painted Japanese night-festival fantasy.
 - Painterly anime characters with clear silhouettes, layered fabric, hair ornaments, paper charms, lantern glow, and controlled magical effects.
 - Backgrounds use visible brush texture, soft depth separation, and limited high-frequency detail in the active playfield.
 - Effects may be luminous, but gameplay elements keep the highest contrast and cleanest edges.
 - UI art is decorative but restrained, with readable shapes and no clutter behind active text or the hitbox lane.
-- Every generated prompt must say the game is original and must avoid existing Touhou Project characters, exact costumes, exact symbols, logos, music, or protected names.
+
+## Original-IP Rules
+
+- Use original characters only.
+- Use no copyrighted Touhou character names, likenesses, costumes, exact symbols, logos, music references, protected spell names, or protected story elements.
+- Every generated prompt must say the game is original.
+- The phrase "Touhou-like" must not appear in image prompts; use "original night-festival danmaku game" instead.
 
 ## Gameplay Readability Contract
 
@@ -30,37 +37,45 @@ Non-negotiable checks:
 - UI and spell-card announcement art must not cover the active hitbox area or current danger zone unless the gameplay state is paused or transitioning.
 - Any beautiful asset that weakens bullet recognition, enemy recognition, item recognition, or UI clarity must be revised or rejected.
 
-IP restrictions:
-
-- Use original characters only.
-- Use no copyrighted Touhou character names, likenesses, costumes, exact symbols, logos, music references, or protected story elements.
-- The phrase "Touhou-like" must not appear in image prompts; use "original night-festival danmaku game" instead.
-
-## Palette System
-
-Global festival identity:
-
-- Lantern gold: warm highlights, signage, flame edges, charm trim.
-- Shrine red: accent rails, seals, bows, danger-neutral festival motifs.
-- Ink blue-black: night sky, deep shadow, readable negative space.
-- Paper white: talismans, UI panel accents, spell-card callouts.
-
-Stage palettes:
-
-- Stage 1 `shrine_approach`: warm shrine lanterns, approachable reds, aged wood, early-night blue shadows.
-- Stage 2 `yokai_market`: market gold, mask colors, coin highlights, tool motifs, warm stall light.
-- Stage 3 `mist_bamboo_grove`: moonlit blues, bamboo greens, fog translucency, low-contrast distant detail.
-- Stage 4 `tengu_mountain_path`: high-altitude blue-gray wind, paper white, feather accents, crisp air gaps.
-- Stage 5 `oni_banquet_hall`: deep reds, drum wood, oni fire, sake lacquer, heavy shadow bands.
-- Stage 6 `night_festival_divine_realm`: divine blue-black sky, endless lantern rivers, spirit fire, faith particles kept broad and non-bullet-like.
-
-## Character Shape Language
+## Shape Language
 
 Playable protagonists:
 
 - Mika maps to protagonist id `miko`: balanced shrine-bound support, red and white base, boundary charm geometry, rounded readable sprite mass.
 - Ren maps to protagonist id `magician`: range spellcaster, dark cloth with gold and violet accents, star-dust magic kept distinct from enemy star bullets.
 - Shiori maps to protagonist id `swordswoman`: half-yokai swordswoman, lean silhouette, spirit blade accents, green-cyan highlights kept distinct from collectible items.
+
+Gameplay silhouettes must read from the outer contour first. Internal decoration is secondary and must not create bullet-like dots, item-like sparkles, or unclear collision expectations.
+
+## Color Language
+
+- Lantern gold: warm highlights, signage, flame edges, charm trim.
+- Shrine red: accent rails, seals, bows, danger-neutral festival motifs.
+- Ink blue-black: night sky, deep shadow, readable negative space.
+- Paper white: talismans, UI panel accents, spell-card callouts.
+
+Player-owned effects should remain visually separate from enemy bullets. If colors overlap, separate them through outline value, shape, animation language, or placement.
+
+## Bullet And Bomb Readability
+
+- `circle`: round small pressure, clean rim, bright center.
+- `rice`: oval rice shape, cyan family identity, narrow collision expectation.
+- `butterfly`: decorative but not fragile, wings readable as enemy bullets.
+- `needle`: thin fast threat, pointed silhouette, yellow-orange identity.
+- `talisman`: rectangular paper charm, red identity, no item-like sparkle.
+- `star`: blue star bullet, simple enough to read at speed.
+- `laser`: lane warning and beam identity, clear edge and telegraph.
+- `large_orb`: large space-control orb with clear boundary and visible center.
+- Bomb effects must communicate player ownership, clear timing, and post-clear danger visibility.
+
+## Character Rendering Standard
+
+- Gameplay sprites need clear outer contours and readable facing at small scale.
+- Portraits can carry more fabric detail than gameplay sprites.
+- Battle sprites use simplified internal detail and high-value outline separation.
+- Transparent gameplay assets must not include noisy halos or stray opaque pixels.
+
+## Enemy And Boss Rendering Standard
 
 Stage boss pairs:
 
@@ -71,55 +86,33 @@ Stage boss pairs:
 - Stage 5: Rei as `little_oni_drummer`, Tsukiko as `banquet_oni_princess`.
 - Stage 6: Noa as `festival_fox_miko`, Astralis as `hyakki_night_festival_god`.
 
-Sprite rules:
+Boss spell auras stay outside the boss silhouette enough to preserve boss recognition.
 
-- Gameplay sprites need clear outer contours and readable facing at small scale.
-- Portraits can carry more fabric detail than gameplay sprites.
-- Battle sprites use simplified internal detail and high-value outline separation.
-- Spell auras stay outside the boss silhouette enough to preserve boss recognition.
+## Background Rendering Standard
 
-## Asset Family Rules
+- Far layers use broad silhouettes and sky value only, with the lowest contrast.
+- Mid layers carry the main setting identity, readable depth, and no bullet-like background dots.
+- Front layers use soft framing elements outside active lanes; never foreground clutter over the player route.
+- Atmosphere layers use fog, wind, ember, or spirit overlays with broad shapes and low opacity.
 
-Background layers:
+## UI Rendering Standard
 
-- Far: broad silhouettes and sky value only, lowest contrast.
-- Mid: main setting identity, readable depth, no bullet-like background dots.
-- Front: soft framing elements outside active lanes; never foreground clutter over the player route.
-- Atmosphere: fog, wind, ember, or spirit overlays with broad shapes and low opacity.
+UI overlays must preserve text-safe areas, hitbox visibility, danger-zone visibility, and spell-card timing. Decorative paper texture, lantern rim light, and festival trim are acceptable only when they do not reduce active-play clarity.
 
-Bullet families:
+## Stage Palettes
 
-- `circle`: round small pressure, clean rim, bright center.
-- `rice`: oval rice shape, cyan family identity, narrow collision expectation.
-- `butterfly`: decorative but not fragile, wings readable as enemy bullets.
-- `needle`: thin fast threat, pointed silhouette, yellow-orange identity.
-- `talisman`: rectangular paper charm, red identity, no item-like sparkle.
-- `star`: blue star bullet, simple enough to read at speed.
-- `laser`: lane warning and beam identity, clear edge and telegraph.
-- `large_orb`: large space-control orb with clear boundary and visible center.
+- Stage 1 `shrine_approach`: warm shrine lanterns, approachable reds, aged wood, early-night blue shadows.
+- Stage 2 `yokai_market`: market gold, mask colors, coin highlights, tool motifs, warm stall light.
+- Stage 3 `mist_bamboo_grove`: moonlit blues, bamboo greens, fog translucency, low-contrast distant detail.
+- Stage 4 `tengu_mountain_path`: high-altitude blue-gray wind, paper white, feather accents, crisp air gaps.
+- Stage 5 `oni_banquet_hall`: deep reds, drum wood, oni fire, sake lacquer, heavy shadow bands.
+- Stage 6 `night_festival_divine_realm`: divine blue-black sky, endless lantern rivers, spirit fire, faith particles kept broad and non-bullet-like.
 
-Items:
+## Prompt Negative Constraints
 
-- `power`: power-up energy token, not round like circle bullets.
-- `point`: score token, coin-like but with collectible shine and non-danger color.
-- `bomb_fragment`: fragment wedge or charm shard, clearly not a bullet.
-- `life_fragment`: heart or life shard, readable at small scale.
-- `night_festival_seal`: festival seal, rare and valuable, unique silhouette.
-- `full_power`: full-power token, celebratory but not bullet-shaped.
+Every production prompt must include local negative constraints. Required negatives include no copyrighted Touhou character, no protected names, no exact costumes, no logos, no bullet-like background dots for backgrounds, no small bright confetti that resembles bullets or items, no high-contrast clutter in active lanes, no unreadable silhouettes, and no muddy low-contrast gameplay shapes.
 
-## Prompt Requirements
-
-Every production prompt must include:
-
-- "original night-festival danmaku game"
-- The target asset id.
-- The registry path or category target when known.
-- The style target: hand-painted Japanese night-festival fantasy.
-- The relevant stage palette or character palette.
-- Readability constraints for dense 720x960 play.
-- Negative constraints including no copyrighted Touhou character, no protected names, no exact costumes, no logos, no bullet-like background dots for backgrounds, and no foreground clutter in active lanes.
-
-## QA Gate
+## Acceptance Checklist
 
 Before acceptance, inspect the asset in a gameplay-like composition:
 
