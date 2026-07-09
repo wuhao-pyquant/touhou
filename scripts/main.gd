@@ -212,6 +212,20 @@ func _selected_bomb_profile() -> Dictionary:
 		return game_manager_ref.selected_bomb_profile()
 	return {}
 
+func _gameplay_shot_label() -> String:
+	var shot := _selected_shot_profile()
+	var fallback: String = SHOT_NAMES_ZH[game_manager_ref.bullet_type] if game_manager_ref else ""
+	return String(shot.get("hud_name", shot.get("display_name", fallback)))
+
+func _gameplay_protagonist_label() -> String:
+	if game_manager_ref and game_manager_ref.has_method("protagonist_profile"):
+		return String(game_manager_ref.protagonist_profile().get("display_name", ""))
+	return ""
+
+func _gameplay_bomb_label() -> String:
+	var bomb := _selected_bomb_profile()
+	return String(bomb.get("hud_name", bomb.get("display_name", "")))
+
 func _spawn_player_bullet_spec(spec: Dictionary) -> void:
 	_spawn_bullet_player(
 		float(spec.position.x),
@@ -365,7 +379,7 @@ func _respawn():
 	game_manager_ref.bombs = game_manager_ref.PLAYER_INITIAL_BOMBS
 	var dropped: int = int(game_manager_ref.shared_power * game_manager_ref.DEATH_POWER_DROP)
 	for i in range(mini(50, dropped)):
-		_spawn_item(player_x+randf_range(-80,80), player_y+randf_range(-60,60), ["bullet_spread","bullet_linear","bullet_homing"][i%3])
+		_spawn_item(player_x+randf_range(-80,80), player_y+randf_range(-60,60), "power")
 	game_manager_ref.shared_power = max(0, game_manager_ref.shared_power - dropped)
 	_reset_player()
 	player_invincible = true
@@ -1331,20 +1345,19 @@ func _drop_item(x: float, y: float, strong: bool):
 		if r < 0.40: t = "power"
 		elif r < 0.58: t = "point"
 		elif r < 0.68: t = "bomb_refill"
-		elif r < 0.72: t = "life"
-		else: t = ["bullet_spread","bullet_linear","bullet_homing"][randi()%3]
+		elif r < 0.72: t = "life_fragment"
+		else: t = "full_power"
 		items.append({"alive":true,"collected":false,"x":x,"y":y,"type":t,"radius":9.0,"vy":-2.5,"vx":randf_range(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":randf_range(0,TAU),"birth":15.0,"anim":randf_range(0,TAU)})
 
 func _collect(it: Dictionary):
+	_collect_item(it)
+
+func _collect_item(it: Dictionary):
 	it.collected = true; it.alive = false
 	match it.type:
 		"bullet_spread", "bullet_linear", "bullet_homing":
-			var bt: int = 0
-			if it.type == "bullet_linear": bt = 1
-			elif it.type == "bullet_homing": bt = 2
-			game_manager_ref.switch_bullet_type(bt)
-			if game_manager_ref.add_power(): pass
-			game_manager_ref.score += 10
+			game_manager_ref.add_power(2)
+			game_manager_ref.score += 120
 		"power":
 			if game_manager_ref.add_power(): pass
 			game_manager_ref.score += 10
@@ -1352,8 +1365,10 @@ func _collect(it: Dictionary):
 			game_manager_ref.score += 10 * (1 + game_manager_ref.shared_power)
 		"bomb_refill":
 			game_manager_ref.bombs = min(game_manager_ref.bombs+1, 5); game_manager_ref.score += 100
-		"life":
+		"life", "life_fragment":
 			game_manager_ref.lives = min(game_manager_ref.lives+1, 6); game_manager_ref.score += 500
+		"full_power":
+			game_manager_ref.shared_power = 50; game_manager_ref.score += 300
 
 func _draw_ui_background(accent: Color) -> void:
 	draw_rect(Rect2(0, 0, SCREEN_W, SCREEN_H), Color(0.04, 0.05, 0.08))
@@ -1382,6 +1397,15 @@ func _draw_menu_entries(font: Font, entries: Array, cursor: int, start_y: float,
 		var description: String = String(entry.get("description", ""))
 		if description != "":
 			draw_string(font, Vector2(132, y + 24.0), description, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 15, Color(0.58, 0.65, 0.76))
+
+func _draw_entry_detail_lines(font: Font, entries: Array, cursor: int, start_y: float, row_height: float) -> void:
+	if entries.is_empty():
+		return
+	var entry: Dictionary = entries[clampi(cursor, 0, entries.size() - 1)]
+	var detail_lines: Array = entry.get("detail_lines", [])
+	var y := start_y + entries.size() * row_height + 22.0
+	for i in range(min(detail_lines.size(), 4)):
+		draw_string(font, Vector2(78, y + i * 22.0), String(detail_lines[i]), HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color(0.78, 0.82, 0.88))
 
 func _setting_value_text(entry: Dictionary) -> String:
 	match String(entry.get("type", "")):
@@ -1465,7 +1489,9 @@ func _draw_character_select_screen() -> void:
 	_draw_ui_background(Color(0.16, 0.38, 0.56))
 	var mode_label: String = "\u6a21\u5f0f\uff1a\u7ec3\u4e60" if game_manager_ref.practice_mode else "\u6a21\u5f0f\uff1a\u6545\u4e8b"
 	_draw_ui_heading(font, "\u89d2\u8272\u9009\u62e9", mode_label, 34)
-	_draw_menu_entries(font, ui_model.protagonist_entries(), character_menu_cursor, 304.0, 92.0)
+	var entries: Array = ui_model.protagonist_entries()
+	_draw_menu_entries(font, entries, character_menu_cursor, 304.0, 92.0)
+	_draw_entry_detail_lines(font, entries, character_menu_cursor, 304.0, 92.0)
 	var hint := "\u65b9\u5411\u952e\u9009\u62e9    Z \u786e\u8ba4    X/Esc \u8fd4\u56de\u6807\u9898"
 	_draw_control_hint(font, hint, SCREEN_H - 78.0)
 
@@ -1477,6 +1503,7 @@ func _draw_shot_select_screen() -> void:
 	_draw_ui_heading(font, "\u5c04\u51fb\u9009\u62e9", "\u5df2\u9009\u89d2\u8272\uff1a%s" % protagonist_label, 34)
 	var shots: Array = ui_model.shot_entries(String(game_manager_ref.selected_protagonist_id))
 	_draw_menu_entries(font, shots, shot_menu_cursor, 328.0, 92.0)
+	_draw_entry_detail_lines(font, shots, shot_menu_cursor, 328.0, 92.0)
 	var hint := "\u65b9\u5411\u952e\u9009\u62e9    Z \u5f00\u59cb    X/Esc \u8fd4\u56de\u89d2\u8272"
 	_draw_control_hint(font, hint, SCREEN_H - 78.0)
 
@@ -1537,6 +1564,7 @@ func _draw():
 		var ix: int = int(it.x); var iy: int = int(it.y)
 		match it.type:
 			"power": draw_circle(Vector2(ix,iy),9,Color.RED); draw_circle(Vector2(ix,iy),9,Color.WHITE,false,2)
+			"full_power": draw_circle(Vector2(ix,iy),11,Color(1.0,0.72,0.16)); draw_circle(Vector2(ix,iy),11,Color.WHITE,false,2)
 			"point":
 				var pts: PackedVector2Array = PackedVector2Array([Vector2(ix,iy-9),Vector2(ix+9,iy),Vector2(ix,iy+9),Vector2(ix-9,iy)])
 				draw_colored_polygon(pts,Color.BLUE); draw_polyline(pts,Color.WHITE,1,true)
@@ -1544,7 +1572,7 @@ func _draw():
 				var pts2: PackedVector2Array = PackedVector2Array()
 				for i in range(6): var a: float = TAU/6*i-PI/2; pts2.append(Vector2(ix+cos(a)*(9 if i%2==0 else 4.5),iy+sin(a)*(9 if i%2==0 else 4.5)))
 				draw_colored_polygon(pts2,Color.ORANGE)
-			"life": draw_rect(Rect2(ix-9,iy-9,18,18),Color.PINK); draw_rect(Rect2(ix-9,iy-9,18,18),Color.WHITE,false,2)
+			"life", "life_fragment": draw_rect(Rect2(ix-9,iy-9,18,18),Color.PINK); draw_rect(Rect2(ix-9,iy-9,18,18),Color.WHITE,false,2)
 			_:
 				var bt: int = 0
 				if it.type == "bullet_linear": bt = 1
@@ -1645,7 +1673,8 @@ func _draw():
 	var font = SystemFont.new()
 	draw_string(font,Vector2(10,20),"\u5f97\u5206: %d"%gm.score)
 	draw_string(font,Vector2(10,35),"\u64e6\u5f39: %d"%gm.graze)
-	draw_string(font,Vector2(10,50),"\u5c04\u51fb: %s Lv.%d"%[SHOT_NAMES_ZH[gm.bullet_type],gm.power_level()])
+	draw_string(font,Vector2(10,50),"Shot: %s Lv.%d"%[_gameplay_shot_label(),gm.power_level()])
+	draw_string(font,Vector2(10,65),"Pilot: %s  Bomb: %s"%[_gameplay_protagonist_label(),_gameplay_bomb_label()])
 	# Right-aligned life/bomb indicators: heart/diamond count can grow up to
 	# 6/5, so we anchor the trailing edge 12px inside the right screen edge
 	# and let the string extend to the left as lives/bombs increase - never
