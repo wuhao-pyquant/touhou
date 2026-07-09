@@ -24,6 +24,13 @@ func _assert_equal(actual, expected, message: String) -> bool:
 func _enemy_bullet(x: float, y: float) -> Dictionary:
 	return {"active": true, "type": "circle", "x": x, "y": y, "radius": 4.0}
 
+func _specs_have_color(specs: Array, expected: Color) -> bool:
+	for spec in specs:
+		var spec_color: Color = spec.get("color", Color.TRANSPARENT)
+		if spec_color.is_equal_approx(expected):
+			return true
+	return false
+
 func _verify_bomb_executor() -> void:
 	var db = load("res://scripts/data/game_database.gd").new()
 	var executor_script = load("res://scripts/player/player_bomb_executor.gd")
@@ -40,6 +47,9 @@ func _verify_bomb_executor() -> void:
 	_assert_equal(String(sword_state.behavior_id), "instant_slash", "Swordswoman bomb behavior mismatch.")
 	_assert(executor.wave_specs(miko_state, 0).size() > executor.wave_specs(magician_state, 0).size(), "Boundary Bloom should have more radial bullets than Master Spark.")
 	_assert(executor.wave_specs(magician_state, 0).size() >= 1, "Master Spark should emit lane bullets.")
+	var master_spark_specs: Array = executor.wave_specs(magician_state, 0)
+	_assert(_specs_have_color(master_spark_specs, magician_state.color), "Master Spark should include red lane bullets.")
+	_assert(_specs_have_color(master_spark_specs, Color.WHITE), "Master Spark should include white lane bullets.")
 	_assert(executor.wave_specs(sword_state, 0).size() >= 3, "Instant Slash should emit multi-hit slash bullets.")
 	_assert(executor.should_clear_enemy_bullet(miko_state, _enemy_bullet(360, 420), origin), "Boundary Bloom should clear nearby bullets.")
 	_assert(executor.should_clear_enemy_bullet(magician_state, _enemy_bullet(360, 260), origin), "Master Spark should clear the forward lane.")

@@ -68,7 +68,7 @@ func _master_spark_specs(state: Dictionary, phase: int) -> Array:
 	for i in range(count):
 		var lane_offset: float = (float(i) / denom - 0.5) * 84.0
 		var phase_push: float = float(phase) * 10.0
-		specs.append(_bomb_spec(
+		var spec: Dictionary = _bomb_spec(
 			state,
 			origin + side * lane_offset + direction * phase_push,
 			direction * speed,
@@ -77,7 +77,9 @@ func _master_spark_specs(state: Dictionary, phase: int) -> Array:
 			false,
 			1,
 			72.0
-		))
+		)
+		spec["color"] = Color.WHITE if i % 2 == 1 else state.get("color", Color.RED)
+		specs.append(spec)
 	return specs
 
 func _instant_slash_specs(state: Dictionary, phase: int) -> Array:
