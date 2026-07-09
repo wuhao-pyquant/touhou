@@ -762,7 +762,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_04a_hina_assets",
       "boss_id": "rookie_crow_tengu"
     },
@@ -776,7 +776,7 @@
       "height": 1024,
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_04a_hina_assets",
       "boss_id": "rookie_crow_tengu"
     },
@@ -790,7 +790,7 @@
       "height": 720,
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_04a_hina_assets",
       "boss_id": "rookie_crow_tengu"
     },
@@ -804,7 +804,7 @@
       "height": 512,
       "transparent": true,
       "readability_role": "boss sprite silhouette remains readable and never hides live bullet shapes",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_04b_kasumi_assets",
       "boss_id": "mountain_wind_tengu"
     },
@@ -818,7 +818,7 @@
       "height": 1024,
       "transparent": true,
       "readability_role": "boss portrait supports story and spell-card UI without protected likenesses",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_04b_kasumi_assets",
       "boss_id": "mountain_wind_tengu"
     },
@@ -832,7 +832,7 @@
       "height": 720,
       "transparent": true,
       "readability_role": "spell aura stays behind boss and below enemy bullets in visual priority",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "boss_04b_kasumi_assets",
       "boss_id": "mountain_wind_tengu"
     },
