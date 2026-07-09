@@ -44,6 +44,7 @@ var game_manager_ref: Object = null
 var audio_manager_ref: Object = null
 var performance_monitor_ref: Node = null
 var ui_model: Object = load("res://scripts/ui/ui_model.gd").new()
+var shot_executor: Object = load("res://scripts/player/player_shot_executor.gd").new()
 var main_menu_cursor: int = 0
 var character_menu_cursor: int = 0
 var shot_menu_cursor: int = 0
@@ -191,18 +192,35 @@ func _entry_label_by_id(entries: Array, id: String) -> String:
 
 func _bullet_type_for_shot_id(shot_id: String) -> int:
 	_resolve_singletons()
-	var spread_type: int = game_manager_ref.BulletType.SPREAD if game_manager_ref else 0
-	var linear_type: int = game_manager_ref.BulletType.LINEAR if game_manager_ref else 1
-	var homing_type: int = game_manager_ref.BulletType.HOMING if game_manager_ref else 2
-	match shot_id:
-		"yin_yang_focus", "magic_laser":
-			return linear_type
-		"ofuda_trace", "returning_spirit_blades":
-			return homing_type
-		"stardust_spread", "sword_wave_fan":
-			return spread_type
-		_:
-			return spread_type
+	var db = load("res://scripts/data/game_database.gd").new()
+	var shot_profile: Dictionary = db.shot_profile_by_id(shot_id)
+	if shot_profile.is_empty():
+		return game_manager_ref.BulletType.SPREAD if game_manager_ref else 0
+	return shot_executor.bullet_type_for_shot(shot_profile, game_manager_ref)
+
+func _selected_shot_profile() -> Dictionary:
+	_resolve_singletons()
+	if game_manager_ref and game_manager_ref.has_method("selected_shot_profile"):
+		return game_manager_ref.selected_shot_profile()
+	return {}
+
+func _spawn_player_bullet_spec(spec: Dictionary) -> void:
+	_spawn_bullet_player(
+		float(spec.position.x),
+		float(spec.position.y),
+		float(spec.velocity.x),
+		float(spec.velocity.y),
+		float(spec.radius),
+		spec.color,
+		float(spec.damage),
+		bool(spec.homing),
+		int(spec.btype),
+		bool(spec.get("persist", false)),
+		float(spec.lifetime)
+	)
+
+func _shot_executor_fire_pattern(shot_profile: Dictionary, level: int, focused: bool, origin: Vector2) -> Array:
+	return shot_executor.fire_pattern(shot_profile, level, focused, origin)
 
 func _sync_character_cursor_to_selected() -> void:
 	if not game_manager_ref:
@@ -305,7 +323,6 @@ func _start_game():
 	_resolve_singletons()
 	var selected_protagonist_id: String = String(game_manager_ref.selected_protagonist_id)
 	var selected_shot_id: String = String(game_manager_ref.selected_shot_id)
-	var selected_bullet_type: int = _bullet_type_for_shot_id(selected_shot_id)
 	var selected_practice_mode: bool = bool(game_manager_ref.practice_mode)
 	var selected_settings: Dictionary = game_manager_ref.settings.duplicate(true)
 	game_manager_ref.reset()
@@ -313,7 +330,7 @@ func _start_game():
 	game_manager_ref.selected_shot_id = selected_shot_id
 	game_manager_ref.practice_mode = selected_practice_mode
 	game_manager_ref.settings = selected_settings
-	game_manager_ref.switch_bullet_type(selected_bullet_type)
+	game_manager_ref.apply_selected_shot()
 	_apply_runtime_settings()
 	game_manager_ref.state = "stage"
 	_set_active_stage(1)
@@ -474,7 +491,7 @@ func _update_shot_select_menu() -> void:
 		return
 	var selected_shot_id: String = String(entries[shot_menu_cursor].get("id", ""))
 	game_manager_ref.selected_shot_id = selected_shot_id
-	game_manager_ref.switch_bullet_type(_bullet_type_for_shot_id(selected_shot_id))
+	game_manager_ref.apply_selected_shot()
 	_start_game()
 
 func _update_settings_menu() -> void:
@@ -954,7 +971,7 @@ func _update_player(delta: float):
 	if player_bombing: _update_bomb(delta)
 
 	var focus: bool = Input.is_key_pressed(KEY_SHIFT)
-	var speed: float = game_manager_ref.PLAYER_SPEED_LOW if focus else game_manager_ref.PLAYER_SPEED_HIGH
+	var speed: float = game_manager_ref.selected_speed_low() if focus else game_manager_ref.selected_speed_high()
 	var dx: float = Input.get_axis("move_left", "move_right")
 	var dy: float = Input.get_axis("move_up", "move_down")
 	if dx != 0 and dy != 0: dx *= 0.7071; dy *= 0.7071
@@ -965,20 +982,19 @@ func _update_player(delta: float):
 
 	player_fire_cooldown -= delta
 	if Input.is_action_pressed("shoot") and player_fire_cooldown <= 0:
-		player_fire_cooldown = game_manager_ref.PLAYER_FIRE_INTERVAL / 60.0
+		player_fire_cooldown = game_manager_ref.selected_fire_interval_frames() / 60.0
 		_shoot()
 
 	if Input.is_action_just_pressed("bomb") and game_manager_ref.bombs > 0 and not player_deathbomb_primed and not player_bombing:
 		_start_bomb()
 
 func _shoot():
+	var shot_profile := _selected_shot_profile()
 	var level: int = game_manager_ref.power_level()
-	var bt: int = game_manager_ref.bullet_type
-	var dmg_val: float = game_manager_ref.BULLET_DMG[bt]
-	match bt:
-		game_manager_ref.BulletType.SPREAD: _shoot_spread(level, dmg_val)
-		game_manager_ref.BulletType.LINEAR: _shoot_linear(level, dmg_val)
-		game_manager_ref.BulletType.HOMING: _shoot_homing(level, dmg_val)
+	var focused := Input.is_key_pressed(KEY_SHIFT)
+	var specs: Array = _shot_executor_fire_pattern(shot_profile, level, focused, Vector2(player_x, player_y))
+	for spec in specs:
+		_spawn_player_bullet_spec(spec)
 	# Throttle shoot SFX so 20 Hz fire doesn't sound like a machine-gun
 	_sfx_shoot_skip = (_sfx_shoot_skip + 1) % 2
 	if _sfx_shoot_skip == 0 and audio_manager_ref:
