@@ -101,6 +101,11 @@ const ITEM_TYPE_FIELDS := {
 	"full_power": {"base_score": 300, "collect_behavior": "full_power"},
 }
 
+const LEGACY_ITEM_TYPE_LOOKUPS := {
+	"bomb_refill": {"id": "bomb_refill", "display_name": "鐐稿脊", "role": "direct_bomb_stock", "base_score": 100, "collect_behavior": "bomb_refill"},
+	"life": {"id": "life", "display_name": "娈嬫満", "role": "direct_life_stock", "base_score": 500, "collect_behavior": "life"},
+}
+
 const BULLET_FAMILIES := [
 	{"id": "circle", "display_name": "圆弹", "collision": "round", "role": "baseline_pressure"},
 	{"id": "rice", "display_name": "米弹", "collision": "round", "role": "woven_paths"},
@@ -210,6 +215,8 @@ func item_type_by_id(id: String) -> Dictionary:
 	for item in item_types():
 		if String(item.id) == id:
 			return item.duplicate(true)
+	if LEGACY_ITEM_TYPE_LOOKUPS.has(id):
+		return LEGACY_ITEM_TYPE_LOOKUPS[id].duplicate(true)
 	return {}
 
 func drop_table_for_tier(tier: String) -> Array:

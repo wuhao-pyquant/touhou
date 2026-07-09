@@ -86,6 +86,18 @@ func _init() -> void:
 		_assert(int(item.base_score) >= 0, "Item base_score should be non-negative.")
 	_assert_equal(int(db.item_type_by_id("bomb_fragment").fragment_goal), 3, "Bomb fragment goal should be 3.")
 	_assert_equal(int(db.item_type_by_id("life_fragment").fragment_goal), 5, "Life fragment goal should be 5.")
+	var bomb_refill: Dictionary = db.item_type_by_id("bomb_refill")
+	if _assert(not bomb_refill.is_empty(), "item_type_by_id should preserve legacy bomb_refill lookups."):
+		_assert_keys(bomb_refill, ["id", "display_name", "role", "base_score", "collect_behavior"], "legacy item bomb_refill")
+		_assert_equal(String(bomb_refill.id), "bomb_refill", "bomb_refill compatibility id mismatch.")
+		_assert_equal(String(bomb_refill.collect_behavior), "bomb_refill", "bomb_refill compatibility collect_behavior mismatch.")
+		_assert_equal(int(bomb_refill.base_score), 100, "bomb_refill compatibility base_score mismatch.")
+	var life: Dictionary = db.item_type_by_id("life")
+	if _assert(not life.is_empty(), "item_type_by_id should preserve legacy life lookups."):
+		_assert_keys(life, ["id", "display_name", "role", "base_score", "collect_behavior"], "legacy item life")
+		_assert_equal(String(life.id), "life", "life compatibility id mismatch.")
+		_assert_equal(String(life.collect_behavior), "life", "life compatibility collect_behavior mismatch.")
+		_assert_equal(int(life.base_score), 500, "life compatibility base_score mismatch.")
 	_assert_equal(db.item_type_by_id("missing"), {}, "Unknown item type should return empty Dictionary.")
 
 	_assert_drop_table(db.drop_table_for_tier("light"), "light")
