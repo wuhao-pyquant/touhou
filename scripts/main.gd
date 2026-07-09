@@ -226,6 +226,12 @@ func _gameplay_bomb_label() -> String:
 	var bomb := _selected_bomb_profile()
 	return String(bomb.get("hud_name", bomb.get("display_name", "")))
 
+func _gameplay_loadout_hud_rect() -> Rect2:
+	return Rect2(10.0, 50.0, 360.0, 22.0)
+
+func _performance_hud_rect() -> Rect2:
+	return Rect2(8.0, 84.0, 152.0, 64.0)
+
 func _spawn_player_bullet_spec(spec: Dictionary) -> void:
 	_spawn_bullet_player(
 		float(spec.position.x),
@@ -1475,7 +1481,7 @@ func _draw_performance_hud(font: Font) -> void:
 		"P %d  E %d" % [player_bullets, enemy_bullets],
 		"EN %d  I %d  G %d" % [enemy_count, item_count, draw_groups],
 	]
-	var box_rect := Rect2(8.0, 64.0, 152.0, 64.0)
+	var box_rect := _performance_hud_rect()
 	draw_rect(box_rect, Color(0.0, 0.0, 0.0, 0.58))
 	draw_rect(box_rect, Color(0.7, 0.9, 1.0, 0.46), false, 1)
 	for i in range(lines.size()):

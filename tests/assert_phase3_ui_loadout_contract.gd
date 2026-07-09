@@ -42,7 +42,7 @@ func _verify_main_fixed_loadout_contract() -> void:
 		return
 	var main_shell = main_script.new()
 	main_shell.game_manager_ref = gm
-	for method in ["_gameplay_shot_label", "_gameplay_protagonist_label", "_gameplay_bomb_label"]:
+	for method in ["_gameplay_shot_label", "_gameplay_protagonist_label", "_gameplay_bomb_label", "_gameplay_loadout_hud_rect", "_performance_hud_rect"]:
 		if not _assert(main_shell.has_method(method), "Main missing HUD helper %s" % method):
 			main_shell.free()
 			gm.free()
@@ -53,6 +53,9 @@ func _verify_main_fixed_loadout_contract() -> void:
 	_assert(main_shell._gameplay_protagonist_label().length() > 0, "HUD protagonist label should not be empty.")
 	_assert(main_shell._gameplay_shot_label().find("Spirit") >= 0 or main_shell._gameplay_shot_label().find("Blade") >= 0, "HUD shot label should use selected shot hud_name.")
 	_assert(main_shell._gameplay_bomb_label().find("Slash") >= 0 or main_shell._gameplay_bomb_label().find("Boundary") >= 0, "HUD bomb label should use selected bomb hud_name.")
+	var loadout_rect: Rect2 = main_shell._gameplay_loadout_hud_rect()
+	var performance_rect: Rect2 = main_shell._performance_hud_rect()
+	_assert(not loadout_rect.intersects(performance_rect), "Loadout HUD line should not overlap performance HUD box. loadout=%s performance=%s" % [loadout_rect, performance_rect])
 	var original_bullet_type: int = gm.bullet_type
 	var legacy_item := {"alive": true, "collected": false, "type": "bullet_linear", "x": 0.0, "y": 0.0}
 	main_shell._collect_item(legacy_item)
@@ -84,6 +87,17 @@ func _verify_main_fixed_loadout_contract() -> void:
 	for item in main_shell.items:
 		var item_type := String(item.get("type", ""))
 		_assert(not item_type.begins_with("bullet_"), "Phase 3 drops should not include weapon-switch item %s" % item_type)
+	main_shell.items = []
+	gm.lives = 3
+	gm.bombs = 1
+	gm.shared_power = 500
+	main_shell.player_x = 360.0
+	main_shell.player_y = 540.0
+	main_shell._respawn()
+	_assert(main_shell.items.size() > 0, "Respawn should create power-loss drops when shared_power is high enough.")
+	for item in main_shell.items:
+		var item_type := String(item.get("type", ""))
+		_assert(not item_type.begins_with("bullet_"), "Respawn drops should not include weapon-switch item %s" % item_type)
 	main_shell.free()
 	gm.free()
 
