@@ -45,6 +45,8 @@ var audio_manager_ref: Object = null
 var performance_monitor_ref: Node = null
 var ui_model: Object = load("res://scripts/ui/ui_model.gd").new()
 var shot_executor: Object = load("res://scripts/player/player_shot_executor.gd").new()
+var bomb_executor: Object = load("res://scripts/player/player_bomb_executor.gd").new()
+var player_last_move_dir: Vector2 = Vector2(0, -1)
 var main_menu_cursor: int = 0
 var character_menu_cursor: int = 0
 var shot_menu_cursor: int = 0
@@ -204,6 +206,12 @@ func _selected_shot_profile() -> Dictionary:
 		return game_manager_ref.selected_shot_profile()
 	return {}
 
+func _selected_bomb_profile() -> Dictionary:
+	_resolve_singletons()
+	if game_manager_ref and game_manager_ref.has_method("selected_bomb_profile"):
+		return game_manager_ref.selected_bomb_profile()
+	return {}
+
 func _spawn_player_bullet_spec(spec: Dictionary) -> void:
 	_spawn_bullet_player(
 		float(spec.position.x),
@@ -350,6 +358,7 @@ func _reset_player():
 	player_bomb_timer = 0.0; player_bomb_radius = 0.0; player_bomb_phase = 0
 	player_fire_cooldown = 0.0
 	player_deathbomb_primed = false; player_deathbomb_timer = 0.0
+	player_last_move_dir = Vector2(0, -1)
 
 func _respawn():
 	game_manager_ref.lives -= 1
@@ -975,6 +984,8 @@ func _update_player(delta: float):
 	var dx: float = Input.get_axis("move_left", "move_right")
 	var dy: float = Input.get_axis("move_up", "move_down")
 	if dx != 0 and dy != 0: dx *= 0.7071; dy *= 0.7071
+	if dx != 0.0 or dy != 0.0:
+		player_last_move_dir = Vector2(dx, dy).normalized()
 	player_x += dx * speed * delta * 60.0
 	player_y += dy * speed * delta * 60.0
 	player_x = clampf(player_x, PLAYFIELD_MARGIN, SCREEN_W - PLAYFIELD_MARGIN)
@@ -1033,61 +1044,29 @@ func _shoot_homing(level: int, dmg_val: float):
 func _start_bomb():
 	if game_manager_ref.bombs <= 0: return
 	game_manager_ref.bombs -= 1
-	player_bomb_config = game_manager_ref.BOMB_CONFIG[game_manager_ref.bullet_type]
-	player_bombing = true; player_bomb_timer = player_bomb_config.duration / 60.0
+	player_bomb_config = bomb_executor.start_state(_selected_bomb_profile(), Vector2(player_x, player_y), player_last_move_dir)
+	player_bombing = true
+	player_bomb_timer = int(player_bomb_config.duration) / 60.0
 	player_bomb_phase = 0; player_bomb_wave_timer = 0.0; player_bomb_radius = 0.0
-	player_invincible = true; player_invincible_timer = player_bomb_config.duration / 60.0
+	player_invincible = true; player_invincible_timer = int(player_bomb_config.duration) / 60.0
 	if audio_manager_ref: audio_manager_ref.play_sfx("bomb", -4.0)
 
 func _update_bomb(delta: float):
 	player_bomb_timer -= delta; player_bomb_wave_timer -= delta
 	var bc: Dictionary = player_bomb_config
-	player_bomb_radius += bc.radius / bc.duration * 2.0 * delta * 60.0
-	if player_bomb_radius > bc.radius: player_bomb_radius = bc.radius
-	var wave_int: float = bc.duration / bc.waves / 60.0
-	if player_bomb_wave_timer <= 0 and player_bomb_phase < bc.waves:
+	player_bomb_radius += float(bc.get("clear_radius", 160.0)) / float(bc.get("duration", 120)) * 2.0 * delta * 60.0
+	player_bomb_radius = min(player_bomb_radius, float(bc.get("clear_radius", 160.0)))
+	var total_waves: int = max(1, int(bc.get("waves", 1)))
+	var wave_int: float = float(bc.get("duration", 60)) / float(total_waves) / 60.0
+	if player_bomb_wave_timer <= 0.0 and player_bomb_phase < total_waves:
 		player_bomb_wave_timer = wave_int
-		# Three visually distinct bomb shapes, chosen by the weapon the player
-		# is currently holding. Previously all three branches produced the
-		# same omni-directional round-bullet ring, making them look identical
-		# in the air.
-		match game_manager_ref.bullet_type:
-			game_manager_ref.BulletType.SPREAD:
-				# Big omni-direction flash ring of circles. Many bullets, slow,
-				# all directions. Pierces so all waves actually pass through
-				# packed enemy clusters instead of dying on the first hit.
-				var n: int = bc.bullets
-				var spd: float = bc.speed
-				for i in range(n):
-					var a: float = TAU/n*i + player_bomb_phase * 0.3
-					_spawn_bullet_player(player_x, player_y,
-						cos(a)*spd, sin(a)*spd,
-						7, Color(0.78,0.39,1.0,1.0), 3.0, false, -1, true, 80.0)
-			game_manager_ref.BulletType.LINEAR:
-				# Piercing spokes: a small number of long fast rods that pass
-				# straight through enemies (they don't despawn on hit). Double
-				# spokes each wave so the pattern slowly rotates.
-				var spokes: int = 8
-				var spd: float = bc.speed * 1.6
-				for i in range(spokes):
-					var a: float = TAU/spokes*i + player_bomb_phase * (PI / 4)
-					_spawn_bullet_player(player_x, player_y,
-						cos(a)*spd, sin(a)*spd,
-						12, Color(1.0, 0.31, 0.31), bc.dmg, false, 1, true, 120.0)
-			game_manager_ref.BulletType.HOMING:
-				# A swarm of slow homing seekers out in a spiral. They seek the
-				# nearest enemy and nibble through HP. Distinct, lingering.
-				var n: int = bc.bullets
-				var spd: float = bc.speed
-				for i in range(n):
-					var a: float = TAU/n*i + player_bomb_phase * 0.6
-					_spawn_bullet_player(player_x, player_y,
-						cos(a)*spd, sin(a)*spd,
-						4, Color(0.31, 1.0, 0.55), bc.dmg, true, 2, true, 90.0)
+		for spec in bomb_executor.wave_specs(bc, player_bomb_phase):
+			_spawn_player_bullet_spec(spec)
 		player_bomb_phase += 1
 	for b in bullet_pool:
 		if b.active and b.type in ["circle","rice","arrow","laser"]:
-			if Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < player_bomb_radius: b.active = false
+			if bomb_executor.should_clear_enemy_bullet(bc, b, Vector2(player_x, player_y)):
+				b.active = false
 	if player_bomb_timer <= 0:
 		# End bomb state but DO NOT clear player_invincible here.
 		# _start_bomb() set the invincibility timer to the bomb's duration;
