@@ -82,11 +82,16 @@ func _verify_main_fixed_loadout_contract() -> void:
 	_assert_equal(gm.bombs, 2, "Three bomb_fragments should grant one bomb.")
 	_assert_equal(gm.bomb_fragments, 0, "Three bomb_fragments should consume the fragment counter.")
 	main_shell.items = []
+	seed(12345)
 	for i in range(80):
 		main_shell._drop_item(200.0, 120.0, i % 5 == 0)
+	var saw_bomb_fragment := false
 	for item in main_shell.items:
 		var item_type := String(item.get("type", ""))
 		_assert(not item_type.begins_with("bullet_"), "Phase 3 drops should not include weapon-switch item %s" % item_type)
+		if item_type == "bomb_fragment":
+			saw_bomb_fragment = true
+	_assert(saw_bomb_fragment, "Phase 3 drops should include bomb_fragment so three-fragment bomb economy is reachable.")
 	main_shell.items = []
 	gm.lives = 3
 	gm.bombs = 1

@@ -1344,16 +1344,21 @@ func _check_collisions(is_boss: bool):
 			_collect(it)
 
 func _drop_item(x: float, y: float, strong: bool):
-	if strong: items.append({"alive":true,"collected":false,"x":x,"y":y,"type":"bomb_refill","radius":9.0,"vy":-2.5,"vx":randf_range(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":randf_range(0,TAU),"birth":15.0,"anim":randf_range(0,TAU)})
-	else:
-		var r: float = randf()
-		var t: String = "power"
-		if r < 0.40: t = "power"
-		elif r < 0.58: t = "point"
-		elif r < 0.68: t = "bomb_refill"
-		elif r < 0.72: t = "life_fragment"
+	var r: float = randf()
+	var t: String = "power"
+	if strong:
+		if r < 0.48: t = "bomb_refill"
+		elif r < 0.72: t = "bomb_fragment"
+		elif r < 0.86: t = "life_fragment"
 		else: t = "full_power"
-		items.append({"alive":true,"collected":false,"x":x,"y":y,"type":t,"radius":9.0,"vy":-2.5,"vx":randf_range(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":randf_range(0,TAU),"birth":15.0,"anim":randf_range(0,TAU)})
+	else:
+		if r < 0.36: t = "power"
+		elif r < 0.54: t = "point"
+		elif r < 0.64: t = "bomb_refill"
+		elif r < 0.74: t = "bomb_fragment"
+		elif r < 0.80: t = "life_fragment"
+		else: t = "full_power"
+	items.append({"alive":true,"collected":false,"x":x,"y":y,"type":t,"radius":9.0,"vy":-2.5,"vx":randf_range(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":randf_range(0,TAU),"birth":15.0,"anim":randf_range(0,TAU)})
 
 func _collect(it: Dictionary):
 	_collect_item(it)
@@ -1590,6 +1595,11 @@ func _draw():
 				var pts2: PackedVector2Array = PackedVector2Array()
 				for i in range(6): var a: float = TAU/6*i-PI/2; pts2.append(Vector2(ix+cos(a)*(9 if i%2==0 else 4.5),iy+sin(a)*(9 if i%2==0 else 4.5)))
 				draw_colored_polygon(pts2,Color.ORANGE)
+			"bomb_fragment":
+				var bomb_pts: PackedVector2Array = PackedVector2Array([Vector2(ix,iy-10),Vector2(ix+8,iy-2),Vector2(ix+5,iy+8),Vector2(ix-5,iy+8),Vector2(ix-8,iy-2)])
+				draw_colored_polygon(bomb_pts,Color(1.0,0.46,0.12))
+				draw_polyline(bomb_pts,Color.WHITE,1,true)
+				draw_circle(Vector2(ix,iy),3,Color(1.0,0.86,0.42))
 			"life", "life_fragment": draw_rect(Rect2(ix-9,iy-9,18,18),Color.PINK); draw_rect(Rect2(ix-9,iy-9,18,18),Color.WHITE,false,2)
 			_:
 				var bt: int = 0
