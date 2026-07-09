@@ -144,7 +144,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_03_background_set",
       "stage": 3,
       "stage_id": "mist_bamboo_grove"
@@ -159,7 +159,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_03_background_set",
       "stage": 3,
       "stage_id": "mist_bamboo_grove"
@@ -174,7 +174,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_03_background_set",
       "stage": 3,
       "stage_id": "mist_bamboo_grove"
@@ -189,7 +189,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_03_background_set",
       "stage": 3,
       "stage_id": "mist_bamboo_grove"
@@ -204,7 +204,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_04_background_set",
       "stage": 4,
       "stage_id": "tengu_mountain_path"
@@ -219,7 +219,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_04_background_set",
       "stage": 4,
       "stage_id": "tengu_mountain_path"
@@ -234,7 +234,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_04_background_set",
       "stage": 4,
       "stage_id": "tengu_mountain_path"
@@ -249,7 +249,7 @@
       "height": 960,
       "transparent": false,
       "readability_role": "low-contrast layer behind gameplay; no bullet-like dots or active-lane clutter",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "stage_04_background_set",
       "stage": 4,
       "stage_id": "tengu_mountain_path"
