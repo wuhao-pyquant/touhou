@@ -73,6 +73,34 @@ const STAGES := [
 	{"index": 6, "id": "night_festival_divine_realm", "display_name": "夜祭神域", "theme": "lantern_faith_domain", "midboss_id": "festival_fox_miko", "boss_id": "hyakki_night_festival_god"},
 ]
 
+const ENEMY_FAMILIES := [
+	{"id": "low_yokai", "display_name": "Low Yokai", "role": "tutorial pressure", "base_hp": 8.0, "radius": 14.0, "shoot_interval": 72.0, "default_pattern": "aimed", "bullet_family": "circle", "drop_tier": "light", "density": 0.65},
+	{"id": "fast_attacker", "display_name": "Fast Attacker", "role": "lane route check", "base_hp": 9.0, "radius": 13.0, "shoot_interval": 84.0, "default_pattern": "downward", "bullet_family": "needle", "drop_tier": "light", "density": 0.75},
+	{"id": "formation_shooter", "display_name": "Formation Shooter", "role": "synchronized rings and spreads", "base_hp": 14.0, "radius": 15.0, "shoot_interval": 66.0, "default_pattern": "ring", "bullet_family": "star", "drop_tier": "standard", "density": 1.0},
+	{"id": "elite_yokai", "display_name": "Elite Yokai", "role": "durable pressure source", "base_hp": 24.0, "radius": 18.0, "shoot_interval": 48.0, "default_pattern": "double_spread", "bullet_family": "talisman", "drop_tier": "rich", "density": 1.2},
+	{"id": "mechanism", "display_name": "Mechanism Enemy", "role": "stage object behavior", "base_hp": 18.0, "radius": 16.0, "shoot_interval": 60.0, "default_pattern": "wave", "bullet_family": "rice", "drop_tier": "mechanism", "density": 0.95},
+]
+
+const BULLET_FAMILY_FIELDS := {
+	"circle": {"radius": 5.0, "speed_multiplier": 1.0, "collision_radius": 5.0, "color": Color(0.78, 0.36, 1.0), "draw_group": "round_small"},
+	"rice": {"radius": 4.5, "speed_multiplier": 0.95, "collision_radius": 4.0, "color": Color(0.16, 0.86, 0.94), "draw_group": "rice_small"},
+	"butterfly": {"radius": 5.5, "speed_multiplier": 0.9, "collision_radius": 4.5, "color": Color(1.0, 0.35, 0.78), "draw_group": "butterfly"},
+	"needle": {"radius": 4.0, "speed_multiplier": 1.35, "collision_radius": 3.0, "color": Color(1.0, 0.72, 0.2), "draw_group": "needle"},
+	"talisman": {"radius": 5.0, "speed_multiplier": 1.05, "collision_radius": 4.5, "color": Color(0.95, 0.22, 0.25), "draw_group": "talisman"},
+	"star": {"radius": 5.0, "speed_multiplier": 1.0, "collision_radius": 4.5, "color": Color(0.45, 0.66, 1.0), "draw_group": "star"},
+	"laser": {"radius": 6.0, "speed_multiplier": 1.2, "collision_radius": 5.0, "color": Color(1.0, 0.42, 0.18), "draw_group": "laser_warning"},
+	"large_orb": {"radius": 10.0, "speed_multiplier": 0.65, "collision_radius": 8.0, "color": Color(0.62, 0.38, 1.0), "draw_group": "orb_large"},
+}
+
+const ITEM_TYPE_FIELDS := {
+	"power": {"base_score": 10, "collect_behavior": "power"},
+	"point": {"base_score": 10, "collect_behavior": "point"},
+	"bomb_fragment": {"base_score": 100, "collect_behavior": "bomb_fragment", "fragment_goal": 3},
+	"life_fragment": {"base_score": 500, "collect_behavior": "life_fragment", "fragment_goal": 5},
+	"night_festival_seal": {"base_score": 1000, "collect_behavior": "night_festival_seal"},
+	"full_power": {"base_score": 300, "collect_behavior": "full_power"},
+}
+
 const BULLET_FAMILIES := [
 	{"id": "circle", "display_name": "圆弹", "collision": "round", "role": "baseline_pressure"},
 	{"id": "rice", "display_name": "米弹", "collision": "round", "role": "woven_paths"},
@@ -93,17 +121,66 @@ const ITEM_TYPES := [
 	{"id": "full_power", "display_name": "满火力", "role": "recovery"},
 ]
 
+const DROP_TABLES := {
+	"light": [
+		{"id": "power", "weight": 0.34},
+		{"id": "point", "weight": 0.22},
+		{"id": "bomb_fragment", "weight": 0.14},
+		{"id": "life_fragment", "weight": 0.08},
+		{"id": "night_festival_seal", "weight": 0.12},
+		{"id": "full_power", "weight": 0.10},
+	],
+	"standard": [
+		{"id": "power", "weight": 0.28},
+		{"id": "point", "weight": 0.22},
+		{"id": "bomb_fragment", "weight": 0.18},
+		{"id": "life_fragment", "weight": 0.10},
+		{"id": "night_festival_seal", "weight": 0.14},
+		{"id": "full_power", "weight": 0.08},
+	],
+	"rich": [
+		{"id": "point", "weight": 0.20},
+		{"id": "bomb_refill", "weight": 0.20},
+		{"id": "bomb_fragment", "weight": 0.22},
+		{"id": "life_fragment", "weight": 0.14},
+		{"id": "night_festival_seal", "weight": 0.16},
+		{"id": "full_power", "weight": 0.08},
+	],
+	"mechanism": [
+		{"id": "power", "weight": 0.24},
+		{"id": "point", "weight": 0.18},
+		{"id": "bomb_fragment", "weight": 0.18},
+		{"id": "life_fragment", "weight": 0.10},
+		{"id": "night_festival_seal", "weight": 0.20},
+		{"id": "full_power", "weight": 0.10},
+	],
+}
+
+const SCORING_RULES := {
+	"enemy_defeat": 50,
+	"graze": 10,
+	"point_base": 10,
+	"top_collection_multiplier": 2.0,
+	"night_festival_seal_base": 1000,
+	"night_festival_seal_step": 0.05,
+	"spell_card_no_miss_bonus": 100000,
+	"spell_card_no_bomb_bonus": 50000,
+}
+
 func protagonists() -> Array:
 	return _protagonists_with_profiles()
 
 func stages() -> Array:
 	return STAGES.duplicate(true)
 
+func enemy_families() -> Array:
+	return ENEMY_FAMILIES.duplicate(true)
+
 func bullet_families() -> Array:
-	return BULLET_FAMILIES.duplicate(true)
+	return _decorate_entries(BULLET_FAMILIES, BULLET_FAMILY_FIELDS)
 
 func item_types() -> Array:
-	return ITEM_TYPES.duplicate(true)
+	return _decorate_entries(ITEM_TYPES, ITEM_TYPE_FIELDS)
 
 func stage_by_index(index: int) -> Dictionary:
 	for stage in STAGES:
@@ -117,6 +194,32 @@ func protagonist_by_id(id: String) -> Dictionary:
 			return protagonist.duplicate(true)
 	return {}
 
+func enemy_family_by_id(id: String) -> Dictionary:
+	for family in ENEMY_FAMILIES:
+		if String(family.id) == id:
+			return family.duplicate(true)
+	return {}
+
+func bullet_family_by_id(id: String) -> Dictionary:
+	for family in bullet_families():
+		if String(family.id) == id:
+			return family.duplicate(true)
+	return {}
+
+func item_type_by_id(id: String) -> Dictionary:
+	for item in item_types():
+		if String(item.id) == id:
+			return item.duplicate(true)
+	return {}
+
+func drop_table_for_tier(tier: String) -> Array:
+	if DROP_TABLES.has(tier):
+		return DROP_TABLES[tier].duplicate(true)
+	return DROP_TABLES["standard"].duplicate(true)
+
+func scoring_rules() -> Dictionary:
+	return SCORING_RULES.duplicate(true)
+
 func shot_profile_by_id(shot_id: String) -> Dictionary:
 	for protagonist in _protagonists_with_profiles():
 		for shot in protagonist.get("shot_types", []):
@@ -129,6 +232,16 @@ func bomb_profile_for_protagonist(protagonist_id: String) -> Dictionary:
 	if protagonist.is_empty():
 		return {}
 	return protagonist.get("bomb", {}).duplicate(true)
+
+func _decorate_entries(base_entries: Array, extra_fields: Dictionary) -> Array:
+	var result: Array = base_entries.duplicate(true)
+	for i in range(result.size()):
+		var entry: Dictionary = result[i]
+		var entry_id := String(entry.get("id", ""))
+		if extra_fields.has(entry_id):
+			entry.merge(extra_fields[entry_id], false)
+		result[i] = entry
+	return result
 
 func _protagonists_with_profiles() -> Array:
 	var result: Array = PROTAGONISTS.duplicate(true)
