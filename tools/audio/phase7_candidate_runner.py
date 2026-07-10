@@ -45,11 +45,14 @@ def build_command(
 def validate_wave(path: Path, expected_seconds: float) -> dict[str, Any]:
     if not path.is_file():
         raise ValueError(f"missing WAV output: {path}")
-    with wave.open(str(path), "rb") as handle:
-        channels = handle.getnchannels()
-        sample_width = handle.getsampwidth()
-        sample_rate = handle.getframerate()
-        frames = handle.getnframes()
+    try:
+        with wave.open(str(path), "rb") as handle:
+            channels = handle.getnchannels()
+            sample_width = handle.getsampwidth()
+            sample_rate = handle.getframerate()
+            frames = handle.getnframes()
+    except wave.Error as exc:
+        raise ValueError(f"invalid WAV output: {path}") from exc
     duration = frames / sample_rate if sample_rate else 0.0
     if channels != 2:
         raise ValueError(f"WAV must be stereo, got {channels} channels")
@@ -127,8 +130,9 @@ def run_catalog(
                     job["status"] = "skipped_valid"
                     write_json_atomic(manifest_path, manifest)
                     continue
-                except ValueError:
+                except ValueError as exc:
                     job["status"] = "existing_invalid"
+                    job["error"] = str(exc)
                     failures += 1
                     write_json_atomic(manifest_path, manifest)
                     continue
@@ -145,8 +149,16 @@ def run_catalog(
                 partial_path,
                 catalog["negative_prompt"],
             )
-            completed = subprocess.run(command, check=False)
-            job["exit_code"] = completed.returncode
+            try:
+                completed = subprocess.run(command, check=False)
+                job["exit_code"] = completed.returncode
+            except OSError as exc:
+                job["finished_at_unix"] = int(time.time())
+                job["status"] = "generation_failed"
+                job["error"] = str(exc)
+                failures += 1
+                write_json_atomic(manifest_path, manifest)
+                continue
             job["finished_at_unix"] = int(time.time())
             if completed.returncode != 0:
                 job["status"] = "generation_failed"

@@ -97,6 +97,13 @@ class Phase7CandidateRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "stereo"):
                 validate_wave(path, 1.0)
 
+    def test_wave_validation_rejects_corrupt_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "corrupt.wav"
+            path.write_bytes(b"not-a-wave-file")
+            with self.assertRaisesRegex(ValueError, "invalid WAV output"):
+                validate_wave(path, 30.0)
+
     def test_run_catalog_skips_existing_valid_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             staging = Path(temp_dir)
@@ -128,6 +135,64 @@ class Phase7CandidateRunnerTests(unittest.TestCase):
             self.assertFalse(final_path.exists())
             manifest = json.loads((staging / "reports" / "generation_manifest.json").read_text(encoding="utf-8"))
             self.assertEqual("generation_failed", manifest["jobs"][0]["status"])
+
+    def test_run_catalog_marks_corrupt_existing_final_invalid(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            staging = Path(temp_dir)
+            track_dir = staging / "bgm_candidates" / "stage1_mid"
+            track_dir.mkdir(parents=True)
+            final_path = track_dir / candidate_filename("stage1_mid", "A", 2026071101)
+            final_path.write_bytes(b"corrupt-existing-final")
+            with mock.patch.object(runner, "load_catalog", return_value=mini_catalog()):
+                exit_code = runner.run_catalog(
+                    Path("unused.json"), staging,
+                    [sys.executable, "-c", "raise SystemExit(99)"], False,
+                )
+            self.assertEqual(1, exit_code)
+            manifest = json.loads((staging / "reports" / "generation_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual("existing_invalid", manifest["jobs"][0]["status"])
+            self.assertEqual(1, manifest["failure_count"])
+
+    def test_run_catalog_marks_corrupt_generated_partial_validation_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            staging = Path(temp_dir)
+            fake_generator = staging / "fake_generator.py"
+            fake_generator.write_text(
+                "import sys\n"
+                "out=sys.argv[sys.argv.index('--out')+1]\n"
+                "open(out,'wb').write(b'corrupt-partial-output')\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(runner, "load_catalog", return_value=mini_catalog()):
+                exit_code = runner.run_catalog(
+                    Path("unused.json"), staging,
+                    [sys.executable, str(fake_generator)], False,
+                )
+            final_path = staging / "bgm_candidates" / "stage1_mid" / candidate_filename(
+                "stage1_mid", "A", 2026071101
+            )
+            self.assertEqual(1, exit_code)
+            self.assertFalse(final_path.exists())
+            manifest = json.loads((staging / "reports" / "generation_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual("validation_failed", manifest["jobs"][0]["status"])
+            self.assertIn("invalid WAV output", manifest["jobs"][0]["error"])
+            self.assertEqual(1, manifest["failure_count"])
+
+    def test_run_catalog_records_generator_oserror_as_generation_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            staging = Path(temp_dir)
+            with mock.patch.object(runner, "load_catalog", return_value=mini_catalog()):
+                with mock.patch.object(runner.subprocess, "run", side_effect=OSError("generator missing")):
+                    exit_code = runner.run_catalog(
+                        Path("unused.json"), staging,
+                        [sys.executable, "-c", "print('unused')"], False,
+                    )
+            self.assertEqual(1, exit_code)
+            manifest = json.loads((staging / "reports" / "generation_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual("generation_failed", manifest["jobs"][0]["status"])
+            self.assertIn("generator missing", manifest["jobs"][0]["error"])
+            self.assertIn("finished_at_unix", manifest["jobs"][0])
+            self.assertEqual(1, manifest["failure_count"])
 
     def test_successful_generation_atomically_publishes_final_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
