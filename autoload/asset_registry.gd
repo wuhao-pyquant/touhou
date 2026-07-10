@@ -185,12 +185,18 @@ func stage_background_layers(stage_id: Variant) -> Dictionary:
 func protagonist_assets(id: String = "") -> Dictionary:
 	if id == "":
 		return PHASE6_PROTAGONIST_ASSETS.duplicate(true)
-	return PROTAGONIST_ASSETS.get(id, PHASE6_PROTAGONIST_ASSETS.get(id, {})).duplicate(true)
+	var merged: Dictionary = PROTAGONIST_ASSETS.get(id, {}).duplicate(true)
+	for key in PHASE6_PROTAGONIST_ASSETS.get(id, {}):
+		merged[key] = PHASE6_PROTAGONIST_ASSETS[id][key]
+	return merged
 
 func boss_assets(id: String = "") -> Dictionary:
 	if id == "":
 		return PHASE6_BOSS_ASSETS.duplicate(true)
-	return BOSS_ASSETS.get(id, PHASE6_BOSS_ASSETS.get(id, {})).duplicate(true)
+	var merged: Dictionary = BOSS_ASSETS.get(id, {}).duplicate(true)
+	for key in PHASE6_BOSS_ASSETS.get(id, {}):
+		merged[key] = PHASE6_BOSS_ASSETS[id][key]
+	return merged
 
 func enemy_family_assets() -> Dictionary:
 	return PHASE6_ENEMY_FAMILY_ASSETS.duplicate(true)
