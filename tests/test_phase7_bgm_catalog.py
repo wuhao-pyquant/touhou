@@ -107,6 +107,40 @@ class Phase7BgmCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"defaults\.free_models must be true"):
             validate_catalog(data)
 
+    def test_validate_catalog_rejects_non_object_candidate_entry(self) -> None:
+        data = self.clone_data()
+        data["tracks"][0]["candidates"][0] = "A"
+
+        with self.assertRaisesRegex(ValueError, r"stage1_mid\.candidates\[0\] must be an object"):
+            validate_catalog(data)
+
+    def test_validate_catalog_rejects_candidate_missing_variant(self) -> None:
+        data = self.clone_data()
+        data["tracks"][0]["candidates"][0].pop("variant")
+
+        with self.assertRaisesRegex(ValueError, r"stage1_mid\.candidates\[0\]\.variant must be A or B"):
+            validate_catalog(data)
+
+    def test_validate_catalog_rejects_candidates_in_wrong_order(self) -> None:
+        data = self.clone_data()
+        data["tracks"][0]["candidates"] = [
+            {"variant": "B", "seed": 2026071101},
+            {"variant": "A", "seed": 2026071102},
+        ]
+
+        with self.assertRaisesRegex(ValueError, r"stage1_mid\.candidates must be ordered A, B"):
+            validate_catalog(data)
+
+    def test_validate_catalog_rejects_duplicate_candidate_variants(self) -> None:
+        data = self.clone_data()
+        data["tracks"][0]["candidates"] = [
+            {"variant": "A", "seed": 2026071101},
+            {"variant": "A", "seed": 2026071102},
+        ]
+
+        with self.assertRaisesRegex(ValueError, r"stage1_mid\.candidates must be ordered A, B"):
+            validate_catalog(data)
+
 
 if __name__ == "__main__":
     unittest.main()

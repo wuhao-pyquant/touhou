@@ -78,12 +78,20 @@ def validate_catalog(data: dict[str, Any]) -> None:
             isinstance(candidates, list) and len(candidates) == 2,
             f"{key}.candidates must contain A and B",
         )
+        candidate_variants: list[str] = []
+        for candidate_index, item in enumerate(candidates):
+            _require(isinstance(item, dict), f"{key}.candidates[{candidate_index}] must be an object")
+            variant = item.get("variant")
+            _require(
+                isinstance(variant, str) and variant in {"A", "B"},
+                f"{key}.candidates[{candidate_index}].variant must be A or B",
+            )
+            candidate_variants.append(variant)
         _require(
-            [item.get("variant") if isinstance(item, dict) else None for item in candidates] == ["A", "B"],
+            candidate_variants == ["A", "B"],
             f"{key}.candidates must be ordered A, B",
         )
         for item in candidates:
-            _require(isinstance(item, dict), f"{key}.candidates entries must be objects")
             seed = item.get("seed")
             _require(
                 isinstance(seed, int) and 0 < seed < 2_147_483_647,
