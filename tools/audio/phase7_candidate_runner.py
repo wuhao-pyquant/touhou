@@ -51,7 +51,7 @@ def validate_wave(path: Path, expected_seconds: float) -> dict[str, Any]:
             sample_width = handle.getsampwidth()
             sample_rate = handle.getframerate()
             frames = handle.getnframes()
-    except wave.Error as exc:
+    except (wave.Error, EOFError) as exc:
         raise ValueError(f"invalid WAV output: {path}") from exc
     duration = frames / sample_rate if sample_rate else 0.0
     if channels != 2:
