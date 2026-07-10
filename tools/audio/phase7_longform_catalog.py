@@ -107,6 +107,46 @@ def _require(condition: bool, message: str) -> None:
         raise ValueError(message)
 
 
+def _require_nonempty_string(value: Any, message: str) -> str:
+    _require(type(value) is str and bool(value.strip()), message)
+    return value
+
+
+def _require_exact_string(value: Any, expected: str, type_message: str, value_message: str) -> str:
+    actual = _require_nonempty_string(value, type_message)
+    _require(actual == expected, value_message)
+    return actual
+
+
+def _require_exact_int(value: Any, expected: int, type_message: str, value_message: str | None = None) -> int:
+    _require(type(value) is int, type_message)
+    if value_message is None:
+        value_message = type_message
+    _require(value == expected, value_message)
+    return value
+
+
+def _require_positive_int(value: Any, message: str) -> int:
+    _require(type(value) is int and value > 0, message)
+    return value
+
+
+def _require_exact_float(value: Any, expected: float, type_message: str, value_message: str | None = None) -> float:
+    _require(type(value) is float, type_message)
+    if value_message is None:
+        value_message = type_message
+    _require(value == expected, value_message)
+    return value
+
+
+def _require_exact_bool(value: Any, expected: bool, type_message: str, value_message: str | None = None) -> bool:
+    _require(type(value) is bool, type_message)
+    if value_message is None:
+        value_message = type_message
+    _require(value is expected, value_message)
+    return value
+
+
 def _is_lower_hex_sha256(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(ch in "0123456789abcdef" for ch in value)
 
@@ -127,24 +167,39 @@ def _require_exact_keys(obj: dict[str, Any], allowed_keys: set[str], subject: st
 def validate_longform_catalog(data: dict[str, Any]) -> None:
     _require(isinstance(data, dict), "catalog root must be an object")
     _require_exact_keys(data, CATALOG_ALLOWED_KEYS, "catalog")
-    schema_version = data.get("schema_version")
-    _require(type(schema_version) is int and schema_version == 1, "schema_version must be integer 1")
+    _require_exact_int(data.get("schema_version"), 1, "schema_version must be integer 1")
 
     defaults = data.get("defaults")
     _require(isinstance(defaults, dict), "defaults must be an object")
     _require_exact_keys(defaults, DEFAULT_ALLOWED_KEYS, "defaults")
-    for key, expected in APPROVED_DEFAULTS.items():
-        _require(defaults.get(key) == expected, f"defaults.{key} must be {expected}")
+    _require_exact_float(defaults.get("source_seconds"), 188.0, "defaults.source_seconds must be float 188.0", "defaults.source_seconds must be 188.0")
+    _require_exact_float(defaults.get("master_seconds"), 180.0, "defaults.master_seconds must be float 180.0", "defaults.master_seconds must be 180.0")
+    _require_exact_float(defaults.get("crossfade_seconds"), 8.0, "defaults.crossfade_seconds must be float 8.0", "defaults.crossfade_seconds must be 8.0")
+    _require_exact_float(defaults.get("guide_crossfade_seconds"), 1.0, "defaults.guide_crossfade_seconds must be float 1.0", "defaults.guide_crossfade_seconds must be 1.0")
+    _require_exact_int(defaults.get("steps"), 8, "defaults.steps must be integer 8", "defaults.steps must be 8")
+    _require_exact_float(defaults.get("cfg"), 2.0, "defaults.cfg must be float 2.0", "defaults.cfg must be 2.0")
+    _require_exact_float(defaults.get("init_noise_level"), 0.55, "defaults.init_noise_level must be float 0.55", "defaults.init_noise_level must be 0.55")
+    _require_exact_string(defaults.get("dit"), "medium", "defaults.dit must be string medium", "defaults.dit must be medium")
+    _require_exact_string(defaults.get("decoder"), "same-l", "defaults.decoder must be string same-l", "defaults.decoder must be same-l")
+    _require_exact_bool(defaults.get("free_models"), True, "defaults.free_models must be boolean True", "defaults.free_models must be true")
+    _require_exact_float(defaults.get("target_lufs"), -16.0, "defaults.target_lufs must be float -16.0", "defaults.target_lufs must be -16.0")
+    _require_exact_float(defaults.get("max_true_peak_dbtp"), -1.0, "defaults.max_true_peak_dbtp must be float -1.0", "defaults.max_true_peak_dbtp must be -1.0")
 
     phase7a_catalog = load_phase7a_catalog(PHASE7A_CATALOG_PATH)
 
-    negative_prompt = data.get("negative_prompt")
-    _require(
-        isinstance(negative_prompt, str) and negative_prompt == phase7a_catalog["negative_prompt"],
+    _require_exact_string(
+        data.get("negative_prompt"),
+        phase7a_catalog["negative_prompt"],
+        "negative_prompt must be a non-empty string",
         "negative_prompt must reuse the Phase 7A negative prompt exactly",
     )
 
-    _require(data.get("longform_structure_prompt") == APPROVED_STRUCTURE_PROMPT, "longform_structure_prompt must match the approved six-section wording")
+    _require_exact_string(
+        data.get("longform_structure_prompt"),
+        APPROVED_STRUCTURE_PROMPT,
+        "longform_structure_prompt must be a non-empty string",
+        "longform_structure_prompt must match the approved six-section wording",
+    )
 
     macro_sections = data.get("macro_sections")
     _require(isinstance(macro_sections, list), "macro_sections must be an array")
@@ -152,7 +207,25 @@ def validate_longform_catalog(data: dict[str, Any]) -> None:
     for index, section in enumerate(macro_sections):
         _require(isinstance(section, dict), f"macro_sections[{index}] must be an object")
         _require_exact_keys(section, MACRO_SECTION_ALLOWED_KEYS, f"macro_sections[{index}]")
-    _require(macro_sections == APPROVED_MACRO_SECTIONS, "macro_sections must match the approved six-section plan")
+        approved_section = APPROVED_MACRO_SECTIONS[index]
+        _require_exact_string(
+            section.get("key"),
+            approved_section["key"],
+            f"macro_sections[{index}].key must be string {approved_section['key']}",
+            "macro_sections must match the approved six-section plan",
+        )
+        _require_exact_string(
+            section.get("label"),
+            approved_section["label"],
+            f"macro_sections[{index}].label must be string {approved_section['label']}",
+            "macro_sections must match the approved six-section plan",
+        )
+        _require_exact_float(
+            section.get("effective_seconds"),
+            approved_section["effective_seconds"],
+            f"macro_sections[{index}].effective_seconds must be float {approved_section['effective_seconds']}",
+            "macro_sections must match the approved six-section plan",
+        )
 
     tracks = data.get("tracks")
     _require(isinstance(tracks, list), "tracks must be an array")
@@ -165,20 +238,36 @@ def validate_longform_catalog(data: dict[str, Any]) -> None:
         key = track["key"]
         _require_exact_keys(track, TRACK_ALLOWED_KEYS, key)
         phase7a_track = phase7a_tracks[key]
-        _require(track.get("stage") == phase7a_track["stage"], f"{key}.stage must match Phase 7A")
-        _require(track.get("phase") == phase7a_track["phase"], f"{key}.phase must match Phase 7A")
-        _require(track.get("title_zh") == phase7a_track["title_zh"], f"{key}.title_zh must match Phase 7A")
-        _require(track.get("bpm") == phase7a_track["bpm"], f"{key}.bpm must match Phase 7A")
-        _require(track.get("voice_policy") == phase7a_track["voice_policy"], f"{key}.voice_policy must match Phase 7A")
-        _require(track.get("prompt") == phase7a_track["prompt"], f"{key}.prompt must reuse the Phase 7A prompt exactly")
-
-        _require(track.get("selected_variant") == "B", f"{key}.selected_variant must be B")
-        seed = track.get("selected_seed")
-        _require(type(seed) is int and seed > 0, f"tracks[{index}].selected_seed must be a positive integer")
+        _require_exact_string(track.get("key"), key, f"{key}.key must be string {key}", "tracks must contain the twelve approved keys in stage order")
+        _require_exact_int(track.get("stage"), phase7a_track["stage"], f"{key}.stage must be integer {phase7a_track['stage']}", f"{key}.stage must match Phase 7A")
+        _require_exact_string(track.get("phase"), phase7a_track["phase"], f"{key}.phase must be string {phase7a_track['phase']}", f"{key}.phase must match Phase 7A")
+        _require_exact_string(track.get("title_zh"), phase7a_track["title_zh"], f"{key}.title_zh must be string {phase7a_track['title_zh']}", f"{key}.title_zh must match Phase 7A")
+        _require_exact_int(track.get("bpm"), phase7a_track["bpm"], f"{key}.bpm must be integer {phase7a_track['bpm']}", f"{key}.bpm must match Phase 7A")
+        _require_exact_string(
+            track.get("voice_policy"),
+            phase7a_track["voice_policy"],
+            f"{key}.voice_policy must be string {phase7a_track['voice_policy']}",
+            f"{key}.voice_policy must match Phase 7A",
+        )
+        _require_exact_string(
+            track.get("prompt"),
+            phase7a_track["prompt"],
+            f"{key}.prompt must be string {phase7a_track['prompt']}",
+            f"{key}.prompt must reuse the Phase 7A prompt exactly",
+        )
+        _require_exact_string(
+            track.get("longform_development"),
+            APPROVED_TRACK_DEVELOPMENT[key],
+            f"{key}.longform_development must be string {APPROVED_TRACK_DEVELOPMENT[key]}",
+            f"{key}.longform_development must match the approved deterministic wording",
+        )
+        _require_exact_string(track.get("selected_variant"), "B", f"{key}.selected_variant must be string B", f"{key}.selected_variant must be B")
+        seed = _require_positive_int(track.get("selected_seed"), f"tracks[{index}].selected_seed must be a positive integer")
+        _require(isinstance(track.get("selected_sha256"), str), f"{key}.selected_sha256 must be 64 lowercase hex")
         _require(_is_lower_hex_sha256(track.get("selected_sha256")), f"{key}.selected_sha256 must be 64 lowercase hex")
         _require(
-            track.get("longform_development") == APPROVED_TRACK_DEVELOPMENT[key],
-            f"{key}.longform_development must match the approved deterministic wording",
+            seed == phase7a_track["candidates"][1]["seed"],
+            f"{key}.selected_seed must match the approved B seed",
         )
 
 

@@ -324,6 +324,39 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"stage1_mid\.selected_sha256 must be 64 lowercase hex"):
             validate_longform_catalog(data)
 
+    def test_validate_longform_catalog_rejects_scalar_type_coercions(self) -> None:
+        cases = [
+            ("schema_version bool", lambda data: data.__setitem__("schema_version", True), r"schema_version must be integer 1"),
+            ("defaults.source_seconds int", lambda data: data["defaults"].__setitem__("source_seconds", 188), r"defaults\.source_seconds must be float 188\.0"),
+            ("defaults.master_seconds bool", lambda data: data["defaults"].__setitem__("master_seconds", True), r"defaults\.master_seconds must be float 180\.0"),
+            ("defaults.steps bool", lambda data: data["defaults"].__setitem__("steps", True), r"defaults\.steps must be integer 8"),
+            ("defaults.cfg int", lambda data: data["defaults"].__setitem__("cfg", 2), r"defaults\.cfg must be float 2\.0"),
+            ("defaults.init_noise_level int", lambda data: data["defaults"].__setitem__("init_noise_level", 0), r"defaults\.init_noise_level must be float 0\.55"),
+            ("defaults.dit int", lambda data: data["defaults"].__setitem__("dit", 9), r"defaults\.dit must be string medium"),
+            ("defaults.free_models int", lambda data: data["defaults"].__setitem__("free_models", 1), r"defaults\.free_models must be boolean True"),
+            ("defaults.target_lufs int", lambda data: data["defaults"].__setitem__("target_lufs", -16), r"defaults\.target_lufs must be float -16\.0"),
+            ("macro key int", lambda data: data["macro_sections"][0].__setitem__("key", 7), r"macro_sections\[0\]\.key must be string theme_establishment"),
+            ("macro label bool", lambda data: data["macro_sections"][0].__setitem__("label", False), r"macro_sections\[0\]\.label must be string theme establishment"),
+            ("macro effective_seconds int", lambda data: data["macro_sections"][0].__setitem__("effective_seconds", 30), r"macro_sections\[0\]\.effective_seconds must be float 30\.0"),
+            ("track stage bool", lambda data: data["tracks"][0].__setitem__("stage", False), r"stage1_mid\.stage must be integer 1"),
+            ("track phase int", lambda data: data["tracks"][0].__setitem__("phase", 3), r"stage1_mid\.phase must be string mid"),
+            ("track title_zh int", lambda data: data["tracks"][0].__setitem__("title_zh", 5), r"stage1_mid\.title_zh must be string .+"),
+            ("track bpm bool", lambda data: data["tracks"][0].__setitem__("bpm", True), r"stage1_mid\.bpm must be integer 150"),
+            ("track voice_policy bool", lambda data: data["tracks"][0].__setitem__("voice_policy", True), r"stage1_mid\.voice_policy must be string instrumental_only"),
+            ("track prompt int", lambda data: data["tracks"][0].__setitem__("prompt", 5), r"stage1_mid\.prompt must be string .+"),
+            ("track longform_development bool", lambda data: data["tracks"][0].__setitem__("longform_development", True), r"stage1_mid\.longform_development must be string .+"),
+            ("track selected_variant bool", lambda data: data["tracks"][0].__setitem__("selected_variant", False), r"stage1_mid\.selected_variant must be string B"),
+            ("track selected_seed bool", lambda data: data["tracks"][0].__setitem__("selected_seed", True), r"tracks\[0\]\.selected_seed must be a positive integer"),
+            ("track selected_sha256 int", lambda data: data["tracks"][0].__setitem__("selected_sha256", 9), r"stage1_mid\.selected_sha256 must be 64 lowercase hex"),
+        ]
+
+        for label, mutate, pattern in cases:
+            with self.subTest(label=label):
+                data = self.clone_data()
+                mutate(data)
+                with self.assertRaisesRegex(ValueError, pattern):
+                    validate_longform_catalog(data)
+
     def test_validate_external_selection_rejects_wrong_selection_path(self) -> None:
         catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
         self.addCleanup(temp_dir.cleanup)
