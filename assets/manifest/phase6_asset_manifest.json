@@ -1014,7 +1014,7 @@
       "height": 256,
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "enemy_family_sprites"
     },
     {
@@ -1027,7 +1027,7 @@
       "height": 256,
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "enemy_family_sprites"
     },
     {
@@ -1040,7 +1040,7 @@
       "height": 256,
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "enemy_family_sprites"
     },
     {
@@ -1053,7 +1053,7 @@
       "height": 256,
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "enemy_family_sprites"
     },
     {
@@ -1066,7 +1066,7 @@
       "height": 256,
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "enemy_family_sprites"
     },
     {
@@ -1079,7 +1079,7 @@
       "height": 256,
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "enemy_family_sprites"
     },
     {
@@ -1092,7 +1092,7 @@
       "height": 256,
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "enemy_family_sprites"
     },
     {
@@ -1105,7 +1105,7 @@
       "height": 256,
       "transparent": true,
       "readability_role": "enemy family silhouette is distinct from bullets, items, and player-owned effects",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "enemy_family_sprites"
     },
     {
@@ -1118,7 +1118,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1131,7 +1131,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1144,7 +1144,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1157,7 +1157,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1170,7 +1170,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1183,7 +1183,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1196,7 +1196,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1209,7 +1209,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1222,7 +1222,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1235,7 +1235,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1248,7 +1248,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1261,7 +1261,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1274,7 +1274,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1287,7 +1287,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1300,7 +1300,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1313,7 +1313,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1326,7 +1326,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1339,7 +1339,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "projectile family keeps clean center, crisp rim, and readable collision expectation",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "bullet_family_atlases"
     },
     {
@@ -1352,7 +1352,7 @@
       "height": 960,
       "transparent": true,
       "readability_role": "bomb plate reads as player-owned and does not obscure post-clear danger visibility",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_mika_shot_and_bomb",
       "protagonist_id": "miko"
     },
@@ -1366,7 +1366,7 @@
       "height": 960,
       "transparent": true,
       "readability_role": "bomb plate reads as player-owned and does not obscure post-clear danger visibility",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_mika_shot_and_bomb",
       "protagonist_id": "miko"
     },
@@ -1380,7 +1380,7 @@
       "height": 960,
       "transparent": true,
       "readability_role": "bomb plate reads as player-owned and does not obscure post-clear danger visibility",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_mika_shot_and_bomb",
       "protagonist_id": "miko"
     },
@@ -1394,7 +1394,7 @@
       "height": 960,
       "transparent": true,
       "readability_role": "bomb plate reads as player-owned and does not obscure post-clear danger visibility",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_ren_assets",
       "protagonist_id": "magician"
     },
@@ -1408,7 +1408,7 @@
       "height": 960,
       "transparent": true,
       "readability_role": "bomb plate reads as player-owned and does not obscure post-clear danger visibility",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_ren_assets",
       "protagonist_id": "magician"
     },
@@ -1422,7 +1422,7 @@
       "height": 960,
       "transparent": true,
       "readability_role": "bomb plate reads as player-owned and does not obscure post-clear danger visibility",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_ren_assets",
       "protagonist_id": "magician"
     },
@@ -1436,7 +1436,7 @@
       "height": 960,
       "transparent": true,
       "readability_role": "bomb plate reads as player-owned and does not obscure post-clear danger visibility",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_shiori_assets",
       "protagonist_id": "swordswoman"
     },
@@ -1450,7 +1450,7 @@
       "height": 960,
       "transparent": true,
       "readability_role": "bomb plate reads as player-owned and does not obscure post-clear danger visibility",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_shiori_assets",
       "protagonist_id": "swordswoman"
     },
@@ -1464,7 +1464,7 @@
       "height": 960,
       "transparent": true,
       "readability_role": "bomb plate reads as player-owned and does not obscure post-clear danger visibility",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "protagonist_shiori_assets",
       "protagonist_id": "swordswoman"
     },
@@ -1478,7 +1478,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "collectible icon silhouette remains distinct from every hostile bullet family",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "item_icons"
     },
     {
@@ -1491,7 +1491,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "collectible icon silhouette remains distinct from every hostile bullet family",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "item_icons"
     },
     {
@@ -1504,7 +1504,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "collectible icon silhouette remains distinct from every hostile bullet family",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "item_icons"
     },
     {
@@ -1517,7 +1517,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "collectible icon silhouette remains distinct from every hostile bullet family",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "item_icons"
     },
     {
@@ -1530,7 +1530,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "collectible icon silhouette remains distinct from every hostile bullet family",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "item_icons"
     },
     {
@@ -1543,7 +1543,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "collectible icon silhouette remains distinct from every hostile bullet family",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "item_icons"
     },
     {
@@ -1556,7 +1556,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "collectible icon silhouette remains distinct from every hostile bullet family",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "item_icons"
     },
     {
@@ -1569,7 +1569,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "collectible icon silhouette remains distinct from every hostile bullet family",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "item_icons"
     },
     {
@@ -1582,7 +1582,7 @@
       "height": 720,
       "transparent": true,
       "readability_role": "UI art preserves text-safe areas, hitbox visibility, and active danger clarity",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "ui_key_art"
     },
     {
@@ -1595,7 +1595,7 @@
       "height": 960,
       "transparent": true,
       "readability_role": "UI art preserves text-safe areas, hitbox visibility, and active danger clarity",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "ui_key_art"
     },
     {
@@ -1608,7 +1608,7 @@
       "height": 960,
       "transparent": true,
       "readability_role": "UI art preserves text-safe areas, hitbox visibility, and active danger clarity",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "ui_key_art"
     },
     {
@@ -1621,7 +1621,7 @@
       "height": 960,
       "transparent": true,
       "readability_role": "UI art preserves text-safe areas, hitbox visibility, and active danger clarity",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "ui_key_art"
     },
     {
@@ -1634,7 +1634,7 @@
       "height": 192,
       "transparent": true,
       "readability_role": "UI art preserves text-safe areas, hitbox visibility, and active danger clarity",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "ui_key_art"
     },
     {
@@ -1647,7 +1647,7 @@
       "height": 128,
       "transparent": true,
       "readability_role": "UI art preserves text-safe areas, hitbox visibility, and active danger clarity",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "ui_key_art"
     },
     {
@@ -1660,7 +1660,7 @@
       "height": 220,
       "transparent": true,
       "readability_role": "UI art preserves text-safe areas, hitbox visibility, and active danger clarity",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "ui_key_art"
     },
     {
@@ -1673,7 +1673,7 @@
       "height": 960,
       "transparent": true,
       "readability_role": "UI art preserves text-safe areas, hitbox visibility, and active danger clarity",
-      "status": "pending_generation",
+      "status": "accepted",
       "prompt_id": "ui_key_art"
     }
   ]
