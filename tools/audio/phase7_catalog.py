@@ -29,6 +29,7 @@ def validate_catalog(data: dict[str, Any]) -> None:
     _require(defaults.get("cfg") == 2.0, "defaults.cfg must be 2.0")
     _require(defaults.get("dit") == "medium", "defaults.dit must be medium")
     _require(defaults.get("decoder") == "same-l", "defaults.decoder must be same-l")
+    _require(defaults.get("free_models") is True, "defaults.free_models must be true")
     _require(
         isinstance(data.get("negative_prompt"), str) and data["negative_prompt"].strip(),
         "negative_prompt must be a non-empty string",
@@ -36,14 +37,17 @@ def validate_catalog(data: dict[str, Any]) -> None:
 
     tracks = data.get("tracks")
     _require(isinstance(tracks, list), "tracks must be an array")
-    _require(
-        [track.get("key") for track in tracks] == TRACK_KEYS,
-        "tracks must contain the twelve approved keys in stage order",
-    )
-
+    track_keys: list[str] = []
     all_seeds: set[int] = set()
-    for track in tracks:
-        key = track["key"]
+    for index, track in enumerate(tracks):
+        _require(isinstance(track, dict), f"tracks[{index}] must be an object")
+        raw_key = track.get("key")
+        _require(
+            isinstance(raw_key, str) and raw_key.strip(),
+            f"tracks[{index}].key must be a non-empty string",
+        )
+        key = raw_key
+        track_keys.append(key)
         stage = track.get("stage")
         phase = track.get("phase")
         _require(isinstance(stage, int) and 1 <= stage <= 6, f"{key}.stage must be 1..6")
@@ -60,8 +64,13 @@ def validate_catalog(data: dict[str, Any]) -> None:
         _require(track.get("voice_policy") in VOICE_POLICIES, f"{key}.voice_policy is invalid")
         expected_voice = "instrumental_only" if stage <= 4 else "restrained_wordless_only"
         _require(track["voice_policy"] == expected_voice, f"{key}.voice_policy must be {expected_voice}")
+        prompt = track.get("prompt")
         _require(
-            isinstance(track.get("prompt"), str) and len(track["prompt"]) >= 120,
+            isinstance(prompt, str) and prompt.strip(),
+            f"{key}.prompt must be a non-empty string",
+        )
+        _require(
+            len(prompt) >= 120,
             f"{key}.prompt is too short",
         )
         candidates = track.get("candidates")
@@ -70,10 +79,11 @@ def validate_catalog(data: dict[str, Any]) -> None:
             f"{key}.candidates must contain A and B",
         )
         _require(
-            [item.get("variant") for item in candidates] == ["A", "B"],
+            [item.get("variant") if isinstance(item, dict) else None for item in candidates] == ["A", "B"],
             f"{key}.candidates must be ordered A, B",
         )
         for item in candidates:
+            _require(isinstance(item, dict), f"{key}.candidates entries must be objects")
             seed = item.get("seed")
             _require(
                 isinstance(seed, int) and 0 < seed < 2_147_483_647,
@@ -81,6 +91,11 @@ def validate_catalog(data: dict[str, Any]) -> None:
             )
             _require(seed not in all_seeds, f"duplicate seed {seed}")
             all_seeds.add(seed)
+
+    _require(
+        track_keys == TRACK_KEYS,
+        "tracks must contain the twelve approved keys in stage order",
+    )
 
 
 def load_catalog(path: Path) -> dict[str, Any]:

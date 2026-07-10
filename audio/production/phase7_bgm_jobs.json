@@ -87,7 +87,7 @@
       "title_zh": "改写天幕的山风",
       "bpm": 184,
       "voice_policy": "instrumental_only",
-      "prompt": "Original instrumental Japanese night-festival fantasy danmaku boss music, exact 184 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, direct mountain wind tengu aerial duel, memorable independent melody, tremolo shamisen-like plucks, forceful taiko, fast electronic rock guitar, driving bass and sharp but controlled synth lead, strictly instrumental, no choir, no vocal, preserve transient space for laser warning SFX and player hit SFX",
+      "prompt": "Original instrumental Japanese night-festival fantasy danmaku boss music, exact 184 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, direct mountain wind tengu aerial duel, memorable independent melody, tremolo shamisen-like plucks, forceful taiko, fast electronic rock guitar, driving bass and sharp but controlled synth lead, strictly instrumental, no choir, no vocal, preserve transient space for laser warning and player hit SFX",
       "candidates": [{"variant": "A", "seed": 2026071411}, {"variant": "B", "seed": 2026071412}]
     },
     {
@@ -127,7 +127,7 @@
       "title_zh": "百鬼夜祭神",
       "bpm": 194,
       "voice_policy": "restrained_wordless_only",
-      "prompt": "Original Japanese night-festival fantasy danmaku final-boss music, exact 194 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, divine god of the unending night festival, memorable independent final melody, forceful taiko, electronic rock guitar and bass, festival flute, shamisen-like plucks, brilliant synth lead and restrained wordless choir only, no lyrics, no speech, dramatic but clean mix with explicit transient space for spell, laser warning SFX, deathbomb and player hit SFX",
+      "prompt": "Original Japanese night-festival fantasy danmaku final-boss music, exact 194 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, divine god of the unending night festival, memorable independent final melody, forceful taiko, electronic rock guitar and bass, festival flute, shamisen-like plucks, brilliant synth lead and restrained wordless choir only, no lyrics, no speech, dramatic but clean mix with explicit transient space for spell, laser warning, deathbomb and player hit SFX",
       "candidates": [{"variant": "A", "seed": 2026071611}, {"variant": "B", "seed": 2026071612}]
     }
   ]
