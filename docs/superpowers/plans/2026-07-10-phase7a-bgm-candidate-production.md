@@ -1190,7 +1190,7 @@ Run:
 
 ```powershell
 $root = 'Z:\temp\godot_touhou_phase7'
-$manifest = Get-Content "$root\reports\generation_manifest.json" -Raw | ConvertFrom-Json
+$manifest = Get-Content "$root\reports\generation_manifest.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($manifest.failure_count -ne 0) { throw "Generation failures: $($manifest.failure_count)" }
 $valid = @($manifest.jobs | Where-Object { $_.status -in @('generated','skipped_valid') })
 if ($valid.Count -ne 24) { throw "Expected 24 generated jobs, got $($valid.Count)" }
