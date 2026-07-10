@@ -58,6 +58,30 @@ APPROVED_TRACK_DEVELOPMENT = {
     "stage6_boss": "Keep the final-divine confrontation breadth, let each section escalate the ritual scale without losing melodic focus, and make the return feel inevitable while preserving deathbomb, spell, and laser-warning clarity.",
 }
 
+CATALOG_ALLOWED_KEYS = {
+    "schema_version",
+    "defaults",
+    "negative_prompt",
+    "longform_structure_prompt",
+    "macro_sections",
+    "tracks",
+}
+DEFAULT_ALLOWED_KEYS = set(APPROVED_DEFAULTS.keys())
+MACRO_SECTION_ALLOWED_KEYS = {"key", "label", "effective_seconds"}
+TRACK_ALLOWED_KEYS = {
+    "key",
+    "stage",
+    "phase",
+    "title_zh",
+    "bpm",
+    "voice_policy",
+    "prompt",
+    "longform_development",
+    "selected_variant",
+    "selected_seed",
+    "selected_sha256",
+}
+
 
 def _require(condition: bool, message: str) -> None:
     if not condition:
@@ -76,14 +100,26 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _require_exact_keys(obj: dict[str, Any], allowed_keys: set[str], subject: str) -> None:
+    unknown_keys = sorted(set(obj.keys()) - allowed_keys)
+    _require(not unknown_keys, f"{subject} contains unknown keys: {', '.join(unknown_keys)}")
+    missing_keys = sorted(allowed_keys - set(obj.keys()))
+    _require(not missing_keys, f"{subject} is missing keys: {', '.join(missing_keys)}")
+
+
+def _normalized_path(path: Path) -> Path:
+    return Path(path).resolve(strict=False)
+
+
 def validate_longform_catalog(data: dict[str, Any]) -> None:
     _require(isinstance(data, dict), "catalog root must be an object")
+    _require_exact_keys(data, CATALOG_ALLOWED_KEYS, "catalog")
     schema_version = data.get("schema_version")
     _require(type(schema_version) is int and schema_version == 1, "schema_version must be integer 1")
 
     defaults = data.get("defaults")
     _require(isinstance(defaults, dict), "defaults must be an object")
-    _require(set(defaults.keys()) == set(APPROVED_DEFAULTS.keys()), "defaults must contain exactly the approved keys")
+    _require_exact_keys(defaults, DEFAULT_ALLOWED_KEYS, "defaults")
     for key, expected in APPROVED_DEFAULTS.items():
         _require(defaults.get(key) == expected, f"defaults.{key} must be {expected}")
 
@@ -95,11 +131,15 @@ def validate_longform_catalog(data: dict[str, Any]) -> None:
         "negative_prompt must reuse the Phase 7A negative prompt exactly",
     )
 
-    _require(
-        data.get("longform_structure_prompt") == APPROVED_STRUCTURE_PROMPT,
-        "longform_structure_prompt must match the approved six-section wording",
-    )
-    _require(data.get("macro_sections") == APPROVED_MACRO_SECTIONS, "macro_sections must match the approved six-section plan")
+    _require(data.get("longform_structure_prompt") == APPROVED_STRUCTURE_PROMPT, "longform_structure_prompt must match the approved six-section wording")
+
+    macro_sections = data.get("macro_sections")
+    _require(isinstance(macro_sections, list), "macro_sections must be an array")
+    _require(len(macro_sections) == len(APPROVED_MACRO_SECTIONS), "macro_sections must contain six entries")
+    for index, section in enumerate(macro_sections):
+        _require(isinstance(section, dict), f"macro_sections[{index}] must be an object")
+        _require_exact_keys(section, MACRO_SECTION_ALLOWED_KEYS, f"macro_sections[{index}]")
+    _require(macro_sections == APPROVED_MACRO_SECTIONS, "macro_sections must match the approved six-section plan")
 
     tracks = data.get("tracks")
     _require(isinstance(tracks, list), "tracks must be an array")
@@ -110,6 +150,7 @@ def validate_longform_catalog(data: dict[str, Any]) -> None:
     for index, track in enumerate(tracks):
         _require(isinstance(track, dict), f"tracks[{index}] must be an object")
         key = track["key"]
+        _require_exact_keys(track, TRACK_ALLOWED_KEYS, key)
         phase7a_track = phase7a_tracks[key]
         _require(track.get("stage") == phase7a_track["stage"], f"{key}.stage must match Phase 7A")
         _require(track.get("phase") == phase7a_track["phase"], f"{key}.phase must match Phase 7A")
@@ -172,15 +213,18 @@ def validate_external_selection(catalog: dict[str, Any], selection_path: Path, s
         _require(sha256 == job["selected_sha256"], f"selection.{key}.sha256 does not match catalog selected_sha256")
         _require(record.get("qa_status") == "pass", f"selection.{key}.qa_status must be pass")
         _require(record.get("status") == "selected", f"selection.{key}.status must be selected")
+        expected_candidate_filename = f"bgm_{key}_B_seed-{seed}.wav"
+        expected_candidate_path = staging_root / "bgm_candidates" / key / expected_candidate_filename
+        expected_candidate_path_macos = f"/Volumes/personal_folder/temp/godot_touhou_phase7/bgm_candidates/{key}/{expected_candidate_filename}"
+        candidate_path_macos = record.get("candidate_path_macos")
         _require(
-            isinstance(record.get("candidate_path_macos"), str) and record["candidate_path_macos"].strip(),
-            f"selection.{key}.candidate_path_macos must be a non-empty string",
+            isinstance(candidate_path_macos, str) and candidate_path_macos == expected_candidate_path_macos,
+            f"selection.{key}.candidate_path_macos must be {expected_candidate_path_macos}",
         )
 
-        expected_candidate_path = staging_root / "bgm_candidates" / key / f"bgm_{key}_B_seed-{seed}.wav"
         candidate_path_windows = record.get("candidate_path_windows")
         _require(
-            isinstance(candidate_path_windows, str) and Path(candidate_path_windows) == expected_candidate_path,
+            isinstance(candidate_path_windows, str) and _normalized_path(Path(candidate_path_windows)) == _normalized_path(expected_candidate_path),
             f"selection.{key}.candidate_path_windows must be {expected_candidate_path}",
         )
         _require(expected_candidate_path.is_file(), f"selection.{key}.candidate_path_windows file is missing")

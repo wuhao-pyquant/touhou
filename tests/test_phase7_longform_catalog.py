@@ -204,7 +204,7 @@ class Phase7LongformCatalogTests(unittest.TestCase):
                     "variant": "B",
                     "seed": seed,
                     "candidate_path_windows": str(candidate_path),
-                    "candidate_path_macos": f"/Volumes/personal_folder/temp/{key}/bgm_{key}_B_seed-{seed}.wav",
+                    "candidate_path_macos": f"/Volumes/personal_folder/temp/godot_touhou_phase7/bgm_candidates/{key}/bgm_{key}_B_seed-{seed}.wav",
                     "sha256": sha256,
                     "qa_status": "pass",
                     "status": "selected",
@@ -274,10 +274,22 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"stage1_mid\.selected_variant must be B"):
             validate_longform_catalog(data)
 
+    def test_validate_longform_catalog_rejects_unexpected_root_key(self) -> None:
+        data = self.clone_data()
+        data["unexpected_root"] = True
+        with self.assertRaisesRegex(ValueError, r"catalog contains unknown keys: unexpected_root"):
+            validate_longform_catalog(data)
+
     def test_validate_longform_catalog_rejects_wrong_source_seconds_default(self) -> None:
         data = self.clone_data()
         data["defaults"]["source_seconds"] = 187.0
         with self.assertRaisesRegex(ValueError, r"defaults\.source_seconds must be 188\.0"):
+            validate_longform_catalog(data)
+
+    def test_validate_longform_catalog_rejects_unexpected_defaults_key(self) -> None:
+        data = self.clone_data()
+        data["defaults"]["unexpected_default"] = "value"
+        with self.assertRaisesRegex(ValueError, r"defaults contains unknown keys: unexpected_default"):
             validate_longform_catalog(data)
 
     def test_validate_longform_catalog_rejects_wrong_macro_section_duration(self) -> None:
@@ -286,10 +298,22 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"macro_sections must match the approved six-section plan"):
             validate_longform_catalog(data)
 
+    def test_validate_longform_catalog_rejects_unexpected_macro_section_key(self) -> None:
+        data = self.clone_data()
+        data["macro_sections"][0]["unexpected_section"] = True
+        with self.assertRaisesRegex(ValueError, r"macro_sections\[0\] contains unknown keys: unexpected_section"):
+            validate_longform_catalog(data)
+
     def test_validate_longform_catalog_rejects_prompt_drift_from_phase7a(self) -> None:
         data = self.clone_data()
         data["tracks"][0]["prompt"] = data["tracks"][0]["prompt"] + " extra drift"
         with self.assertRaisesRegex(ValueError, r"stage1_mid\.prompt must reuse the Phase 7A prompt exactly"):
+            validate_longform_catalog(data)
+
+    def test_validate_longform_catalog_rejects_unexpected_track_key(self) -> None:
+        data = self.clone_data()
+        data["tracks"][0]["protected_reference"] = "external"
+        with self.assertRaisesRegex(ValueError, r"stage1_mid contains unknown keys: protected_reference"):
             validate_longform_catalog(data)
 
     def test_validate_longform_catalog_rejects_invalid_selected_sha(self) -> None:
@@ -349,6 +373,18 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         data["tracks"][0]["candidate_path_windows"] = str(staging_root / "wrong" / "candidate.wav")
         selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, r"selection\.stage1_mid\.candidate_path_windows must be .*bgm_stage1_mid_B_seed-2026071102\.wav"):
+            validate_external_selection(catalog, selection_path, staging_root)
+
+    def test_validate_external_selection_rejects_candidate_path_macos_mismatch(self) -> None:
+        catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
+        self.addCleanup(temp_dir.cleanup)
+        data = json.loads(selection_path.read_text(encoding="utf-8"))
+        data["tracks"][0]["candidate_path_macos"] = "/Volumes/personal_folder/temp/godot_touhou_phase7/wrong/stage1_mid.wav"
+        selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        with self.assertRaisesRegex(
+            ValueError,
+            r"selection\.stage1_mid\.candidate_path_macos must be /Volumes/personal_folder/temp/godot_touhou_phase7/bgm_candidates/stage1_mid/bgm_stage1_mid_B_seed-2026071102\.wav",
+        ):
             validate_external_selection(catalog, selection_path, staging_root)
 
     def test_validate_external_selection_rejects_qa_status_mismatch(self) -> None:
