@@ -217,6 +217,8 @@ class Phase7LongformCatalogTests(unittest.TestCase):
                 {
                     "schema_version": 1,
                     "selection_source": "human",
+                    "user_decision": "all_B",
+                    "recorded_at_utc": "2026-07-10T08:39:01+00:00",
                     "selection_complete": True,
                     "tracks": selection_tracks,
                 },
@@ -330,6 +332,42 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"selection_path must match .*bgm_candidate_selection\.json"):
             validate_external_selection(catalog, wrong_path, staging_root)
 
+    def test_validate_external_selection_rejects_unexpected_root_key(self) -> None:
+        catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
+        self.addCleanup(temp_dir.cleanup)
+        data = json.loads(selection_path.read_text(encoding="utf-8"))
+        data["unexpected_root"] = True
+        selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, r"selection contains unknown keys: unexpected_root"):
+            validate_external_selection(catalog, selection_path, staging_root)
+
+    def test_validate_external_selection_rejects_blank_selection_source(self) -> None:
+        catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
+        self.addCleanup(temp_dir.cleanup)
+        data = json.loads(selection_path.read_text(encoding="utf-8"))
+        data["selection_source"] = ""
+        selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, r"selection\.selection_source must be a non-empty string"):
+            validate_external_selection(catalog, selection_path, staging_root)
+
+    def test_validate_external_selection_rejects_blank_user_decision(self) -> None:
+        catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
+        self.addCleanup(temp_dir.cleanup)
+        data = json.loads(selection_path.read_text(encoding="utf-8"))
+        data["user_decision"] = ""
+        selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, r"selection\.user_decision must be a non-empty string"):
+            validate_external_selection(catalog, selection_path, staging_root)
+
+    def test_validate_external_selection_rejects_blank_recorded_at_utc(self) -> None:
+        catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
+        self.addCleanup(temp_dir.cleanup)
+        data = json.loads(selection_path.read_text(encoding="utf-8"))
+        data["recorded_at_utc"] = ""
+        selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, r"selection\.recorded_at_utc must be a non-empty string"):
+            validate_external_selection(catalog, selection_path, staging_root)
+
     def test_validate_external_selection_rejects_track_order_mismatch(self) -> None:
         catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
         self.addCleanup(temp_dir.cleanup)
@@ -346,6 +384,24 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         data["tracks"][0]["variant"] = "A"
         selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, r"selection\.stage1_mid\.variant must be B"):
+            validate_external_selection(catalog, selection_path, staging_root)
+
+    def test_validate_external_selection_rejects_unexpected_track_key(self) -> None:
+        catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
+        self.addCleanup(temp_dir.cleanup)
+        data = json.loads(selection_path.read_text(encoding="utf-8"))
+        data["tracks"][0]["unexpected_track"] = True
+        selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, r"selection\.stage1_mid contains unknown keys: unexpected_track"):
+            validate_external_selection(catalog, selection_path, staging_root)
+
+    def test_validate_external_selection_rejects_blank_title_zh(self) -> None:
+        catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
+        self.addCleanup(temp_dir.cleanup)
+        data = json.loads(selection_path.read_text(encoding="utf-8"))
+        data["tracks"][0]["title_zh"] = ""
+        selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, r"selection\.stage1_mid\.title_zh must be a non-empty string"):
             validate_external_selection(catalog, selection_path, staging_root)
 
     def test_validate_external_selection_rejects_seed_mismatch(self) -> None:
@@ -371,6 +427,16 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         self.addCleanup(temp_dir.cleanup)
         data = json.loads(selection_path.read_text(encoding="utf-8"))
         data["tracks"][0]["candidate_path_windows"] = str(staging_root / "wrong" / "candidate.wav")
+        selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, r"selection\.stage1_mid\.candidate_path_windows must be .*bgm_stage1_mid_B_seed-2026071102\.wav"):
+            validate_external_selection(catalog, selection_path, staging_root)
+
+    def test_validate_external_selection_rejects_forward_slash_windows_path(self) -> None:
+        catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
+        self.addCleanup(temp_dir.cleanup)
+        data = json.loads(selection_path.read_text(encoding="utf-8"))
+        expected = str(staging_root / "bgm_candidates" / "stage1_mid" / "bgm_stage1_mid_B_seed-2026071102.wav")
+        data["tracks"][0]["candidate_path_windows"] = expected.replace("\\", "/")
         selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, r"selection\.stage1_mid\.candidate_path_windows must be .*bgm_stage1_mid_B_seed-2026071102\.wav"):
             validate_external_selection(catalog, selection_path, staging_root)

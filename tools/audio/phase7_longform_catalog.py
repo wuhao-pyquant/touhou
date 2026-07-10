@@ -81,6 +81,25 @@ TRACK_ALLOWED_KEYS = {
     "selected_seed",
     "selected_sha256",
 }
+SELECTION_ALLOWED_KEYS = {
+    "schema_version",
+    "selection_source",
+    "user_decision",
+    "recorded_at_utc",
+    "selection_complete",
+    "tracks",
+}
+SELECTION_TRACK_ALLOWED_KEYS = {
+    "track_key",
+    "title_zh",
+    "variant",
+    "seed",
+    "candidate_path_windows",
+    "candidate_path_macos",
+    "sha256",
+    "qa_status",
+    "status",
+}
 
 
 def _require(condition: bool, message: str) -> None:
@@ -105,12 +124,6 @@ def _require_exact_keys(obj: dict[str, Any], allowed_keys: set[str], subject: st
     _require(not unknown_keys, f"{subject} contains unknown keys: {', '.join(unknown_keys)}")
     missing_keys = sorted(allowed_keys - set(obj.keys()))
     _require(not missing_keys, f"{subject} is missing keys: {', '.join(missing_keys)}")
-
-
-def _normalized_path(path: Path) -> Path:
-    return Path(path).resolve(strict=False)
-
-
 def validate_longform_catalog(data: dict[str, Any]) -> None:
     _require(isinstance(data, dict), "catalog root must be an object")
     _require_exact_keys(data, CATALOG_ALLOWED_KEYS, "catalog")
@@ -186,8 +199,20 @@ def validate_external_selection(catalog: dict[str, Any], selection_path: Path, s
         data = json.load(handle)
 
     _require(isinstance(data, dict), "selection root must be an object")
+    _require_exact_keys(data, SELECTION_ALLOWED_KEYS, "selection")
     _require(type(data.get("schema_version")) is int and data["schema_version"] == 1, "selection.schema_version must be integer 1")
-    _require(data.get("selection_source") == "human", "selection.selection_source must be human")
+    selection_source = data.get("selection_source")
+    _require(isinstance(selection_source, str) and selection_source.strip(), "selection.selection_source must be a non-empty string")
+    _require(selection_source == "human", "selection.selection_source must be human")
+    _require(
+        isinstance(data.get("user_decision"), str) and data["user_decision"].strip(),
+        "selection.user_decision must be a non-empty string",
+    )
+    _require(
+        isinstance(data.get("recorded_at_utc"), str) and data["recorded_at_utc"].strip(),
+        "selection.recorded_at_utc must be a non-empty string",
+    )
+    _require(type(data.get("selection_complete")) is bool, "selection.selection_complete must be a boolean")
     _require(data.get("selection_complete") is True, "selection.selection_complete must be true")
 
     tracks = data.get("tracks")
@@ -199,32 +224,52 @@ def validate_external_selection(catalog: dict[str, Any], selection_path: Path, s
         _require(isinstance(track, dict), f"selection.tracks[{index}] must be an object")
         track_key = track.get("track_key")
         _require(isinstance(track_key, str) and track_key.strip(), f"selection.tracks[{index}].track_key must be a non-empty string")
+        _require_exact_keys(track, SELECTION_TRACK_ALLOWED_KEYS, f"selection.{track_key}")
         track_keys.append(track_key)
     _require(track_keys == [track["key"] for track in catalog["tracks"]], "selection.tracks must follow catalog track order")
 
     for job, record in zip(catalog["tracks"], tracks):
         key = job["key"]
-        _require(record.get("variant") == job["selected_variant"], f"selection.{key}.variant must be {job['selected_variant']}")
+        _require(
+            isinstance(record.get("title_zh"), str) and record["title_zh"].strip(),
+            f"selection.{key}.title_zh must be a non-empty string",
+        )
+        variant = record.get("variant")
+        _require(isinstance(variant, str) and variant.strip(), f"selection.{key}.variant must be a non-empty string")
+        _require(variant == job["selected_variant"], f"selection.{key}.variant must be {job['selected_variant']}")
         seed = record.get("seed")
         _require(type(seed) is int and seed > 0, f"selection.{key}.seed must be a positive integer")
         _require(seed == job["selected_seed"], f"selection.{key}.seed does not match catalog selected_seed")
         sha256 = record.get("sha256")
+        _require(isinstance(sha256, str) and sha256.strip(), f"selection.{key}.sha256 must be a non-empty string")
         _require(_is_lower_hex_sha256(sha256), f"selection.{key}.sha256 must be 64 lowercase hex")
         _require(sha256 == job["selected_sha256"], f"selection.{key}.sha256 does not match catalog selected_sha256")
-        _require(record.get("qa_status") == "pass", f"selection.{key}.qa_status must be pass")
-        _require(record.get("status") == "selected", f"selection.{key}.status must be selected")
+        qa_status = record.get("qa_status")
+        _require(isinstance(qa_status, str) and qa_status.strip(), f"selection.{key}.qa_status must be a non-empty string")
+        _require(qa_status == "pass", f"selection.{key}.qa_status must be pass")
+        status = record.get("status")
+        _require(isinstance(status, str) and status.strip(), f"selection.{key}.status must be a non-empty string")
+        _require(status == "selected", f"selection.{key}.status must be selected")
         expected_candidate_filename = f"bgm_{key}_B_seed-{seed}.wav"
         expected_candidate_path = staging_root / "bgm_candidates" / key / expected_candidate_filename
         expected_candidate_path_macos = f"/Volumes/personal_folder/temp/godot_touhou_phase7/bgm_candidates/{key}/{expected_candidate_filename}"
         candidate_path_macos = record.get("candidate_path_macos")
         _require(
-            isinstance(candidate_path_macos, str) and candidate_path_macos == expected_candidate_path_macos,
+            isinstance(candidate_path_macos, str) and candidate_path_macos.strip(),
+            f"selection.{key}.candidate_path_macos must be a non-empty string",
+        )
+        _require(
+            candidate_path_macos == expected_candidate_path_macos,
             f"selection.{key}.candidate_path_macos must be {expected_candidate_path_macos}",
         )
 
         candidate_path_windows = record.get("candidate_path_windows")
         _require(
-            isinstance(candidate_path_windows, str) and _normalized_path(Path(candidate_path_windows)) == _normalized_path(expected_candidate_path),
+            isinstance(candidate_path_windows, str) and candidate_path_windows.strip(),
+            f"selection.{key}.candidate_path_windows must be a non-empty string",
+        )
+        _require(
+            candidate_path_windows == str(expected_candidate_path),
             f"selection.{key}.candidate_path_windows must be {expected_candidate_path}",
         )
         _require(expected_candidate_path.is_file(), f"selection.{key}.candidate_path_windows file is missing")
