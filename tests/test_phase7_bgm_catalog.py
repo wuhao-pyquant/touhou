@@ -107,6 +107,13 @@ class Phase7BgmCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"defaults\.free_models must be true"):
             validate_catalog(data)
 
+    def test_validate_catalog_requires_schema_version_exact_int_one(self) -> None:
+        data = self.clone_data()
+        data["schema_version"] = True
+
+        with self.assertRaisesRegex(ValueError, r"schema_version must be integer 1"):
+            validate_catalog(data)
+
     def test_validate_catalog_rejects_non_object_candidate_entry(self) -> None:
         data = self.clone_data()
         data["tracks"][0]["candidates"][0] = "A"
@@ -139,6 +146,27 @@ class Phase7BgmCatalogTests(unittest.TestCase):
         ]
 
         with self.assertRaisesRegex(ValueError, r"stage1_mid\.candidates must be ordered A, B"):
+            validate_catalog(data)
+
+    def test_validate_catalog_rejects_bool_candidate_seed(self) -> None:
+        data = self.clone_data()
+        data["tracks"][0]["candidates"][0]["seed"] = True
+
+        with self.assertRaisesRegex(ValueError, r"tracks\[0\]\.candidates\[0\]\.seed must be a positive integer"):
+            validate_catalog(data)
+
+    def test_validate_catalog_rejects_invalid_candidate_seed_value(self) -> None:
+        data = self.clone_data()
+        data["tracks"][0]["candidates"][0]["seed"] = 0
+
+        with self.assertRaisesRegex(ValueError, r"tracks\[0\]\.candidates\[0\]\.seed must be a positive integer"):
+            validate_catalog(data)
+
+    def test_validate_catalog_rejects_duplicate_seed_with_candidate_location(self) -> None:
+        data = self.clone_data()
+        data["tracks"][0]["candidates"][1]["seed"] = data["tracks"][0]["candidates"][0]["seed"]
+
+        with self.assertRaisesRegex(ValueError, r"tracks\[0\]\.candidates\[1\]\.seed must be unique"):
             validate_catalog(data)
 
 

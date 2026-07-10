@@ -21,7 +21,8 @@ def _require(condition: bool, message: str) -> None:
 
 
 def validate_catalog(data: dict[str, Any]) -> None:
-    _require(data.get("schema_version") == 1, "schema_version must be 1")
+    schema_version = data.get("schema_version")
+    _require(type(schema_version) is int and schema_version == 1, "schema_version must be integer 1")
     defaults = data.get("defaults")
     _require(isinstance(defaults, dict), "defaults must be an object")
     _require(defaults.get("seconds") == 30.0, "defaults.seconds must be 30.0")
@@ -91,13 +92,16 @@ def validate_catalog(data: dict[str, Any]) -> None:
             candidate_variants == ["A", "B"],
             f"{key}.candidates must be ordered A, B",
         )
-        for item in candidates:
+        for candidate_index, item in enumerate(candidates):
             seed = item.get("seed")
             _require(
-                isinstance(seed, int) and 0 < seed < 2_147_483_647,
-                f"{key}.{item.get('variant')}.seed is invalid",
+                type(seed) is int and 0 < seed < 2_147_483_647,
+                f"tracks[{index}].candidates[{candidate_index}].seed must be a positive integer",
             )
-            _require(seed not in all_seeds, f"duplicate seed {seed}")
+            _require(
+                seed not in all_seeds,
+                f"tracks[{index}].candidates[{candidate_index}].seed must be unique",
+            )
             all_seeds.add(seed)
 
     _require(
