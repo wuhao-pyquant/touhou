@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = ROOT / "assets" / "manifest" / "phase6_asset_manifest.json"
 STATUS = "pending_generation"
+VALID_STATUSES = {"pending_generation", "generated_needs_review", "accepted", "rejected"}
 
 STAGES = {
     1: "shrine_approach",
@@ -362,7 +363,39 @@ def build_manifest() -> dict[str, object]:
             )
         )
 
-    return {"version": 1, "assets": assets}
+    manifest = {"version": 1, "assets": assets}
+    preserve_existing_statuses(manifest, load_existing_statuses())
+    return manifest
+
+
+def load_existing_statuses() -> dict[str, str]:
+    if not MANIFEST_PATH.exists():
+        return {}
+    try:
+        with MANIFEST_PATH.open("r", encoding="utf-8") as manifest_file:
+            existing = json.load(manifest_file)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    statuses: dict[str, str] = {}
+    for asset in existing.get("assets", []):
+        if not isinstance(asset, dict):
+            continue
+        asset_id = str(asset.get("id", ""))
+        status = str(asset.get("status", ""))
+        if asset_id and status in VALID_STATUSES:
+            statuses[asset_id] = status
+    return statuses
+
+
+def preserve_existing_statuses(manifest: dict[str, object], statuses: dict[str, str]) -> None:
+    if not statuses:
+        return
+    assets = manifest.get("assets", [])
+    if not isinstance(assets, list):
+        return
+    for asset in assets:
+        if isinstance(asset, dict) and str(asset.get("id", "")) in statuses:
+            asset["status"] = statuses[str(asset["id"])]
 
 
 def protagonist_path(runtime_id: str, filename: str) -> str:
@@ -371,8 +404,9 @@ def protagonist_path(runtime_id: str, filename: str) -> str:
 
 def main() -> None:
     MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    manifest = build_manifest()
     with MANIFEST_PATH.open("w", encoding="utf-8") as manifest_file:
-        json.dump(build_manifest(), manifest_file, indent=2, ensure_ascii=False)
+        json.dump(manifest, manifest_file, indent=2, ensure_ascii=False)
         manifest_file.write("\n")
 
 
