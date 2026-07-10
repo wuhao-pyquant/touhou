@@ -1155,12 +1155,13 @@ git commit -m "docs: add phase 7 candidate operator workflow"
 Run:
 
 ```powershell
+python tests/test_phase7_candidate_workflow.py
 python tests/test_phase7_bgm_catalog.py
 python tests/test_phase7_candidate_runner.py
 python tests/test_phase7_candidate_qa.py
 ```
 
-Expected: `15` tests total, all `OK`.
+Expected: all four commands exit `0` and report `OK`. Current verified baseline is `39` tests total across these four suites, but future coverage growth should not require a plan edit.
 
 - [ ] **Step 4: Publish the three control files to the NAS**
 

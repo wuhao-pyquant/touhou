@@ -31,6 +31,14 @@ class Phase7CandidateWorkflowDocsTests(unittest.TestCase):
         self.assertIn("Expected 24 QA passes", content)
         self.assertIn("Expected 0 QA failures", content)
 
+    def test_plan_requires_all_four_phase7a_suites_and_no_stale_total(self) -> None:
+        content = PLAN_DOC.read_text(encoding="utf-8")
+        self.assertIn("python tests/test_phase7_candidate_workflow.py", content)
+        self.assertIn("python tests/test_phase7_bgm_catalog.py", content)
+        self.assertIn("python tests/test_phase7_candidate_runner.py", content)
+        self.assertIn("python tests/test_phase7_candidate_qa.py", content)
+        self.assertNotIn("Expected: `15` tests total", content)
+
 
 if __name__ == "__main__":
     unittest.main()
