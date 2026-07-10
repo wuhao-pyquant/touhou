@@ -1,5 +1,6 @@
 .godot/
 .superpowers/
+.worktrees/
 __pycache__/
 *.pyc
 *.tmp
