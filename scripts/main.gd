@@ -60,6 +60,52 @@ var character_menu_cursor: int = 0
 var shot_menu_cursor: int = 0
 var settings_menu_cursor: int = 0
 var pause_menu_cursor: int = 0
+var asset_registry_ref: Object = null
+var asset_texture_cache: Dictionary = {}
+var _stage_background_path_cache: Dictionary = {}
+var _protagonist_asset_path_cache: Dictionary = {}
+var _boss_asset_path_cache: Dictionary = {}
+var _enemy_asset_path_cache: Dictionary = {}
+var _bullet_asset_path_cache: Dictionary = {}
+var _bomb_asset_path_cache: Dictionary = {}
+var _item_asset_path_cache: Dictionary = {}
+var _ui_asset_path_cache: Dictionary = {}
+
+const ENEMY_BULLET_ART_BY_FAMILY := {
+	"circle": "enemy_bullet_lotus_core",
+	"rice": "enemy_bullet_mirror_drop",
+	"butterfly": "enemy_bullet_moon_wisp",
+	"needle": "enemy_bullet_ember_needle",
+	"talisman": "enemy_bullet_boss_sigil",
+	"star": "enemy_bullet_astral_star",
+	"laser": "enemy_bullet_warning_ring",
+	"large_orb": "enemy_bullet_slow_orb",
+	"arrow": "enemy_bullet_fast_shard",
+}
+
+const PLAYER_BULLET_ART_BY_BTYPE := {
+	-1: "player_bullet_bomb_seed",
+	0: "player_bullet_spread_petal",
+	1: "player_bullet_focus_lance",
+	2: "player_bullet_homing_charm",
+}
+
+const ITEM_ART_BY_TYPE := {
+	"power": "item_power_small",
+	"point": "item_score_small",
+	"bomb_refill": "item_bomb_fragment",
+	"bomb_fragment": "item_bomb_fragment",
+	"life": "item_life_fragment",
+	"life_fragment": "item_life_fragment",
+	"night_festival_seal": "item_story_token",
+	"full_power": "item_full_power",
+}
+
+const BOMB_ART_PROFILE_BY_BEHAVIOR := {
+	"boundary_bloom": "miko",
+	"master_spark": "magician",
+	"instant_slash": "swordswoman",
+}
 
 func _resolve_singletons() -> void:
 	var tree_root: Window = get_tree().root if is_inside_tree() and get_tree() else null
@@ -85,6 +131,17 @@ func _resolve_singletons() -> void:
 		root_monitor = tree_root.get_node_or_null("PerformanceMonitor")
 	if root_monitor:
 		performance_monitor_ref = root_monitor
+
+	var root_asset_registry: Object = sibling_root.get_node_or_null("AssetRegistry") if sibling_root else null
+	if not root_asset_registry and tree_root:
+		root_asset_registry = tree_root.get_node_or_null("AssetRegistry")
+	if root_asset_registry:
+		if asset_registry_ref != root_asset_registry:
+			asset_registry_ref = root_asset_registry
+			_clear_asset_path_caches()
+	elif not asset_registry_ref:
+		asset_registry_ref = load("res://autoload/asset_registry.gd").new()
+		_clear_asset_path_caches()
 
 func _menu_vertical_delta() -> int:
 	var delta: int = 0
@@ -173,6 +230,241 @@ func _bullet_draw_color(base: Color, alpha_override: float = -1.0) -> Color:
 		var lighten_amount: float = brightness - 1.0
 		adjusted = Color(base.r, base.g, base.b, alpha).lerp(Color(1.0, 1.0, 1.0, alpha), lighten_amount)
 	return Color(clampf(adjusted.r, 0.0, 1.0), clampf(adjusted.g, 0.0, 1.0), clampf(adjusted.b, 0.0, 1.0), alpha)
+
+func get_asset_texture(path: String) -> Texture2D:
+	if path.is_empty():
+		return null
+	if asset_texture_cache.has(path):
+		return asset_texture_cache[path]
+	var resource_exists := ResourceLoader.exists(path)
+	var file_exists := FileAccess.file_exists(path)
+	if not resource_exists and not file_exists:
+		asset_texture_cache[path] = null
+		return null
+	if resource_exists:
+		var loaded := load(path)
+		if loaded is Texture2D:
+			asset_texture_cache[path] = loaded
+			return asset_texture_cache[path]
+	var image := Image.new()
+	if image.load(path) == OK:
+		asset_texture_cache[path] = ImageTexture.create_from_image(image)
+		return asset_texture_cache[path]
+	asset_texture_cache[path] = null
+	return asset_texture_cache[path]
+
+func _asset_registry() -> Object:
+	if not asset_registry_ref:
+		_resolve_singletons()
+	return asset_registry_ref
+
+func _clear_asset_path_caches() -> void:
+	_stage_background_path_cache.clear()
+	_protagonist_asset_path_cache.clear()
+	_boss_asset_path_cache.clear()
+	_enemy_asset_path_cache.clear()
+	_bullet_asset_path_cache.clear()
+	_bomb_asset_path_cache.clear()
+	_item_asset_path_cache.clear()
+	_ui_asset_path_cache.clear()
+
+func _draw_texture_rect_path(path: String, rect: Rect2, modulate: Color = Color.WHITE) -> bool:
+	var texture := get_asset_texture(path)
+	if texture == null:
+		return false
+	draw_texture_rect(texture, rect, false, modulate)
+	return true
+
+func _draw_texture_centered(path: String, center: Vector2, size: Vector2, modulate: Color = Color.WHITE, rotation: float = 0.0) -> bool:
+	var texture := get_asset_texture(path)
+	if texture == null:
+		return false
+	draw_set_transform(center, rotation, Vector2.ONE)
+	draw_texture_rect(texture, Rect2(size * -0.5, size), false, modulate)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	return true
+
+func _full_screen_rect() -> Rect2:
+	return Rect2(0, 0, SCREEN_W, SCREEN_H)
+
+func _stage_background_paths(stage_id: int) -> Dictionary:
+	if _stage_background_path_cache.has(stage_id):
+		return _stage_background_path_cache[stage_id]
+	var registry := _asset_registry()
+	if registry and registry.has_method("stage_background_layers"):
+		_stage_background_path_cache[stage_id] = registry.stage_background_layers(stage_id)
+	else:
+		_stage_background_path_cache[stage_id] = {}
+	return _stage_background_path_cache[stage_id]
+
+func _bullet_asset_path(asset_id: String) -> String:
+	if _bullet_asset_path_cache.is_empty():
+		var registry := _asset_registry()
+		if registry and registry.has_method("bullet_family_assets"):
+			_bullet_asset_path_cache = registry.bullet_family_assets()
+	if _bullet_asset_path_cache.has(asset_id):
+		return String(_bullet_asset_path_cache[asset_id])
+	return ""
+
+func _enemy_asset_path(asset_id: String) -> String:
+	if _enemy_asset_path_cache.is_empty():
+		var registry := _asset_registry()
+		if registry and registry.has_method("enemy_family_assets"):
+			_enemy_asset_path_cache = registry.enemy_family_assets()
+	if _enemy_asset_path_cache.has(asset_id):
+		return String(_enemy_asset_path_cache[asset_id])
+	return ""
+
+func _item_asset_path(asset_id: String) -> String:
+	if _item_asset_path_cache.is_empty():
+		var registry := _asset_registry()
+		if registry and registry.has_method("item_assets"):
+			_item_asset_path_cache = registry.item_assets()
+	if _item_asset_path_cache.has(asset_id):
+		return String(_item_asset_path_cache[asset_id])
+	return ""
+
+func _ui_asset_path(asset_id: String) -> String:
+	if _ui_asset_path_cache.is_empty():
+		var registry := _asset_registry()
+		if registry and registry.has_method("ui_assets"):
+			_ui_asset_path_cache = registry.ui_assets()
+	if _ui_asset_path_cache.has(asset_id):
+		return String(_ui_asset_path_cache[asset_id])
+	return ""
+
+func _bomb_asset_group(profile_id: String) -> Dictionary:
+	if _bomb_asset_path_cache.is_empty():
+		var registry := _asset_registry()
+		if registry and registry.has_method("bomb_assets"):
+			_bomb_asset_path_cache = registry.bomb_assets()
+	if _bomb_asset_path_cache.has(profile_id):
+		return _bomb_asset_path_cache[profile_id]
+	return {}
+
+func _protagonist_asset_paths(id: String) -> Dictionary:
+	if not _protagonist_asset_path_cache.has(id):
+		var registry := _asset_registry()
+		if registry and registry.has_method("protagonist_assets"):
+			_protagonist_asset_path_cache[id] = registry.protagonist_assets(id)
+		else:
+			_protagonist_asset_path_cache[id] = {}
+	return _protagonist_asset_path_cache[id]
+
+func _boss_asset_paths(id: String) -> Dictionary:
+	if not _boss_asset_path_cache.has(id):
+		var registry := _asset_registry()
+		if registry and registry.has_method("boss_assets"):
+			_boss_asset_path_cache[id] = registry.boss_assets(id)
+		else:
+			_boss_asset_path_cache[id] = {}
+	return _boss_asset_path_cache[id]
+
+func _phase6_protagonist_sprite_path() -> String:
+	var registry := _asset_registry()
+	if not registry or not registry.has_method("protagonist_assets") or not game_manager_ref:
+		return ""
+	var assets: Dictionary = _protagonist_asset_paths(String(game_manager_ref.selected_protagonist_id))
+	return String(assets.get("sprite", ""))
+
+func _current_boss_asset_id() -> String:
+	if boss.has("cards") and boss.cards is Array and not boss.cards.is_empty():
+		var card_idx: int = clampi(int(boss.get("card_idx", 0)), 0, boss.cards.size() - 1)
+		return String(boss.cards[card_idx].get("boss_id", ""))
+	var boss_def: Dictionary = stage_director.boss_definition(_active_stage())
+	return String(boss_def.get("id", ""))
+
+func _current_boss_assets() -> Dictionary:
+	return _boss_asset_paths(_current_boss_asset_id())
+
+func _draw_phase6_stage_background(spell_state: bool) -> void:
+	var layers: Dictionary = _stage_background_paths(_active_stage())
+	var drew_any := false
+	drew_any = _draw_texture_rect_path(String(layers.get("far", "")), _full_screen_rect(), Color(1, 1, 1, 1.0)) or drew_any
+	drew_any = _draw_texture_rect_path(String(layers.get("mid", "")), _full_screen_rect(), Color(1, 1, 1, 0.82)) or drew_any
+	if spell_state:
+		drew_any = _draw_texture_rect_path(String(layers.get("spell", "")), _full_screen_rect(), Color(1, 1, 1, 0.36)) or drew_any
+	drew_any = _draw_texture_rect_path(String(layers.get("near", "")), _full_screen_rect(), Color(1, 1, 1, 0.24)) or drew_any
+	if not drew_any:
+		draw_rect(_full_screen_rect(), Color(0.02, 0.03, 0.06))
+
+func _draw_phase6_boss_aura() -> void:
+	if not boss_alive or not boss.has("phase") or boss.get("phase", "") == "defeated":
+		return
+	var aura_path := String(_current_boss_assets().get("spell_aura", ""))
+	var aura_size := Vector2.ONE * (250.0 if bool(boss.get("declaring", false)) else 190.0)
+	_draw_texture_centered(aura_path, Vector2(float(boss.get("x", _screen_center_x())), float(boss.get("y", _boss_anchor_y()))), aura_size, Color(1, 1, 1, 0.34))
+
+func _draw_phase6_bomb_plate() -> void:
+	if not player_bombing or player_bomb_config.is_empty():
+		return
+	var behavior_id := String(player_bomb_config.get("behavior_id", "boundary_bloom"))
+	var profile_id := String(BOMB_ART_PROFILE_BY_BEHAVIOR.get(behavior_id, "miko"))
+	var total_frames: float = maxf(1.0, float(player_bomb_config.get("duration", 120)))
+	var remaining_frames: float = maxf(0.0, player_bomb_timer * 60.0)
+	var elapsed_ratio: float = clampf((total_frames - remaining_frames) / total_frames, 0.0, 1.0)
+	var phase_id := "sustain"
+	if elapsed_ratio < 0.24:
+		phase_id = "start"
+	elif elapsed_ratio > 0.76:
+		phase_id = "finish"
+	var bomb_group: Dictionary = _bomb_asset_group(profile_id)
+	_draw_texture_rect_path(String(bomb_group.get(phase_id, "")), _full_screen_rect(), Color(1, 1, 1, 0.50))
+
+func _draw_phase6_item_sprite(item: Dictionary, center: Vector2) -> bool:
+	var type_id := String(item.get("type", ""))
+	var asset_id := String(ITEM_ART_BY_TYPE.get(type_id, "item_score_small"))
+	var size := Vector2.ONE * (32.0 if type_id in ["full_power", "bomb_refill", "life"] else 26.0)
+	return _draw_texture_centered(_item_asset_path(asset_id), center, size)
+
+func _draw_phase6_enemy_sprite(enemy: Dictionary, center: Vector2) -> bool:
+	var family_id := String(enemy.get("family_id", "low_yokai"))
+	var asset_id := "enemy_%s" % family_id
+	var draw_size: float = clampf(float(enemy.get("radius", 14.0)) * 3.8, 42.0, 82.0)
+	return _draw_texture_centered(_enemy_asset_path(asset_id), center, Vector2.ONE * draw_size)
+
+func _draw_phase6_bullet_sprite(bullet: Dictionary) -> bool:
+	var asset_id := ""
+	var type_id := String(bullet.get("type", ""))
+	if type_id == "player":
+		asset_id = String(PLAYER_BULLET_ART_BY_BTYPE.get(int(bullet.get("btype", 0)), "player_bullet_spread_petal"))
+	elif type_id == "bomb":
+		asset_id = "player_bullet_bomb_seed"
+		if int(bullet.get("btype", -1)) == 0:
+			asset_id = "player_bullet_graze_spark"
+		elif int(bullet.get("btype", -1)) == 1:
+			asset_id = "player_bullet_focus_lance"
+	else:
+		asset_id = String(ENEMY_BULLET_ART_BY_FAMILY.get(type_id, "enemy_bullet_lotus_core"))
+	var radius: float = float(bullet.get("radius", 5.0))
+	var max_size := 64.0 if type_id == "bomb" else 48.0
+	var draw_size := Vector2.ONE * clampf(radius * 4.6, 17.0, max_size)
+	var velocity := Vector2(float(bullet.get("vx", 0.0)), float(bullet.get("vy", -1.0)))
+	var rotation := velocity.angle() + PI * 0.5 if velocity.length_squared() > 0.0 else 0.0
+	return _draw_texture_centered(_bullet_asset_path(asset_id), Vector2(float(bullet.get("x", 0.0)), float(bullet.get("y", 0.0))), draw_size, _bullet_draw_color(Color.WHITE), rotation)
+
+func _draw_phase6_boss_sprite(center: Vector2) -> bool:
+	var sprite_path := String(_current_boss_assets().get("sprite", ""))
+	var draw_size := Vector2.ONE * clampf(float(boss.get("radius", 28.0)) * 3.8, 86.0, 128.0)
+	var alpha := 0.72 if boss.get("phase", "") == "entering" else 0.94
+	var tint := Color(1, 1, 1, alpha) if float(boss.get("flash", 0.0)) <= 0.0 else Color(1, 1, 1, 1.0)
+	return _draw_texture_centered(sprite_path, center, draw_size, tint)
+
+func _draw_phase6_player_sprite(center: Vector2) -> bool:
+	var sprite_path := _phase6_protagonist_sprite_path()
+	return _draw_texture_centered(sprite_path, center + Vector2(0, -7), Vector2(62, 62), Color(1, 1, 1, 0.96))
+
+func _draw_phase6_ui_fullscreen(asset_id: String, alpha: float = 1.0) -> bool:
+	return _draw_texture_rect_path(_ui_asset_path(asset_id), _full_screen_rect(), Color(1, 1, 1, alpha))
+
+func _draw_phase6_spell_banner(font: Font) -> void:
+	if not boss_alive or not bool(boss.get("declaring", false)):
+		return
+	var banner_rect := Rect2(0, 0, SCREEN_W, minf(150.0, SCREEN_H * 0.18))
+	_draw_texture_rect_path(_ui_asset_path("spell_banner"), banner_rect, Color(1, 1, 1, 0.86))
+	var card_name := String(boss.get("card_name", ""))
+	if not card_name.is_empty():
+		draw_string(font, Vector2(_centered_text_x_at_size(font, card_name, 22), banner_rect.position.y + 82.0), card_name, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 22, Color(1.0, 0.94, 0.78))
 
 func _should_show_focus_hitbox() -> bool:
 	return not player_bombing and (_settings_bool("always_show_focus_hitbox", false) or Input.is_key_pressed(KEY_SHIFT))
@@ -1607,6 +1899,8 @@ func _draw_gameplay_input_guide(font: Font) -> void:
 func _draw_title_screen() -> void:
 	var font := SystemFont.new()
 	_draw_ui_background(Color(0.55, 0.14, 0.22))
+	_draw_texture_rect_path(_ui_asset_path("title_key_art"), Rect2(0, 0, SCREEN_W, SCREEN_H * 0.46), Color(1, 1, 1, 0.38))
+	_draw_phase6_ui_fullscreen("main_menu_frame", 0.82)
 	_draw_ui_heading(font, "\u4e1c\u65b9\u5f39\u5e55", "\u6807\u9898\u83dc\u5355", 38)
 	_draw_menu_entries(font, ui_model.main_menu_entries(), main_menu_cursor, 314.0, 76.0)
 	var hint := "\u65b9\u5411\u952e\u9009\u62e9    Z \u786e\u8ba4    X/Esc \u8fd4\u56de"
@@ -1615,6 +1909,7 @@ func _draw_title_screen() -> void:
 func _draw_character_select_screen() -> void:
 	var font := SystemFont.new()
 	_draw_ui_background(Color(0.16, 0.38, 0.56))
+	_draw_phase6_ui_fullscreen("character_select_frame", 0.84)
 	var mode_label: String = "\u6a21\u5f0f\uff1a\u7ec3\u4e60" if game_manager_ref.practice_mode else "\u6a21\u5f0f\uff1a\u6545\u4e8b"
 	_draw_ui_heading(font, "\u89d2\u8272\u9009\u62e9", mode_label, 34)
 	var entries: Array = ui_model.protagonist_entries()
@@ -1626,6 +1921,7 @@ func _draw_character_select_screen() -> void:
 func _draw_shot_select_screen() -> void:
 	var font := SystemFont.new()
 	_draw_ui_background(Color(0.46, 0.32, 0.12))
+	_draw_phase6_ui_fullscreen("main_menu_frame", 0.50)
 	var protagonists: Array = ui_model.protagonist_entries()
 	var protagonist_label: String = _entry_label_by_id(protagonists, String(game_manager_ref.selected_protagonist_id))
 	_draw_ui_heading(font, "\u5c04\u51fb\u9009\u62e9", "\u5df2\u9009\u89d2\u8272\uff1a%s" % protagonist_label, 34)
@@ -1638,6 +1934,7 @@ func _draw_shot_select_screen() -> void:
 func _draw_settings_screen() -> void:
 	var font := SystemFont.new()
 	_draw_ui_background(Color(0.12, 0.38, 0.44))
+	_draw_phase6_ui_fullscreen("main_menu_frame", 0.42)
 	var subtitle := "\u5de6\u53f3\u8c03\u6574    Z \u5207\u6362    X/Esc \u8fd4\u56de" if _should_show_input_guide() else ""
 	_draw_ui_heading(font, "\u8bbe\u7f6e", subtitle, 34)
 	_draw_settings_entries(font, ui_model.settings_entries(game_manager_ref.settings), settings_menu_cursor)
@@ -1646,10 +1943,11 @@ func _draw_pause_overlay() -> void:
 	var entries: Array = ui_model.pause_menu_entries()
 	var font := SystemFont.new()
 	draw_rect(Rect2(0, 0, SCREEN_W, SCREEN_H), Color(0.0, 0.0, 0.0, 0.56))
+	_draw_phase6_ui_fullscreen("pause_panel", 0.76)
 	var row_height := 54.0
 	var panel_width: float = minf(420.0, SCREEN_W - 80.0)
 	var panel_height: float = 112.0 + row_height * entries.size()
-	var panel_rect := Rect2((SCREEN_W - panel_width) * 0.5, (SCREEN_H - panel_height) * 0.5, panel_width, panel_height)
+	var panel_rect := Rect2((SCREEN_W - panel_width) * 0.5, SCREEN_H * 0.075, panel_width, panel_height)
 	draw_rect(panel_rect, Color(0.05, 0.06, 0.09, 0.9))
 	draw_rect(panel_rect, Color(0.88, 0.24, 0.32, 0.84), false, 2)
 	var title := "\u6682\u505c"
@@ -1686,10 +1984,15 @@ func _draw():
 			"settings":
 				_draw_settings_screen()
 				return
+	_draw_phase6_stage_background(gm_ui != null and gm_ui.state == "boss")
+	_draw_phase6_boss_aura()
+	_draw_phase6_bomb_plate()
 	# Items
 	for it in items:
 		if not it.alive or it.birth > 0: continue
 		var ix: int = int(it.x); var iy: int = int(it.y)
+		if _draw_phase6_item_sprite(it, Vector2(ix, iy)):
+			continue
 		match it.type:
 			"power": draw_circle(Vector2(ix,iy),9,Color.RED); draw_circle(Vector2(ix,iy),9,Color.WHITE,false,2)
 			"full_power": draw_circle(Vector2(ix,iy),11,Color(1.0,0.72,0.16)); draw_circle(Vector2(ix,iy),11,Color.WHITE,false,2)
@@ -1723,6 +2026,8 @@ func _draw():
 	for e in enemies:
 		if not e.alive or e.dying: continue
 		var ix: int = int(e.x); var iy: int = int(e.y)
+		if _draw_phase6_enemy_sprite(e, Vector2(ix, iy)):
+			continue
 		var col: Color = Color.GOLD if e.strong else Color(0.47,0.16,0.71)
 		draw_circle(Vector2(ix,iy),e.radius,col); draw_circle(Vector2(ix,iy),e.radius,Color.WHITE,false,1)
 		draw_line(Vector2(ix-e.radius,iy+2),Vector2(ix-e.radius-8,iy-8+sin(e.move_timer*0.1)*3),Color(0.71,0.31,0.94),2)
@@ -1732,9 +2037,22 @@ func _draw():
 			var cr: PackedVector2Array = PackedVector2Array([Vector2(ix,iy-e.radius-8),Vector2(ix-5,iy-e.radius-1),Vector2(ix+5,iy-e.radius-1)])
 			draw_colored_polygon(cr,Color.GOLD)
 
+	# Boss body stays below live bullets so spell patterns remain readable.
+	if boss_alive and boss.has("phase") and boss.get("phase", "") != "defeated":
+		var boss_center := Vector2(float(boss.get("x", _screen_center_x())), float(boss.get("y", _boss_anchor_y())))
+		if not _draw_phase6_boss_sprite(boss_center):
+			var ix: int = int(boss_center.x); var iy: int = int(boss_center.y)
+			var col: Color = Color.WHITE if boss.flash > 0 else Color(0.86,0.24,0.24)
+			var pts: PackedVector2Array = PackedVector2Array()
+			for i in range(6): var a: float = TAU/6*i-PI/2+boss.rot*0.02; pts.append(Vector2(ix+cos(a)*boss.radius,iy+sin(a)*boss.radius))
+			draw_colored_polygon(pts,col); draw_polyline(pts,Color.WHITE,2,true)
+			draw_circle(Vector2(ix,iy),6,Color.WHITE); draw_circle(Vector2(ix,iy),4,Color.RED)
+
 	# Bullets
 	for b in bullet_pool:
 		if not b.active: continue
+		if _draw_phase6_bullet_sprite(b):
+			continue
 		if b.type == "player":
 			draw_circle(Vector2(b.x,b.y), b.radius, _bullet_draw_color(b.color, 0.5))
 			draw_circle(Vector2(b.x,b.y), b.radius * 0.5, _bullet_draw_color(Color.WHITE))
@@ -1748,12 +2066,6 @@ func _draw():
 
 	# Boss
 	if boss_alive and boss.has("phase") and boss.get("phase", "") != "defeated":
-		var ix: int = int(boss.x); var iy: int = int(boss.y)
-		var col: Color = Color.WHITE if boss.flash > 0 else Color(0.86,0.24,0.24)
-		var pts: PackedVector2Array = PackedVector2Array()
-		for i in range(6): var a: float = TAU/6*i-PI/2+boss.rot*0.02; pts.append(Vector2(ix+cos(a)*boss.radius,iy+sin(a)*boss.radius))
-		draw_colored_polygon(pts,col); draw_polyline(pts,Color.WHITE,2,true)
-		draw_circle(Vector2(ix,iy),6,Color.WHITE); draw_circle(Vector2(ix,iy),4,Color.RED)
 		# HP bar
 		var r: float = boss.hp/max(1.0,boss.max_hp)
 		var hp_bar: Rect2 = _boss_hp_bar_rect()
@@ -1772,14 +2084,15 @@ func _draw():
 	if player_invincible and not player_bombing and int(player_invincible_timer*60)%10<5: pass
 	else:
 		var ix: int = int(player_x); var iy: int = int(player_y)
+		if player_bombing:
+			draw_circle(Vector2(player_x,player_y), player_bomb_radius, _bullet_draw_color(player_bomb_config.color, 0.3), false, 3)
+		if not _draw_phase6_player_sprite(Vector2(ix, iy)):
+			draw_circle(Vector2(ix,iy-12),6,Color(1,0.86,0.75))
+			draw_rect(Rect2(ix-6,iy-4,12,16),Color(0.78,0.12,0.16)); draw_rect(Rect2(ix-6,iy-4,12,16),Color.WHITE,false,1)
+			draw_rect(Rect2(ix-7,iy-1,14,3),Color(0.31,0.08,0.31))
 		if _should_show_focus_hitbox():
 			draw_circle(Vector2(player_x,player_y),_player_hitbox_radius(),Color.WHITE,false,1)
 			draw_circle(Vector2(player_x,player_y),_player_graze_radius(),Color(0.31,0.71,1,0.25),false,1)
-		if player_bombing:
-			draw_circle(Vector2(player_x,player_y), player_bomb_radius, _bullet_draw_color(player_bomb_config.color, 0.3), false, 3)
-		draw_circle(Vector2(ix,iy-12),6,Color(1,0.86,0.75))
-		draw_rect(Rect2(ix-6,iy-4,12,16),Color(0.78,0.12,0.16)); draw_rect(Rect2(ix-6,iy-4,12,16),Color.WHITE,false,1)
-		draw_rect(Rect2(ix-7,iy-1,14,3),Color(0.31,0.08,0.31))
 
 	var gm_title = game_manager_ref
 	# Game-over / all-clear summary screen - shows when state is game_over
@@ -1791,6 +2104,7 @@ func _draw():
 		var bonus: int = gm_title.score + gm_title.graze * 10
 		var box_rect := _summary_box_rect()
 		var text_x := box_rect.position.x + 20.0
+		_draw_phase6_ui_fullscreen("result_frame", 0.70)
 		draw_rect(box_rect, Color(0.05, 0.05, 0.1, 0.8))
 		draw_rect(box_rect, Color(0.86, 0.24, 0.24), false, 2)
 		draw_string(sf, Vector2(_centered_text_x(sf, banner), box_rect.position.y + 50.0), banner)
@@ -1809,6 +2123,7 @@ func _draw():
 
 	var gm = game_manager_ref
 	var font = SystemFont.new()
+	_draw_phase6_spell_banner(font)
 	draw_string(font,Vector2(10,20),"\u5f97\u5206: %d"%gm.score)
 	draw_string(font,Vector2(10,35),"\u64e6\u5f39: %d"%gm.graze)
 	draw_string(font,Vector2(10,50),"Shot: %s Lv.%d"%[_gameplay_shot_label(),gm.power_level()])
