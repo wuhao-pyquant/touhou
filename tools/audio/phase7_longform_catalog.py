@@ -57,6 +57,20 @@ APPROVED_TRACK_DEVELOPMENT = {
     "stage6_mid": "Keep the sacred-river sweep and low-mixed choir restraint, let the middle sections widen the lantern procession into awe rather than noise, and prepare the loop as an unbroken final-stage current.",
     "stage6_boss": "Keep the final-divine confrontation breadth, let each section escalate the ritual scale without losing melodic focus, and make the return feel inevitable while preserving deathbomb, spell, and laser-warning clarity.",
 }
+APPROVED_SELECTED_SHA256 = {
+    "stage1_mid": "24c4f41974ce6a44cabdd5d57706597e81acd6233acc6c88184ebd62e206b616",
+    "stage1_boss": "1c8847fb4b58bedc5c0e3811f9de5d1fbf4be1ea0b6adf8d10383b8019260a3c",
+    "stage2_mid": "592e2c15630f6672ba5535e8b4c42d8e83187b28253214c0f8410e43a2bb424a",
+    "stage2_boss": "bd5583970e437933ad90dd89b8b1c652a5b040ad251552caecad1542e3dab735",
+    "stage3_mid": "02aa4ac9710a7ceb6529855c83cd10f32354d1cf59b4888ccbccc53e50ed93ad",
+    "stage3_boss": "22386f83c91812a071c29a2b8bae44c05b7d6b562c77deb1ed899276fd5af206",
+    "stage4_mid": "de711de96adfcf0708d1f5854b61d0583a10032e629949cc5a9e28f93332ed13",
+    "stage4_boss": "db3eca0242c4cd066dbbabe271d0e51a50cc2d80ef9316615db715c4dbe1b117",
+    "stage5_mid": "bcd5e02e95c1e75e0d0dd7b20d1883f8943130984b3980b057e2e73ef56791e7",
+    "stage5_boss": "1f4ffdbb9c901b3c106023c010c39ade8b9d2c5f5123b746f09646a1bba04e64",
+    "stage6_mid": "3b7f671f85ec28a2184cb08376c8932443721a25ac245ae78ea480dc0610444d",
+    "stage6_boss": "89d31925101e6ef45a3abadcebfc985361882e7de8303025e3707f7e3e9d17be",
+}
 
 CATALOG_ALLOWED_KEYS = {
     "schema_version",
@@ -263,8 +277,10 @@ def validate_longform_catalog(data: dict[str, Any]) -> None:
         )
         _require_exact_string(track.get("selected_variant"), "B", f"{key}.selected_variant must be string B", f"{key}.selected_variant must be B")
         seed = _require_positive_int(track.get("selected_seed"), f"tracks[{index}].selected_seed must be a positive integer")
-        _require(isinstance(track.get("selected_sha256"), str), f"{key}.selected_sha256 must be 64 lowercase hex")
-        _require(_is_lower_hex_sha256(track.get("selected_sha256")), f"{key}.selected_sha256 must be 64 lowercase hex")
+        selected_sha256 = track.get("selected_sha256")
+        _require(isinstance(selected_sha256, str), f"{key}.selected_sha256 must be 64 lowercase hex")
+        _require(_is_lower_hex_sha256(selected_sha256), f"{key}.selected_sha256 must be 64 lowercase hex")
+        _require(selected_sha256 == APPROVED_SELECTED_SHA256[key], f"{key}.selected_sha256 must match the frozen Task 1 selection")
         _require(
             seed == phase7a_track["candidates"][1]["seed"],
             f"{key}.selected_seed must match the approved B seed",

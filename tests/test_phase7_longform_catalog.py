@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -183,9 +184,11 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         return copy.deepcopy(source)
 
     def build_temp_selection_fixture(self) -> tuple[dict, Path, Path, tempfile.TemporaryDirectory]:
-        temp_dir = tempfile.TemporaryDirectory()
+        temp_dir = tempfile.TemporaryDirectory(dir=r"Z:\temp")
         staging_root = Path(temp_dir.name)
         catalog = self.clone_data()
+        source_selection = json.loads(self.selection_path.read_text(encoding="utf-8"))
+        source_tracks = {track["track_key"]: track for track in source_selection["tracks"]}
         selection_tracks = []
         for track in catalog["tracks"]:
             key = track["key"]
@@ -193,10 +196,8 @@ class Phase7LongformCatalogTests(unittest.TestCase):
             candidate_dir = staging_root / "bgm_candidates" / key
             candidate_dir.mkdir(parents=True, exist_ok=True)
             candidate_path = candidate_dir / f"bgm_{key}_B_seed-{seed}.wav"
-            payload = f"{key}:{seed}".encode("ascii")
-            candidate_path.write_bytes(payload)
-            sha256 = hashlib.sha256(payload).hexdigest()
-            track["selected_sha256"] = sha256
+            source_candidate_path = Path(source_tracks[key]["candidate_path_windows"])
+            shutil.copyfile(source_candidate_path, candidate_path)
             selection_tracks.append(
                 {
                     "track_key": key,
@@ -205,7 +206,7 @@ class Phase7LongformCatalogTests(unittest.TestCase):
                     "seed": seed,
                     "candidate_path_windows": str(candidate_path),
                     "candidate_path_macos": f"/Volumes/personal_folder/temp/godot_touhou_phase7/bgm_candidates/{key}/bgm_{key}_B_seed-{seed}.wav",
-                    "sha256": sha256,
+                    "sha256": track["selected_sha256"],
                     "qa_status": "pass",
                     "status": "selected",
                 }
@@ -217,8 +218,8 @@ class Phase7LongformCatalogTests(unittest.TestCase):
                 {
                     "schema_version": 1,
                     "selection_source": "human",
-                    "user_decision": "all_B",
-                    "recorded_at_utc": "2026-07-10T08:39:01+00:00",
+                    "user_decision": source_selection["user_decision"],
+                    "recorded_at_utc": source_selection["recorded_at_utc"],
                     "selection_complete": True,
                     "tracks": selection_tracks,
                 },
@@ -323,6 +324,19 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         data["tracks"][0]["selected_sha256"] = "xyz"
         with self.assertRaisesRegex(ValueError, r"stage1_mid\.selected_sha256 must be 64 lowercase hex"):
             validate_longform_catalog(data)
+
+    def test_validate_longform_catalog_rejects_wrong_but_well_formed_selected_sha_for_every_track(self) -> None:
+        wrong_sha_by_key = {}
+        keys = list(EXPECTED_SELECTIONS.keys())
+        for index, key in enumerate(keys):
+            wrong_sha_by_key[key] = EXPECTED_SELECTIONS[keys[(index + 1) % len(keys)]]["selected_sha256"]
+
+        for index, key in enumerate(keys):
+            with self.subTest(track_key=key):
+                data = self.clone_data()
+                data["tracks"][index]["selected_sha256"] = wrong_sha_by_key[key]
+                with self.assertRaisesRegex(ValueError, rf"{key}\.selected_sha256 must match the frozen Task 1 selection"):
+                    validate_longform_catalog(data)
 
     def test_validate_longform_catalog_rejects_scalar_type_coercions(self) -> None:
         cases = [
