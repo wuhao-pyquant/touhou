@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "defaults": {
+    "seconds": 30.0,
+    "steps": 8,
+    "cfg": 2.0,
+    "dit": "medium",
+    "decoder": "same-l",
+    "free_models": true
+  },
+  "negative_prompt": "lyrics, spoken words, dialogue, lead vocals, copyrighted melody, recognizable existing game music, franchise theme, cinematic intro, cinematic outro, fade-out ending, ambient-only drift, uncontrolled tempo change, muddy bass, harsh noise, excessive reverb, crushed dynamics, warning-like beeps",
+  "tracks": [
+    {
+      "key": "stage1_mid",
+      "stage": 1,
+      "phase": "mid",
+      "title_zh": "灯火初参道",
+      "bpm": 150,
+      "voice_policy": "instrumental_only",
+      "prompt": "Original instrumental Japanese night-festival fantasy danmaku stage music, exact 150 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, warm and bright shrine approach, welcoming lantern procession, memorable independent melody, festival flute, koto-like accents, light taiko, restrained electronic rock drums, melodic bass and clear synth support, strictly instrumental, no choir, no vocal, clean game mix leaving spectral room for arcade warning SFX and graze cues",
+      "candidates": [{"variant": "A", "seed": 2026071101}, {"variant": "B", "seed": 2026071102}]
+    },
+    {
+      "key": "stage1_boss",
+      "stage": 1,
+      "phase": "boss",
+      "title_zh": "引路狐的第一夜",
+      "bpm": 172,
+      "voice_policy": "instrumental_only",
+      "prompt": "Original instrumental Japanese night-festival fantasy danmaku boss music, exact 172 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, agile mischievous festival guide fox duel, memorable independent melody, shamisen-like plucks trading phrases with electronic guitar and festival flute, taiko plus punchy electronic rock drums, fast but readable arrangement, strictly instrumental, no choir, no vocal, preserve short spectral openings for spell and warning SFX",
+      "candidates": [{"variant": "A", "seed": 2026071111}, {"variant": "B", "seed": 2026071112}]
+    },
+    {
+      "key": "stage2_mid",
+      "stage": 2,
+      "phase": "mid",
+      "title_zh": "百物市的交易铃",
+      "bpm": 156,
+      "voice_policy": "instrumental_only",
+      "prompt": "Original instrumental Japanese night-festival fantasy danmaku stage music, exact 156 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, lively yokai market gradually becoming unstable, memorable independent melody, wood blocks and abacus-like percussion, koto-like plucks, jumping bass, light taiko and electronic rock groove, colorful stalls and awakened tools, strictly instrumental, no choir, no vocal, uncluttered game mix leaving room for warning SFX",
+      "candidates": [{"variant": "A", "seed": 2026071201}, {"variant": "B", "seed": 2026071202}]
+    },
+    {
+      "key": "stage2_boss",
+      "stage": 2,
+      "phase": "boss",
+      "title_zh": "鬼市掌柜的算盘火",
+      "bpm": 176,
+      "voice_policy": "instrumental_only",
+      "prompt": "Original instrumental Japanese night-festival fantasy danmaku boss music, exact 176 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, forceful oni market merchant leader and supernatural bargain duel, memorable independent melody, heavy bass, sharp synth lead, taiko, metallic abacus percussion and electronic rock guitar, aggressive harmonic motion without chaos, strictly instrumental, no choir, no vocal, preserve cue space for boss hit and laser warning SFX",
+      "candidates": [{"variant": "A", "seed": 2026071211}, {"variant": "B", "seed": 2026071212}]
+    },
+    {
+      "key": "stage3_mid",
+      "stage": 3,
+      "phase": "mid",
+      "title_zh": "雾竹回廊",
+      "bpm": 148,
+      "voice_policy": "instrumental_only",
+      "prompt": "Original instrumental Japanese night-festival fantasy danmaku stage music, exact 148 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, dreamlike mist bamboo corridor, wrong paths and time displacement, memorable independent melody, breathy festival flute, bamboo percussion, delayed koto-like figures, subdued taiko, controlled electronic pulse and warm bass, strictly instrumental, no choir, no vocal, transparent mix leaving warning SFX clearly audible",
+      "candidates": [{"variant": "A", "seed": 2026071301}, {"variant": "B", "seed": 2026071302}]
+    },
+    {
+      "key": "stage3_boss",
+      "stage": 3,
+      "phase": "boss",
+      "title_zh": "月影幻术师",
+      "bpm": 174,
+      "voice_policy": "instrumental_only",
+      "prompt": "Original instrumental Japanese night-festival fantasy danmaku boss music, exact 174 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, moonlit bamboo illusionist duel, reversed-feeling phrases and unstable harmony, memorable independent melody, fast koto-like arpeggios, flute fragments, electronic bass and focused rock drums, tense but not overfilled, strictly instrumental, no choir, no vocal, maintain room for spell and warning SFX",
+      "candidates": [{"variant": "A", "seed": 2026071311}, {"variant": "B", "seed": 2026071312}]
+    },
+    {
+      "key": "stage4_mid",
+      "stage": 4,
+      "phase": "mid",
+      "title_zh": "风上新闻飞行",
+      "bpm": 166,
+      "voice_policy": "instrumental_only",
+      "prompt": "Original instrumental Japanese night-festival fantasy danmaku stage music, exact 166 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, high-speed tengu mountain ascent and aerial pursuit, memorable independent melody, running festival flute, snare propulsion, paper and feather percussion, wind-like synth motion, taiko accents and electronic rock bass, strictly instrumental, no choir, no vocal, clear game mix leaving warning SFX unmasked",
+      "candidates": [{"variant": "A", "seed": 2026071401}, {"variant": "B", "seed": 2026071402}]
+    },
+    {
+      "key": "stage4_boss",
+      "stage": 4,
+      "phase": "boss",
+      "title_zh": "改写天幕的山风",
+      "bpm": 184,
+      "voice_policy": "instrumental_only",
+      "prompt": "Original instrumental Japanese night-festival fantasy danmaku boss music, exact 184 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, direct mountain wind tengu aerial duel, memorable independent melody, tremolo shamisen-like plucks, forceful taiko, fast electronic rock guitar, driving bass and sharp but controlled synth lead, strictly instrumental, no choir, no vocal, preserve transient space for laser warning SFX and player hit SFX",
+      "candidates": [{"variant": "A", "seed": 2026071411}, {"variant": "B", "seed": 2026071412}]
+    },
+    {
+      "key": "stage5_mid",
+      "stage": 5,
+      "phase": "mid",
+      "title_zh": "鬼宴未散",
+      "bpm": 170,
+      "voice_policy": "restrained_wordless_only",
+      "prompt": "Original Japanese night-festival fantasy danmaku stage music, exact 170 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, dangerous oni banquet and rhythm bullets, memorable independent melody, layered taiko polyrhythm, deep bass, shamisen-like accents, electronic rock drums and restrained low-mixed wordless festival shouts only, no lyrics, no speech, keep voices behind the instruments, leave clear space for warning SFX and resource cues",
+      "candidates": [{"variant": "A", "seed": 2026071501}, {"variant": "B", "seed": 2026071502}]
+    },
+    {
+      "key": "stage5_boss",
+      "stage": 5,
+      "phase": "boss",
+      "title_zh": "朱鼓醉姬",
+      "bpm": 188,
+      "voice_policy": "restrained_wordless_only",
+      "prompt": "Original Japanese night-festival fantasy danmaku boss music, exact 188 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, heavy intoxicated oni princess duel, memorable independent melody, massive taiko, aggressive electronic rock guitar, strong bass and background wordless festival calls only, no lyrics, no speech, calls remain low in the mix, protect cue windows for spell announcements, player hit and laser warning SFX",
+      "candidates": [{"variant": "A", "seed": 2026071511}, {"variant": "B", "seed": 2026071512}]
+    },
+    {
+      "key": "stage6_mid",
+      "stage": 6,
+      "phase": "mid",
+      "title_zh": "万灯渡神域",
+      "bpm": 176,
+      "voice_policy": "restrained_wordless_only",
+      "prompt": "Original Japanese night-festival fantasy danmaku final-stage music, exact 176 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, sacred river of ten thousand lanterns becoming overwhelming, memorable independent melody, wide synth layers, festival flute, koto-like lantern accents, taiko, electronic rock rhythm and low-mixed wordless choir only, no lyrics, no speech, preserve clarity for dense final-stage warning SFX",
+      "candidates": [{"variant": "A", "seed": 2026071601}, {"variant": "B", "seed": 2026071602}]
+    },
+    {
+      "key": "stage6_boss",
+      "stage": 6,
+      "phase": "boss",
+      "title_zh": "百鬼夜祭神",
+      "bpm": 194,
+      "voice_policy": "restrained_wordless_only",
+      "prompt": "Original Japanese night-festival fantasy danmaku final-boss music, exact 194 BPM, steady 4/4, seamless loopable 30-second motif, no intro, no outro, divine god of the unending night festival, memorable independent final melody, forceful taiko, electronic rock guitar and bass, festival flute, shamisen-like plucks, brilliant synth lead and restrained wordless choir only, no lyrics, no speech, dramatic but clean mix with explicit transient space for spell, laser warning SFX, deathbomb and player hit SFX",
+      "candidates": [{"variant": "A", "seed": 2026071611}, {"variant": "B", "seed": 2026071612}]
+    }
+  ]
+}
