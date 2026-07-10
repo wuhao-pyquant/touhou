@@ -13,8 +13,9 @@ from typing import Any
 from phase7_candidate_runner import candidate_filename
 from phase7_catalog import load_catalog
 
-PCM_FULL_SCALE = 32_767.0
+PCM_FULL_SCALE = 32_768.0
 SILENCE_THRESHOLD = max(1, int(PCM_FULL_SCALE * (10.0 ** (-60.0 / 20.0))))
+DURATION_TOLERANCE_SECONDS = 0.05
 
 
 def _unreadable_report(path: Path, message: str) -> dict[str, Any]:
@@ -52,8 +53,13 @@ def analyze_wave(path: Path, expected_seconds: float) -> dict[str, Any]:
         errors.append(f"expected 16-bit PCM, got {sample_width * 8} bits")
     if sample_rate != 44_100:
         errors.append(f"expected 44100 Hz, got {sample_rate}")
-    if abs(duration - expected_seconds) > 0.05:
-        errors.append(f"expected {expected_seconds}s, got {duration:.6f}s")
+    if sample_rate:
+        expected_frames = int(round(expected_seconds * sample_rate))
+        tolerance_frames = int(round(DURATION_TOLERANCE_SECONDS * sample_rate))
+        if abs(frame_count - expected_frames) > tolerance_frames:
+            errors.append(f"expected {expected_seconds}s +/- {DURATION_TOLERANCE_SECONDS:.2f}s, got {duration:.6f}s")
+    else:
+        errors.append(f"expected {expected_seconds}s +/- {DURATION_TOLERANCE_SECONDS:.2f}s, got {duration:.6f}s")
 
     try:
         samples = struct.unpack(f"<{len(raw) // 2}h", raw) if raw else ()

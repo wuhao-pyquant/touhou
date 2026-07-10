@@ -15,16 +15,33 @@ sys.path.insert(0, str(ROOT / "tools" / "audio"))
 
 from phase7_candidate_qa import analyze_wave, build_review_html, run_qa
 
+SAMPLE_RATE = 44_100
 
-def write_tone(path: Path, seconds: float = 30.0, amplitude: float = 0.25) -> None:
-    frames = int(44_100 * seconds)
+
+def write_pcm(path: Path, samples: list[int], frame_count: int) -> None:
     with wave.open(str(path), "wb") as handle:
         handle.setnchannels(2)
         handle.setsampwidth(2)
-        handle.setframerate(44_100)
+        handle.setframerate(SAMPLE_RATE)
         chunks = bytearray()
-        for index in range(frames):
-            value = int(32_767 * amplitude * math.sin(2.0 * math.pi * 440.0 * index / 44_100))
+        for index in range(frame_count):
+            value = samples[index % len(samples)]
+            chunks.extend(struct.pack("<hh", value, value))
+        handle.writeframes(bytes(chunks))
+
+
+def write_tone(path: Path, seconds: float = 30.0, amplitude: float = 0.25) -> None:
+    frame_count = int(round(SAMPLE_RATE * seconds))
+    samples = [
+        int(32_767 * amplitude * math.sin(2.0 * math.pi * 440.0 * index / SAMPLE_RATE))
+        for index in range(frame_count)
+    ]
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(2)
+        handle.setsampwidth(2)
+        handle.setframerate(SAMPLE_RATE)
+        chunks = bytearray()
+        for value in samples:
             chunks.extend(struct.pack("<hh", value, value))
         handle.writeframes(bytes(chunks))
 
@@ -53,10 +70,28 @@ class Phase7CandidateQaTests(unittest.TestCase):
     def test_tone_passes_candidate_qa(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "tone.wav"
-            write_tone(path)
+            passing_frames = [
+                (int(round(SAMPLE_RATE * 30.0)), "exact_30"),
+                (int(round(SAMPLE_RATE * 29.95)), "inclusive_lower"),
+                (int(round(SAMPLE_RATE * 30.05)), "inclusive_upper"),
+            ]
+            for frame_count, label in passing_frames:
+                with self.subTest(case=label):
+                    write_tone(path, seconds=frame_count / SAMPLE_RATE)
+                    report = analyze_wave(path, 30.0)
+                    self.assertEqual("pass", report["status"])
+                    self.assertLessEqual(report["peak_dbfs"], 0.0)
+                    self.assertLess(report["silence_ratio"], 0.98)
+
+            write_tone(path, seconds=((int(round(SAMPLE_RATE * 30.05)) + 1) / SAMPLE_RATE))
+            report = analyze_wave(path, 30.0)
+            self.assertEqual("fail", report["status"])
+            self.assertIn("expected 30.0s", " ".join(report["errors"]))
+
+            write_pcm(path, [-32_768], int(round(SAMPLE_RATE * 30.0)))
             report = analyze_wave(path, 30.0)
             self.assertEqual("pass", report["status"])
-            self.assertLess(report["peak_dbfs"], 0.0)
+            self.assertEqual(0.0, report["peak_dbfs"])
             self.assertLess(report["silence_ratio"], 0.98)
 
     def test_silence_fails_candidate_qa(self) -> None:
