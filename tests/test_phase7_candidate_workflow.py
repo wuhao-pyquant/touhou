@@ -38,6 +38,7 @@ class Phase7CandidateWorkflowDocsTests(unittest.TestCase):
         self.assertIn("python tests/test_phase7_candidate_runner.py", content)
         self.assertIn("python tests/test_phase7_candidate_qa.py", content)
         self.assertNotIn("Expected: `15` tests total", content)
+        self.assertNotIn("Current verified baseline", content)
 
 
 if __name__ == "__main__":
