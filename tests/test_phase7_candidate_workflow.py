@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -10,6 +11,19 @@ PLAN_DOC = ROOT / "docs" / "superpowers" / "plans" / "2026-07-10-phase7a-bgm-can
 
 
 class Phase7CandidateWorkflowDocsTests(unittest.TestCase):
+    def _normalize_doc(self, content: str) -> str:
+        return content.rstrip("\n") + "\n"
+
+    def _extract_step1_markdown_block(self) -> str:
+        content = PLAN_DOC.read_text(encoding="utf-8")
+        match = re.search(
+            r"\*\*Step 1: Write the exact operator document\*\*.*?````markdown\n(.*?)\n````",
+            content,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "Task 4 Step 1 embedded markdown block not found")
+        return match.group(1) + "\n"
+
     def test_get_content_json_commands_require_utf8_encoding(self) -> None:
         for path in (WORKFLOW_DOC, PLAN_DOC):
             with self.subTest(path=path):
@@ -39,6 +53,11 @@ class Phase7CandidateWorkflowDocsTests(unittest.TestCase):
         self.assertIn("python tests/test_phase7_candidate_qa.py", content)
         self.assertNotIn("Expected: `15` tests total", content)
         self.assertNotIn("Current verified baseline", content)
+
+    def test_plan_step1_embedded_workflow_doc_matches_tracked_workflow_doc(self) -> None:
+        embedded = self._normalize_doc(self._extract_step1_markdown_block())
+        workflow = self._normalize_doc(WORKFLOW_DOC.read_text(encoding="utf-8"))
+        self.assertEqual(workflow, embedded)
 
 
 if __name__ == "__main__":
