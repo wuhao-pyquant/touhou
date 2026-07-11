@@ -6,6 +6,20 @@ extends Node
 const SFX_POOL_SIZE := 8
 const MIN_VOLUME_DB := -80.0
 const PAUSE_BGM_DUCK_DB := -12.0
+const BGM_PATHS := {
+	"stage1_mid": "res://audio/bgm/bgm_stage1_mid.ogg",
+	"stage1_boss": "res://audio/bgm/bgm_stage1_boss.ogg",
+	"stage2_mid": "res://audio/bgm/bgm_stage2_mid.ogg",
+	"stage2_boss": "res://audio/bgm/bgm_stage2_boss.ogg",
+	"stage3_mid": "res://audio/bgm/bgm_stage3_mid.ogg",
+	"stage3_boss": "res://audio/bgm/bgm_stage3_boss.ogg",
+	"stage4_mid": "res://audio/bgm/bgm_stage4_mid.ogg",
+	"stage4_boss": "res://audio/bgm/bgm_stage4_boss.ogg",
+	"stage5_mid": "res://audio/bgm/bgm_stage5_mid.ogg",
+	"stage5_boss": "res://audio/bgm/bgm_stage5_boss.ogg",
+	"stage6_mid": "res://audio/bgm/bgm_stage6_mid.ogg",
+	"stage6_boss": "res://audio/bgm/bgm_stage6_boss.ogg",
+}
 
 # Two BGM players are used for seamless crossfade between tracks. Swapping
 # `stream` on the SAME player mid-play can cause a single-frame hiccup as
@@ -38,16 +52,8 @@ func _ready() -> void:
 	# play() once and stop(). This forces the audio server to decode the
 	# initial chunk of each track NOW (during level-load / initial boot) so
 	# the first real play() call has zero latency and zero frame hitch later.
-	var bgm_paths := {
-		"stage1_mid":  "res://audio/bgm/bgm_stage1_mid.wav",
-		"stage1_boss": "res://audio/bgm/bgm_stage1_boss.wav",
-		"stage2_mid":  "res://audio/bgm/bgm_stage2_mid.wav",
-		"stage2_boss": "res://audio/bgm/bgm_stage2_boss.wav",
-		"stage3_mid":  "res://audio/bgm/bgm_stage3_mid.wav",
-		"stage3_boss": "res://audio/bgm/bgm_stage3_boss.wav",
-	}
-	for key in bgm_paths.keys():
-		var s = load(bgm_paths[key])
+	for key in BGM_PATHS.keys():
+		var s = load(BGM_PATHS[key])
 		_bgm_cache[key] = s
 		# Prime the stream to pre-decode (uses bgm_players[1] as scratch).
 		bgm_players[1].stream = s
