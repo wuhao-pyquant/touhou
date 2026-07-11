@@ -10,6 +10,7 @@ import wave
 from array import array
 from pathlib import Path
 from typing import Callable
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools" / "audio"))
@@ -362,6 +363,24 @@ class Phase7LongformAudioTests(unittest.TestCase):
         self.assertEqual(PREVIEW_FRAMES, preview_data.frame_count)
         self.assertEqual(frame_slice(master_data.samples, MASTER_FRAMES - (15 * SAMPLE_RATE), 15 * SAMPLE_RATE), frame_slice(preview_data.samples, 0, 15 * SAMPLE_RATE))
         self.assertEqual(frame_slice(master_data.samples, 0, 15 * SAMPLE_RATE), frame_slice(preview_data.samples, 15 * SAMPLE_RATE, 15 * SAMPLE_RATE))
+
+    def test_build_transition_preview_rejects_non_exact_window_arguments_before_reading_master(self) -> None:
+        self.require_audio_api()
+        preview_path = self.temp_root / "invalid_preview.wav"
+        invalid_cases = [
+            ("int", 15),
+            ("different float", 10.0),
+            ("bool", True),
+            ("nan", float("nan")),
+            ("inf", float("inf")),
+            ("neg_inf", float("-inf")),
+        ]
+        for label, invalid_value in invalid_cases:
+            with self.subTest(case=label):
+                with mock.patch("phase7_longform_audio.read_pcm16_wave") as mocked_read:
+                    with self.assertRaisesRegex(ValueError, r"window_seconds must be 15\.0"):
+                        build_transition_preview(self.source_path, preview_path, invalid_value)
+                    mocked_read.assert_not_called()
 
     def test_invalid_metadata_and_contract_values_raise_value_error(self) -> None:
         self.require_audio_api()

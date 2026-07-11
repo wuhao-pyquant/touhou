@@ -24,11 +24,13 @@ MASTER_SECONDS = 180.0
 CANDIDATE_SECONDS = 30.0
 GUIDE_CROSSFADE_SECONDS = 1.0
 LOOP_CROSSFADE_SECONDS = 8.0
+PREVIEW_WINDOW_SECONDS = 15.0
 GUIDE_FRAMES = int(round(GUIDE_SECONDS * SAMPLE_RATE))
 MASTER_FRAMES = int(round(MASTER_SECONDS * SAMPLE_RATE))
 CANDIDATE_FRAMES = int(round(CANDIDATE_SECONDS * SAMPLE_RATE))
 GUIDE_CROSSFADE_FRAMES = int(round(GUIDE_CROSSFADE_SECONDS * SAMPLE_RATE))
 LOOP_CROSSFADE_FRAMES = int(round(LOOP_CROSSFADE_SECONDS * SAMPLE_RATE))
+PREVIEW_FRAMES = int(round(PREVIEW_WINDOW_SECONDS * 2.0 * SAMPLE_RATE))
 SECTION_STARTS_SECONDS = [0.0, 30.0, 60.0, 90.0, 120.0, 158.0]
 SECTION_NOMINAL_SECONDS = [31.0, 31.0, 31.0, 31.0, 39.0, 30.0]
 SECTION_EFFECTIVE_SECONDS = [30.0, 30.0, 30.0, 30.0, 38.0, 30.0]
@@ -524,11 +526,14 @@ def render_circular_loop(source_path: Path, output_path: Path, source_seconds: f
 
 
 def build_transition_preview(master_path: Path, output_path: Path, window_seconds: float = 15.0) -> dict[str, Any]:
-    _require(type(window_seconds) is float and window_seconds > 0.0, "window_seconds must be a positive float")
+    _require(
+        type(window_seconds) is float and math.isfinite(window_seconds) and window_seconds == PREVIEW_WINDOW_SECONDS,
+        "window_seconds must be 15.0",
+    )
     master = read_pcm16_wave(master_path)
     _validate_wave_data(master, MASTER_FRAMES, label="master")
     window_frames = int(round(window_seconds * SAMPLE_RATE))
-    _require(window_frames * 2 <= master.frame_count, "master must be exactly 180 seconds for preview extraction")
+    _require(window_frames == PREVIEW_FRAMES // 2, "window_seconds must be 15.0")
 
     preview_samples = array("h")
     preview_samples.extend(master.samples[(master.frame_count - window_frames) * CHANNELS:])
@@ -539,7 +544,7 @@ def build_transition_preview(master_path: Path, output_path: Path, window_second
         bits_per_sample=BITS_PER_SAMPLE,
         samples=preview_samples,
     )
-    _validate_wave_data(preview, window_frames * 2, label="preview")
+    _validate_wave_data(preview, PREVIEW_FRAMES, label="preview")
     _require_wave_metrics(preview, "preview")
     write_pcm16_wave(output_path, preview)
 
