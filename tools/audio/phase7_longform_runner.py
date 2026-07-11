@@ -18,14 +18,14 @@ from phase7_longform_audio import build_macro_guide
 from phase7_longform_catalog import (
     load_longform_catalog,
     local_candidate_path,
+    phase7a_catalog_path_for_longform_catalog,
     validate_external_selection,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-PHASE7A_CATALOG_PATH = ROOT / "audio" / "production" / "phase7_bgm_jobs.json"
 CONTROL_FILES = [
     ("control/phase7_bgm_longform_jobs.json", lambda catalog_path: catalog_path.resolve()),
-    ("control/phase7_bgm_jobs.json", lambda _catalog_path: PHASE7A_CATALOG_PATH.resolve()),
+    ("control/phase7_bgm_jobs.json", lambda catalog_path: phase7a_catalog_path_for_longform_catalog(catalog_path).resolve()),
     ("control/phase7_longform_catalog.py", lambda _catalog_path: Path(phase7_longform_catalog.__file__).resolve()),
     ("control/phase7_catalog.py", lambda _catalog_path: Path(phase7_catalog.__file__).resolve()),
     ("control/phase7_longform_audio.py", lambda _catalog_path: Path(phase7_longform_audio.__file__).resolve()),
@@ -255,7 +255,11 @@ def run_longform_catalog(
     generator: list[str],
     force: bool,
 ) -> int:
+    catalog_path = Path(catalog_path)
+    selection_path = Path(selection_path)
+    staging_root = Path(staging_root)
     catalog = load_longform_catalog(catalog_path)
+    phase7a_catalog_path = phase7a_catalog_path_for_longform_catalog(catalog_path)
     reports_dir = staging_root / "reports"
     manifest_path = reports_dir / "longform_generation_manifest.json"
     previous_manifest = _load_previous_manifest(manifest_path)
@@ -291,7 +295,7 @@ def run_longform_catalog(
         write_json_atomic(manifest_path, manifest)
 
         try:
-            selection = validate_external_selection(catalog, selection_path, staging_root)
+            selection = validate_external_selection(catalog, selection_path, staging_root, phase7a_catalog_path)
             selection_track = _selection_by_key(selection)[track_key]
             candidate_path = local_candidate_path(staging_root, track_key, selection_track["seed"])
             longform_prompt = _compose_longform_prompt(catalog, track)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import os
 import json
 import shutil
 import subprocess
@@ -10,6 +11,7 @@ import tempfile
 import unittest
 import wave
 from array import array
+from importlib import util as importlib_util
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -252,8 +254,10 @@ class Phase7LongformRunnerTests(unittest.TestCase):
             patchers.append(mock.patch.object(runner.shutil, "which", side_effect=which_side_effect))
 
         catalog_path = staging_root / "phase7_bgm_longform_jobs.json"
+        phase7a_catalog_path = staging_root / "phase7_bgm_jobs.json"
         selection_path = staging_root / "bgm_candidate_selection.json"
         catalog_path.write_text("{\"fixture\": true}\n", encoding="utf-8")
+        phase7a_catalog_path.write_text("{\"fixture\": true}\n", encoding="utf-8")
         selection_path.write_text("{\"fixture\": true}\n", encoding="utf-8")
 
         with patchers[0], patchers[1], patchers[2]:
@@ -378,6 +382,10 @@ class Phase7LongformRunnerTests(unittest.TestCase):
                 ],
                 [entry["published_path"] for entry in job["fingerprint"]["control_files"]],
             )
+            self.assertEqual(
+                str((staging_root / "phase7_bgm_jobs.json").resolve()),
+                job["fingerprint"]["control_files"][1]["source_path"],
+            )
 
             statuses = [snapshot["jobs"][0]["status"] for snapshot in snapshots if snapshot["jobs"]]
             self.assertEqual(["planned", "guide_ready", "generating", "generated"], statuses[:4])
@@ -465,6 +473,103 @@ class Phase7LongformRunnerTests(unittest.TestCase):
             self.assertIn("finished_at_unix", manifest["jobs"][0])
             self.assertEqual("retained_for_next_cleanup", manifest["jobs"][0]["partial_cleanup"])
             self.assertTrue(retained_partial.exists())
+
+    def test_flat_control_layout_uses_sibling_phase7a_and_control_scripts_without_repo_fallback(self) -> None:
+        self.require_runner_api()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            control_root = temp_root / "control"
+            staging_root = temp_root / "staging"
+            control_root.mkdir(parents=True, exist_ok=True)
+            staging_root.mkdir(parents=True, exist_ok=True)
+
+            copied_longform_path = control_root / "phase7_bgm_longform_jobs.json"
+            copied_phase7a_path = control_root / "phase7_bgm_jobs.json"
+            copied_runner_path = control_root / "phase7_longform_runner.py"
+            copied_longform_catalog_path = control_root / "phase7_longform_catalog.py"
+            copied_phase7_catalog_path = control_root / "phase7_catalog.py"
+            copied_longform_audio_path = control_root / "phase7_longform_audio.py"
+            copied_selection_path = staging_root / "reports" / "bgm_candidate_selection.json"
+
+            shutil.copyfile(ROOT / "audio" / "production" / "phase7_bgm_longform_jobs.json", copied_longform_path)
+            shutil.copyfile(ROOT / "audio" / "production" / "phase7_bgm_jobs.json", copied_phase7a_path)
+            shutil.copyfile(ROOT / "tools" / "audio" / "phase7_longform_runner.py", copied_runner_path)
+            shutil.copyfile(ROOT / "tools" / "audio" / "phase7_longform_catalog.py", copied_longform_catalog_path)
+            shutil.copyfile(ROOT / "tools" / "audio" / "phase7_catalog.py", copied_phase7_catalog_path)
+            shutil.copyfile(ROOT / "tools" / "audio" / "phase7_longform_audio.py", copied_longform_audio_path)
+
+            longform_data = json.loads(copied_longform_path.read_text(encoding="utf-8"))
+            phase7a_data = json.loads(copied_phase7a_path.read_text(encoding="utf-8"))
+            phase7a_data["negative_prompt"] = phase7a_data["negative_prompt"] + " flat-control-only"
+            longform_data["negative_prompt"] = phase7a_data["negative_prompt"]
+            copied_phase7a_path.write_text(json.dumps(phase7a_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            copied_longform_path.write_text(json.dumps(longform_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            selection_source = json.loads(REAL_SELECTION_PATH.read_text(encoding="utf-8"))
+            selection_by_key = {track["track_key"]: track for track in selection_source["tracks"]}
+            selection_tracks = []
+            for track in longform_data["tracks"]:
+                key = track["key"]
+                seed = track["selected_seed"]
+                candidate_dir = staging_root / "bgm_candidates" / key
+                candidate_dir.mkdir(parents=True, exist_ok=True)
+                candidate_path = candidate_dir / f"bgm_{key}_B_seed-{seed}.wav"
+                shutil.copyfile(Path(selection_by_key[key]["candidate_path_windows"]), candidate_path)
+                selection_tracks.append({
+                    "track_key": key,
+                    "title_zh": track["title_zh"],
+                    "variant": "B",
+                    "seed": seed,
+                    "candidate_path_windows": rf"{CANONICAL_WINDOWS_ROOT}\bgm_candidates\{key}\bgm_{key}_B_seed-{seed}.wav",
+                    "candidate_path_macos": f"{CANONICAL_MACOS_ROOT}/bgm_candidates/{key}/bgm_{key}_B_seed-{seed}.wav",
+                    "sha256": track["selected_sha256"],
+                    "qa_status": "pass",
+                    "status": "selected",
+                })
+            copied_selection_path.parent.mkdir(parents=True, exist_ok=True)
+            copied_selection_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "selection_source": selection_source["selection_source"],
+                        "user_decision": selection_source["user_decision"],
+                        "recorded_at_utc": selection_source["recorded_at_utc"],
+                        "selection_complete": True,
+                        "tracks": selection_tracks,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ) + "\n",
+                encoding="utf-8",
+            )
+
+            generator_path = self.write_fake_generator(
+                staging_root / "flat_generator.py",
+                "import shutil, sys\n"
+                "out = sys.argv[sys.argv.index('--out') + 1]\n"
+                f"shutil.copyfile(r'{self.source_fixture}', out)\n",
+            )
+
+            script = (
+                "import sys\n"
+                "from pathlib import Path\n"
+                f"sys.path.insert(0, r'{control_root}')\n"
+                "import phase7_longform_runner as runner\n"
+                f"raise SystemExit(runner.run_longform_catalog(Path(r'{copied_longform_path}'), Path(r'{copied_selection_path}'), Path(r'{staging_root}'), [r'{sys.executable}', r'{generator_path}'], False))\n"
+            )
+            completed = subprocess.run([sys.executable, "-c", script], check=False)
+            self.assertEqual(0, completed.returncode)
+
+            manifest_path = staging_root / "reports" / "longform_generation_manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(0, manifest["failure_count"])
+            self.assertEqual("generated", manifest["jobs"][0]["status"])
+            control_files = manifest["jobs"][0]["fingerprint"]["control_files"]
+            self.assertEqual(str(copied_phase7a_path.resolve()), control_files[1]["source_path"])
+            self.assertEqual(str(copied_longform_catalog_path.resolve()), control_files[2]["source_path"])
+            self.assertEqual(str(copied_phase7_catalog_path.resolve()), control_files[3]["source_path"])
+            self.assertEqual(str(copied_longform_audio_path.resolve()), control_files[4]["source_path"])
+            self.assertEqual(str(copied_runner_path.resolve()), control_files[5]["source_path"])
 
     def test_run_longform_catalog_skips_existing_valid_source_only_when_prior_fingerprint_matches_exactly(self) -> None:
         self.require_runner_api()
@@ -616,7 +721,12 @@ class Phase7LongformRunnerTests(unittest.TestCase):
 
         before_bytes = REAL_SELECTION_PATH.read_bytes()
         catalog = load_longform_catalog(REAL_CATALOG_PATH)
-        selection = validate_external_selection(catalog, REAL_SELECTION_PATH, REAL_STAGING_ROOT)
+        selection = validate_external_selection(
+            catalog,
+            REAL_SELECTION_PATH,
+            REAL_STAGING_ROOT,
+            REAL_CATALOG_PATH.with_name("phase7_bgm_jobs.json"),
+        )
 
         generator_path = self.fixture_root / "stable-audio-3-medium.sh"
         generator_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")

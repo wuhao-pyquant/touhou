@@ -186,6 +186,10 @@ def local_candidate_path(staging_root: Path, track_key: str, seed: int) -> Path:
     return staging_root / "bgm_candidates" / track_key / f"bgm_{track_key}_B_seed-{seed}.wav"
 
 
+def phase7a_catalog_path_for_longform_catalog(longform_catalog_path: Path) -> Path:
+    return Path(longform_catalog_path).with_name("phase7_bgm_jobs.json")
+
+
 def _require_exact_keys(obj: dict[str, Any], allowed_keys: set[str], subject: str) -> None:
     unknown_keys = sorted(set(obj.keys()) - allowed_keys)
     _require(not unknown_keys, f"{subject} contains unknown keys: {', '.join(unknown_keys)}")
@@ -193,7 +197,7 @@ def _require_exact_keys(obj: dict[str, Any], allowed_keys: set[str], subject: st
     _require(not missing_keys, f"{subject} is missing keys: {', '.join(missing_keys)}")
 
 
-def validate_longform_catalog(data: dict[str, Any]) -> None:
+def validate_longform_catalog(data: dict[str, Any], phase7a_catalog_path: Path = PHASE7A_CATALOG_PATH) -> None:
     _require(isinstance(data, dict), "catalog root must be an object")
     _require_exact_keys(data, CATALOG_ALLOWED_KEYS, "catalog")
     _require_exact_int(data.get("schema_version"), 1, "schema_version must be integer 1")
@@ -214,7 +218,7 @@ def validate_longform_catalog(data: dict[str, Any]) -> None:
     _require_exact_float(defaults.get("target_lufs"), -16.0, "defaults.target_lufs must be float -16.0", "defaults.target_lufs must be -16.0")
     _require_exact_float(defaults.get("max_true_peak_dbtp"), -1.0, "defaults.max_true_peak_dbtp must be float -1.0", "defaults.max_true_peak_dbtp must be -1.0")
 
-    phase7a_catalog = load_phase7a_catalog(PHASE7A_CATALOG_PATH)
+    phase7a_catalog = load_phase7a_catalog(Path(phase7a_catalog_path))
 
     _require_exact_string(
         data.get("negative_prompt"),
@@ -303,14 +307,16 @@ def validate_longform_catalog(data: dict[str, Any]) -> None:
 
 
 def load_longform_catalog(path: Path) -> dict[str, Any]:
+    path = Path(path)
+    phase7a_catalog_path = phase7a_catalog_path_for_longform_catalog(path)
     with path.open("r", encoding="utf-8") as handle:
         data = json.load(handle)
-    validate_longform_catalog(data)
+    validate_longform_catalog(data, phase7a_catalog_path)
     return data
 
 
-def validate_external_selection(catalog: dict[str, Any], selection_path: Path, staging_root: Path) -> dict[str, Any]:
-    validate_longform_catalog(catalog)
+def validate_external_selection(catalog: dict[str, Any], selection_path: Path, staging_root: Path, phase7a_catalog_path: Path) -> dict[str, Any]:
+    validate_longform_catalog(catalog, phase7a_catalog_path)
 
     expected_selection_path = staging_root / "reports" / "bgm_candidate_selection.json"
     _require(Path(selection_path) == expected_selection_path, f"selection_path must match {expected_selection_path}")
