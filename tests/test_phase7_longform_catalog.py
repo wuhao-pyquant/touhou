@@ -7,7 +7,10 @@ import shutil
 import sys
 import tempfile
 import unittest
+import wave
+from array import array
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools" / "audio"))
@@ -18,6 +21,7 @@ CANONICAL_MACOS_ROOT = "/Volumes/personal_folder/temp/godot_touhou_phase7"
 from phase7_catalog import load_catalog as load_phase7a_catalog
 
 try:
+    import phase7_longform_catalog as longform_catalog_module
     from phase7_longform_catalog import (
         load_longform_catalog,
         validate_external_selection,
@@ -28,7 +32,13 @@ except Exception as exc:  # pragma: no cover - exercised during RED before imple
     load_longform_catalog = None
     validate_external_selection = None
     validate_longform_catalog = None
+    longform_catalog_module = None
     MODULE_IMPORT_ERROR = exc
+
+
+SAMPLE_RATE = 44_100
+CANDIDATE_SECONDS = 30.0
+CANDIDATE_FRAMES = int(round(SAMPLE_RATE * CANDIDATE_SECONDS))
 
 
 EXPECTED_TRACK_ORDER = [
@@ -187,12 +197,35 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         return copy.deepcopy(source)
 
     def validate_selection(self, catalog: dict, selection_path: Path, staging_root: Path, phase7a_path: Path | None = None) -> dict:
-        return validate_external_selection(
-            catalog,
-            selection_path,
-            staging_root,
-            self.phase7a_path if phase7a_path is None else phase7a_path,
-        )
+        with mock.patch.dict(
+            longform_catalog_module.APPROVED_SELECTED_SHA256,
+            {track["key"]: track["selected_sha256"] for track in catalog["tracks"]},
+            clear=False,
+        ):
+            return validate_external_selection(
+                catalog,
+                selection_path,
+                staging_root,
+                self.phase7a_path if phase7a_path is None else phase7a_path,
+            )
+
+    def write_synthetic_candidate(self, path: Path) -> str:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        chunk_frames = 16_384
+        with wave.open(str(path), "wb") as handle:
+            handle.setnchannels(2)
+            handle.setsampwidth(2)
+            handle.setframerate(SAMPLE_RATE)
+            for frame_start in range(0, CANDIDATE_FRAMES, chunk_frames):
+                frame_stop = min(CANDIDATE_FRAMES, frame_start + chunk_frames)
+                samples = array("h")
+                for frame_index in range(frame_start, frame_stop):
+                    left = 1024 if frame_index % 2 == 0 else -1024
+                    right = 768 if frame_index % 3 == 0 else -768
+                    samples.append(left)
+                    samples.append(right)
+                handle.writeframes(samples.tobytes())
+        return hashlib.sha256(path.read_bytes()).hexdigest()
 
     def build_flat_control_catalog_pair(self) -> tuple[Path, Path, tempfile.TemporaryDirectory]:
         temp_dir = tempfile.TemporaryDirectory()
@@ -209,11 +242,9 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         return longform_path, phase7a_path, temp_dir
 
     def build_temp_selection_fixture(self) -> tuple[dict, Path, Path, tempfile.TemporaryDirectory]:
-        temp_dir = tempfile.TemporaryDirectory(dir=r"Z:\temp")
+        temp_dir = tempfile.TemporaryDirectory()
         staging_root = Path(temp_dir.name)
         catalog = self.clone_data()
-        source_selection = json.loads(self.selection_path.read_text(encoding="utf-8"))
-        source_tracks = {track["track_key"]: track for track in source_selection["tracks"]}
         selection_tracks = []
         for track in catalog["tracks"]:
             key = track["key"]
@@ -221,8 +252,8 @@ class Phase7LongformCatalogTests(unittest.TestCase):
             candidate_dir = staging_root / "bgm_candidates" / key
             candidate_dir.mkdir(parents=True, exist_ok=True)
             candidate_path = candidate_dir / f"bgm_{key}_B_seed-{seed}.wav"
-            source_candidate_path = Path(source_tracks[key]["candidate_path_windows"])
-            shutil.copyfile(source_candidate_path, candidate_path)
+            synthetic_sha256 = self.write_synthetic_candidate(candidate_path)
+            track["selected_sha256"] = synthetic_sha256
             selection_tracks.append(
                 {
                     "track_key": key,
@@ -231,7 +262,7 @@ class Phase7LongformCatalogTests(unittest.TestCase):
                     "seed": seed,
                     "candidate_path_windows": rf"{CANONICAL_WINDOWS_ROOT}\bgm_candidates\{key}\bgm_{key}_B_seed-{seed}.wav",
                     "candidate_path_macos": f"{CANONICAL_MACOS_ROOT}/bgm_candidates/{key}/bgm_{key}_B_seed-{seed}.wav",
-                    "sha256": track["selected_sha256"],
+                    "sha256": synthetic_sha256,
                     "qa_status": "pass",
                     "status": "selected",
                 }
@@ -243,8 +274,8 @@ class Phase7LongformCatalogTests(unittest.TestCase):
                 {
                     "schema_version": 1,
                     "selection_source": "human",
-                    "user_decision": source_selection["user_decision"],
-                    "recorded_at_utc": source_selection["recorded_at_utc"],
+                    "user_decision": "synthetic-test-selection",
+                    "recorded_at_utc": "2026-07-10T12:00:00Z",
                     "selection_complete": True,
                     "tracks": selection_tracks,
                 },
@@ -290,8 +321,17 @@ class Phase7LongformCatalogTests(unittest.TestCase):
             self.assertEqual(EXPECTED_TRACK_DEVELOPMENT[track["key"]], track["longform_development"])
 
     def test_validate_external_selection_accepts_real_external_record(self) -> None:
+        if not self.selection_path.exists():
+            self.skipTest(f"missing external selection record: {self.selection_path}")
         data = self.load_catalog()
-        self.assertTrue(self.selection_path.exists(), f"missing external selection record: {self.selection_path}")
+        selection_data = json.loads(self.selection_path.read_text(encoding="utf-8"))
+        missing_candidates = [
+            track["track_key"]
+            for track in selection_data["tracks"]
+            if not (self.staging_root / "bgm_candidates" / track["track_key"] / f"bgm_{track['track_key']}_B_seed-{track['seed']}.wav").is_file()
+        ]
+        if missing_candidates:
+            self.skipTest(f"missing NAS candidates for: {', '.join(missing_candidates)}")
         validated = self.validate_selection(data, self.selection_path, self.staging_root)
         self.assertTrue(validated["selection_complete"])
         self.assertEqual(EXPECTED_TRACK_ORDER, [track["track_key"] for track in validated["tracks"]])
@@ -320,6 +360,20 @@ class Phase7LongformCatalogTests(unittest.TestCase):
             f"{CANONICAL_MACOS_ROOT}/bgm_candidates/stage1_mid/bgm_stage1_mid_B_seed-2026071102.wav",
             validated["tracks"][0]["candidate_path_macos"],
         )
+
+    def test_synthetic_selection_fixture_does_not_touch_real_selection_path(self) -> None:
+        original_read_text = Path.read_text
+
+        def guarded_read_text(path: Path, *args: object, **kwargs: object) -> str:
+            if Path(path) == self.selection_path:
+                raise AssertionError("synthetic fixture must not read REAL_SELECTION_PATH")
+            return original_read_text(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "read_text", autospec=True, side_effect=guarded_read_text):
+            catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
+            self.addCleanup(temp_dir.cleanup)
+            validated = self.validate_selection(catalog, selection_path, staging_root)
+        self.assertTrue(validated["selection_complete"])
 
     def test_validate_longform_catalog_rejects_wrong_selected_variant(self) -> None:
         data = self.clone_data()

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import os
 import json
 import shutil
 import subprocess
@@ -11,7 +10,6 @@ import tempfile
 import unittest
 import wave
 from array import array
-from importlib import util as importlib_util
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -182,7 +180,7 @@ class Phase7LongformRunnerTests(unittest.TestCase):
     def make_patched_inputs(self, staging_root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         candidate_path = staging_root / "bgm_candidates" / "stage1_mid" / "bgm_stage1_mid_B_seed-2026071102.wav"
         candidate_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(self.candidate_fixture, candidate_path)
+        write_pcm16_wave(candidate_path, CANDIDATE_FRAMES, left=640, right=-960)
         catalog = make_fixture_catalog(self.candidate_sha256)
         selection = make_fixture_selection(candidate_path, self.candidate_sha256)
         return catalog, selection
@@ -194,7 +192,7 @@ class Phase7LongformRunnerTests(unittest.TestCase):
         second_candidate_dir = staging_root / "bgm_candidates" / second_key
         second_candidate_dir.mkdir(parents=True, exist_ok=True)
         second_candidate_path = second_candidate_dir / f"bgm_{second_key}_B_seed-{second_seed}.wav"
-        shutil.copyfile(self.candidate_fixture, second_candidate_path)
+        write_pcm16_wave(second_candidate_path, CANDIDATE_FRAMES, left=640, right=-960)
         catalog["tracks"].append({
             "key": second_key,
             "stage": 1,
@@ -490,6 +488,7 @@ class Phase7LongformRunnerTests(unittest.TestCase):
             copied_phase7_catalog_path = control_root / "phase7_catalog.py"
             copied_longform_audio_path = control_root / "phase7_longform_audio.py"
             copied_selection_path = staging_root / "reports" / "bgm_candidate_selection.json"
+            synthetic_candidate_sha256 = self.candidate_sha256
 
             shutil.copyfile(ROOT / "audio" / "production" / "phase7_bgm_longform_jobs.json", copied_longform_path)
             shutil.copyfile(ROOT / "audio" / "production" / "phase7_bgm_jobs.json", copied_phase7a_path)
@@ -500,13 +499,11 @@ class Phase7LongformRunnerTests(unittest.TestCase):
 
             longform_data = json.loads(copied_longform_path.read_text(encoding="utf-8"))
             phase7a_data = json.loads(copied_phase7a_path.read_text(encoding="utf-8"))
-            phase7a_data["negative_prompt"] = phase7a_data["negative_prompt"] + " flat-control-only"
-            longform_data["negative_prompt"] = phase7a_data["negative_prompt"]
             copied_phase7a_path.write_text(json.dumps(phase7a_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            for track in longform_data["tracks"]:
+                track["selected_sha256"] = synthetic_candidate_sha256
             copied_longform_path.write_text(json.dumps(longform_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-            selection_source = json.loads(REAL_SELECTION_PATH.read_text(encoding="utf-8"))
-            selection_by_key = {track["track_key"]: track for track in selection_source["tracks"]}
             selection_tracks = []
             for track in longform_data["tracks"]:
                 key = track["key"]
@@ -514,7 +511,7 @@ class Phase7LongformRunnerTests(unittest.TestCase):
                 candidate_dir = staging_root / "bgm_candidates" / key
                 candidate_dir.mkdir(parents=True, exist_ok=True)
                 candidate_path = candidate_dir / f"bgm_{key}_B_seed-{seed}.wav"
-                shutil.copyfile(Path(selection_by_key[key]["candidate_path_windows"]), candidate_path)
+                write_pcm16_wave(candidate_path, CANDIDATE_FRAMES, left=640, right=-960)
                 selection_tracks.append({
                     "track_key": key,
                     "title_zh": track["title_zh"],
@@ -522,7 +519,7 @@ class Phase7LongformRunnerTests(unittest.TestCase):
                     "seed": seed,
                     "candidate_path_windows": rf"{CANONICAL_WINDOWS_ROOT}\bgm_candidates\{key}\bgm_{key}_B_seed-{seed}.wav",
                     "candidate_path_macos": f"{CANONICAL_MACOS_ROOT}/bgm_candidates/{key}/bgm_{key}_B_seed-{seed}.wav",
-                    "sha256": track["selected_sha256"],
+                    "sha256": synthetic_candidate_sha256,
                     "qa_status": "pass",
                     "status": "selected",
                 })
@@ -531,9 +528,9 @@ class Phase7LongformRunnerTests(unittest.TestCase):
                 json.dumps(
                     {
                         "schema_version": 1,
-                        "selection_source": selection_source["selection_source"],
-                        "user_decision": selection_source["user_decision"],
-                        "recorded_at_utc": selection_source["recorded_at_utc"],
+                        "selection_source": "human",
+                        "user_decision": "synthetic-flat-control",
+                        "recorded_at_utc": "2026-07-10T12:00:00Z",
                         "selection_complete": True,
                         "tracks": selection_tracks,
                     },
@@ -542,6 +539,9 @@ class Phase7LongformRunnerTests(unittest.TestCase):
                 ) + "\n",
                 encoding="utf-8",
             )
+            approved_sha_map_literal = "{" + ", ".join(
+                [f"'{track['key']}': '{synthetic_candidate_sha256}'" for track in longform_data["tracks"]]
+            ) + "}"
 
             generator_path = self.write_fake_generator(
                 staging_root / "flat_generator.py",
@@ -554,7 +554,9 @@ class Phase7LongformRunnerTests(unittest.TestCase):
                 "import sys\n"
                 "from pathlib import Path\n"
                 f"sys.path.insert(0, r'{control_root}')\n"
+                "import phase7_longform_catalog as catalog_module\n"
                 "import phase7_longform_runner as runner\n"
+                f"catalog_module.APPROVED_SELECTED_SHA256 = {approved_sha_map_literal}\n"
                 f"raise SystemExit(runner.run_longform_catalog(Path(r'{copied_longform_path}'), Path(r'{copied_selection_path}'), Path(r'{staging_root}'), [r'{sys.executable}', r'{generator_path}'], False))\n"
             )
             completed = subprocess.run([sys.executable, "-c", script], check=False)
@@ -570,6 +572,39 @@ class Phase7LongformRunnerTests(unittest.TestCase):
             self.assertEqual(str(copied_phase7_catalog_path.resolve()), control_files[3]["source_path"])
             self.assertEqual(str(copied_longform_audio_path.resolve()), control_files[4]["source_path"])
             self.assertEqual(str(copied_runner_path.resolve()), control_files[5]["source_path"])
+
+    def test_synthetic_runner_helpers_do_not_touch_real_selection_path(self) -> None:
+        self.require_runner_api()
+        original_read_text = Path.read_text
+        original_read_bytes = Path.read_bytes
+
+        def guarded_read_text(path: Path, *args: object, **kwargs: object) -> str:
+            if Path(path) == REAL_SELECTION_PATH:
+                raise AssertionError("synthetic runner helpers must not read REAL_SELECTION_PATH")
+            return original_read_text(path, *args, **kwargs)
+
+        def guarded_read_bytes(path: Path, *args: object, **kwargs: object) -> bytes:
+            if Path(path) == REAL_SELECTION_PATH:
+                raise AssertionError("synthetic runner helpers must not read REAL_SELECTION_PATH")
+            return original_read_bytes(path, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            staging_root = Path(temp_dir)
+
+            def fake_subprocess(command: list[str], check: bool = False) -> subprocess.CompletedProcess:
+                out_path = Path(command[command.index("--out") + 1])
+                shutil.copyfile(self.source_fixture, out_path)
+                return subprocess.CompletedProcess(command, 0)
+
+            with mock.patch.object(Path, "read_text", autospec=True, side_effect=guarded_read_text):
+                with mock.patch.object(Path, "read_bytes", autospec=True, side_effect=guarded_read_bytes):
+                    exit_code, manifest, _ = self.run_with_patches(
+                        staging_root,
+                        [sys.executable, str(staging_root / "synthetic_generator.py")],
+                        subprocess_side_effect=fake_subprocess,
+                    )
+        self.assertEqual(0, exit_code)
+        self.assertEqual("generated", manifest["jobs"][0]["status"])
 
     def test_run_longform_catalog_skips_existing_valid_source_only_when_prior_fingerprint_matches_exactly(self) -> None:
         self.require_runner_api()
@@ -716,8 +751,10 @@ class Phase7LongformRunnerTests(unittest.TestCase):
 
     def test_real_catalog_and_real_selection_build_twelve_exact_commands_without_mutating_external_selection(self) -> None:
         self.require_runner_api()
-        self.assertTrue(REAL_CATALOG_PATH.exists(), f"missing catalog: {REAL_CATALOG_PATH}")
-        self.assertTrue(REAL_SELECTION_PATH.exists(), f"missing selection: {REAL_SELECTION_PATH}")
+        if not REAL_CATALOG_PATH.exists():
+            self.skipTest(f"missing catalog: {REAL_CATALOG_PATH}")
+        if not REAL_SELECTION_PATH.exists():
+            self.skipTest(f"missing selection: {REAL_SELECTION_PATH}")
 
         before_bytes = REAL_SELECTION_PATH.read_bytes()
         catalog = load_longform_catalog(REAL_CATALOG_PATH)
@@ -727,6 +764,13 @@ class Phase7LongformRunnerTests(unittest.TestCase):
             REAL_STAGING_ROOT,
             REAL_CATALOG_PATH.with_name("phase7_bgm_jobs.json"),
         )
+        missing_candidates = [
+            track["track_key"]
+            for track in selection["tracks"]
+            if not (REAL_STAGING_ROOT / "bgm_candidates" / track["track_key"] / f"bgm_{track['track_key']}_B_seed-{track['seed']}.wav").is_file()
+        ]
+        if missing_candidates:
+            self.skipTest(f"missing NAS candidates for: {', '.join(missing_candidates)}")
 
         generator_path = self.fixture_root / "stable-audio-3-medium.sh"
         generator_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
