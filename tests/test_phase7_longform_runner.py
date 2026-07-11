@@ -219,6 +219,34 @@ class Phase7LongformRunnerTests(unittest.TestCase):
         })
         return catalog, selection
 
+    def make_full_catalog_fixture(self, staging_root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+        del staging_root
+        catalog = json.loads(REAL_CATALOG_PATH.read_text(encoding="utf-8"))
+        selection_tracks = []
+        for track in catalog["tracks"]:
+            key = track["key"]
+            seed = track["selected_seed"]
+            selection_tracks.append({
+                "track_key": key,
+                "title_zh": track["title_zh"],
+                "variant": "B",
+                "seed": seed,
+                "candidate_path_windows": rf"{CANONICAL_WINDOWS_ROOT}\bgm_candidates\{key}\bgm_{key}_B_seed-{seed}.wav",
+                "candidate_path_macos": f"{CANONICAL_MACOS_ROOT}/bgm_candidates/{key}/bgm_{key}_B_seed-{seed}.wav",
+                "sha256": track["selected_sha256"],
+                "qa_status": "pass",
+                "status": "selected",
+            })
+        selection = {
+            "schema_version": 1,
+            "selection_source": "synthetic",
+            "user_decision": "approved",
+            "recorded_at_utc": "2026-07-11T00:00:00Z",
+            "selection_complete": True,
+            "tracks": selection_tracks,
+        }
+        return catalog, selection
+
     def optional_integration_candidate_path(self, staging_root: Path, track_key: str, seed: int) -> Path:
         return staging_root / "bgm_candidates" / track_key / f"bgm_{track_key}_B_seed-{seed}.wav"
 
@@ -509,6 +537,60 @@ class Phase7LongformRunnerTests(unittest.TestCase):
             self.assertEqual(str(generator_path.resolve()), manifest["jobs"][0]["fingerprint"]["generator_script_path"])
             self.assertEqual(str(generator_path.resolve()), captured_commands[0][0])
 
+    def test_run_longform_catalog_records_unresolved_path_generator_as_durable_global_preflight_failure(self) -> None:
+        self.require_runner_api()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            staging_root = Path(temp_dir)
+            exit_code, manifest, snapshots = self.run_with_patches(
+                staging_root,
+                ["stable-audio-3-medium.sh", "--profile", "longform"],
+                capture_manifest=True,
+                fixture_factory=self.make_full_catalog_fixture,
+                which_side_effect=lambda _name: None,
+            )
+
+            self.assertEqual(1, exit_code)
+            self.assertEqual(12, len(manifest["jobs"]))
+            self.assertEqual(12, manifest["failure_count"])
+            self.assertIn("completed_at_unix", manifest)
+            self.assertEqual(12, len(snapshots[0]["jobs"]))
+            self.assertTrue(all(job["status"] == "planned" for job in snapshots[0]["jobs"]))
+            self.assertTrue(all(job["status"] == "generation_failed" for job in manifest["jobs"]))
+            self.assertTrue(all(job.get("error") == "generator executable could not be resolved: stable-audio-3-medium.sh" for job in manifest["jobs"]))
+            self.assertTrue(all("finished_at_unix" in job for job in manifest["jobs"]))
+            self.assertFalse((staging_root / "bgm_guides").exists())
+            self.assertFalse((staging_root / "bgm_longform").exists())
+            self.assertTrue(all(not Path(job["guide_path"]).exists() for job in manifest["jobs"]))
+            self.assertTrue(all(not Path(job["output_path"]).exists() for job in manifest["jobs"]))
+            self.assertTrue(all(not Path(job["partial_output_path"]).exists() for job in manifest["jobs"]))
+
+    def test_run_longform_catalog_records_missing_absolute_generator_as_durable_global_preflight_failure(self) -> None:
+        self.require_runner_api()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            staging_root = Path(temp_dir)
+            missing_generator = staging_root / "missing_generator.py"
+            exit_code, manifest, snapshots = self.run_with_patches(
+                staging_root,
+                [str(missing_generator)],
+                capture_manifest=True,
+                fixture_factory=self.make_full_catalog_fixture,
+            )
+
+            self.assertEqual(1, exit_code)
+            self.assertEqual(12, len(manifest["jobs"]))
+            self.assertEqual(12, manifest["failure_count"])
+            self.assertIn("completed_at_unix", manifest)
+            self.assertEqual(12, len(snapshots[0]["jobs"]))
+            self.assertTrue(all(job["status"] == "planned" for job in snapshots[0]["jobs"]))
+            self.assertTrue(all(job["status"] == "generation_failed" for job in manifest["jobs"]))
+            self.assertTrue(all(job.get("error") == f"generator executable could not be resolved: {missing_generator}" for job in manifest["jobs"]))
+            self.assertTrue(all("finished_at_unix" in job for job in manifest["jobs"]))
+            self.assertFalse((staging_root / "bgm_guides").exists())
+            self.assertFalse((staging_root / "bgm_longform").exists())
+            self.assertTrue(all(not Path(job["guide_path"]).exists() for job in manifest["jobs"]))
+            self.assertTrue(all(not Path(job["output_path"]).exists() for job in manifest["jobs"]))
+            self.assertTrue(all(not Path(job["partial_output_path"]).exists() for job in manifest["jobs"]))
+
     def test_run_longform_catalog_handles_keyboard_interrupt_persists_failure_and_stops_remaining_jobs(self) -> None:
         self.require_runner_api()
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -530,11 +612,12 @@ class Phase7LongformRunnerTests(unittest.TestCase):
             self.assertEqual(1, exit_code)
             self.assertEqual(1, manifest["failure_count"])
             self.assertIn("completed_at_unix", manifest)
-            self.assertEqual(1, len(manifest["jobs"]))
+            self.assertEqual(2, len(manifest["jobs"]))
             self.assertEqual("generation_failed", manifest["jobs"][0]["status"])
             self.assertIn("KeyboardInterrupt", manifest["jobs"][0]["error"])
             self.assertIn("finished_at_unix", manifest["jobs"][0])
             self.assertEqual("retained_for_next_cleanup", manifest["jobs"][0]["partial_cleanup"])
+            self.assertEqual("planned", manifest["jobs"][1]["status"])
             self.assertTrue(retained_partial.exists())
 
     def test_flat_control_layout_uses_sibling_phase7a_and_control_scripts_without_repo_fallback(self) -> None:

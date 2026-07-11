@@ -183,9 +183,19 @@ def _control_file_fingerprint(catalog_path: Path) -> list[dict[str, Any]]:
     return entries
 
 
+def _resolve_global_fingerprint_dependencies(catalog_path: Path, generator: list[str]) -> dict[str, Any]:
+    resolved_generator = _resolve_generator(generator)
+    generator_script = Path(resolved_generator[0])
+    return {
+        "generator": resolved_generator,
+        "generator_script_path": str(generator_script),
+        "generator_script_sha256": _sha256_file(generator_script),
+        "control_files": _control_file_fingerprint(catalog_path),
+    }
+
+
 def _build_fingerprint(
-    catalog_path: Path,
-    resolved_generator: list[str],
+    global_dependencies: dict[str, Any],
     defaults: dict[str, Any],
     track: dict[str, Any],
     selected_sha256: str,
@@ -193,7 +203,6 @@ def _build_fingerprint(
     negative_prompt: str,
     longform_prompt: str,
 ) -> dict[str, Any]:
-    generator_script = Path(resolved_generator[0])
     return {
         "selected_sha256": selected_sha256,
         "guide_sha256": guide_sha256,
@@ -206,10 +215,10 @@ def _build_fingerprint(
         "source_seconds": defaults["source_seconds"],
         "dit": defaults["dit"],
         "decoder": defaults["decoder"],
-        "generator": resolved_generator,
-        "generator_script_path": str(generator_script),
-        "generator_script_sha256": _sha256_file(generator_script),
-        "control_files": _control_file_fingerprint(catalog_path),
+        "generator": list(global_dependencies["generator"]),
+        "generator_script_path": global_dependencies["generator_script_path"],
+        "generator_script_sha256": global_dependencies["generator_script_sha256"],
+        "control_files": list(global_dependencies["control_files"]),
     }
 
 
@@ -248,6 +257,18 @@ def _selection_by_key(selection: dict[str, Any]) -> dict[str, dict[str, Any]]:
     }
 
 
+def _record_global_preflight_failure(manifest_path: Path, manifest: dict[str, Any], error: str) -> int:
+    finished_at_unix = int(time.time())
+    for job in manifest["jobs"]:
+        job["status"] = "generation_failed"
+        job["error"] = error
+        job["finished_at_unix"] = finished_at_unix
+    manifest["failure_count"] = len(manifest["jobs"])
+    manifest["completed_at_unix"] = finished_at_unix
+    write_json_atomic(manifest_path, manifest)
+    return 1
+
+
 def run_longform_catalog(
     catalog_path: Path,
     selection_path: Path,
@@ -260,22 +281,26 @@ def run_longform_catalog(
     staging_root = Path(staging_root)
     catalog = load_longform_catalog(catalog_path)
     phase7a_catalog_path = phase7a_catalog_path_for_longform_catalog(catalog_path)
+    selection = validate_external_selection(catalog, selection_path, staging_root, phase7a_catalog_path)
+    selection_by_key = _selection_by_key(selection)
     reports_dir = staging_root / "reports"
     manifest_path = reports_dir / "longform_generation_manifest.json"
     previous_manifest = _load_previous_manifest(manifest_path)
-    resolved_generator = _resolve_generator(generator)
     manifest: dict[str, Any] = {
         "schema_version": 1,
         "catalog_path": str(Path(catalog_path).resolve()),
         "selection_path": str(Path(selection_path).resolve()),
         "staging_root": str(Path(staging_root).resolve()),
-        "generator": resolved_generator,
+        "generator": list(generator),
         "jobs": [],
     }
     failures = 0
 
     for track in catalog["tracks"]:
         track_key = track["key"]
+        selection_track = selection_by_key[track_key]
+        candidate_path = local_candidate_path(staging_root, track_key, selection_track["seed"])
+        longform_prompt = _compose_longform_prompt(catalog, track)
         guide_path = staging_root / "bgm_guides" / track_key / guide_filename(track_key)
         output_path = staging_root / "bgm_longform" / track_key / source_filename(track_key)
         partial_path = output_path.with_name(output_path.stem + ".partial.wav")
@@ -284,35 +309,47 @@ def run_longform_catalog(
             "title_zh": track["title_zh"],
             "selected_variant": track["selected_variant"],
             "selected_seed": track["selected_seed"],
-            "generator": resolved_generator,
+            "generator": list(generator),
+            "candidate_path": str(candidate_path),
             "guide_path": str(guide_path),
             "output_path": str(output_path),
             "partial_output_path": str(partial_path),
             "negative_prompt": catalog["negative_prompt"],
+            "longform_prompt": longform_prompt,
             "status": "planned",
         }
         manifest["jobs"].append(job)
-        write_json_atomic(manifest_path, manifest)
+    write_json_atomic(manifest_path, manifest)
+
+    try:
+        global_dependencies = _resolve_global_fingerprint_dependencies(Path(catalog_path), generator)
+    except (OSError, ValueError) as exc:
+        return _record_global_preflight_failure(manifest_path, manifest, str(exc))
+
+    manifest["generator"] = list(global_dependencies["generator"])
+    for job in manifest["jobs"]:
+        job["generator"] = list(global_dependencies["generator"])
+
+    for track, job in zip(catalog["tracks"], manifest["jobs"]):
+        track_key = track["key"]
+        selection_track = selection_by_key[track_key]
+        candidate_path = Path(job["candidate_path"])
+        guide_path = Path(job["guide_path"])
+        output_path = Path(job["output_path"])
+        partial_path = Path(job["partial_output_path"])
 
         try:
-            selection = validate_external_selection(catalog, selection_path, staging_root, phase7a_catalog_path)
-            selection_track = _selection_by_key(selection)[track_key]
-            candidate_path = local_candidate_path(staging_root, track_key, selection_track["seed"])
-            longform_prompt = _compose_longform_prompt(catalog, track)
-            job["longform_prompt"] = longform_prompt
-            job["candidate_path"] = str(candidate_path)
             guide = _build_and_publish_guide(candidate_path, guide_path, catalog["defaults"])
             job["guide_sha256"] = guide["sha256"]
             job["guide_wave"] = guide["wave"]
             job["fingerprint"] = _build_fingerprint(
-                Path(catalog_path),
-                resolved_generator,
+                global_dependencies,
                 catalog["defaults"],
                 track,
                 selection_track["sha256"],
                 guide["sha256"],
                 catalog["negative_prompt"],
-                longform_prompt,
+                job["longform_prompt"],
             )
             job["status"] = "guide_ready"
             write_json_atomic(manifest_path, manifest)
@@ -349,7 +386,7 @@ def run_longform_catalog(
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         command = build_longform_command(
-            resolved_generator,
+            global_dependencies["generator"],
             catalog["defaults"],
             job,
             guide_path,
