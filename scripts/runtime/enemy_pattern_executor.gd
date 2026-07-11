@@ -84,13 +84,18 @@ func bullet_specs(enemy: Dictionary, player_position: Vector2, stage_bullet_spee
 			var mist_specs: Array = []
 			for i in range(6):
 				var mist_angle := PI / 2.0 + sin(shoot_phase * 0.1 + i * 0.9) * 0.65
-				mist_specs.append(_make_spec(position + Vector2((i - 2.5) * 9.0, 0.0), _velocity_for("butterfly", mist_angle, 1.65, stage_bullet_speed), "butterfly"))
+				var mist_velocity := _velocity_for("spiral_seed", mist_angle, 1.65, stage_bullet_speed)
+				mist_specs.append(_make_spec(position + Vector2((i - 2.5) * 9.0, 0.0), mist_velocity, "spiral_seed", {
+					"kind": "delayed_aim", "trigger_age": 30.0 + i * 5.0, "target_speed": mist_velocity.length(), "aim_on_trigger": true,
+				}))
 			return mist_specs
 		"wind":
 			var wind_specs: Array = []
 			for i in range(4):
 				var wind_angle := PI / 2.0 + sin(shoot_phase * 0.22 + i) * 0.45
-				wind_specs.append(_make_spec(position + Vector2((i - 1.5) * 12.0, 0.0), _velocity_for("needle", wind_angle, 2.8, stage_bullet_speed), "needle"))
+				wind_specs.append(_make_spec(position + Vector2((i - 1.5) * 12.0, 0.0), _velocity_for("storm_arc", wind_angle, 2.55, stage_bullet_speed), "storm_arc", {
+					"kind": "curve", "turn_rate": (-0.006 if i < 2 else 0.006),
+				}))
 			return wind_specs
 		"wind_aimed":
 			var wind_aim := (player_position - position).angle()
@@ -104,20 +109,31 @@ func bullet_specs(enemy: Dictionary, player_position: Vector2, stage_bullet_spee
 			for i in range(rhythm_count):
 				var rhythm_angle := TAU / float(rhythm_count) * i + shoot_phase * 0.18
 				var rhythm_family := "star" if shoot_phase % 2 == 0 else "rice"
-				rhythm_specs.append(_make_spec(position, _velocity_for(rhythm_family, rhythm_angle, 2.05, stage_bullet_speed), rhythm_family))
+				var rhythm_velocity := _velocity_for(rhythm_family, rhythm_angle, 2.05, stage_bullet_speed)
+				rhythm_specs.append(_make_spec(position, rhythm_velocity, rhythm_family, {
+					"kind": "brake_restart", "brake": 0.045, "trigger_age": 32.0, "target_speed": rhythm_velocity.length() * 0.9,
+				}))
 			return rhythm_specs
 		"large_orb":
 			var orb_specs: Array = []
 			var orb_angle := (player_position - position).angle()
 			for off in [-0.38, 0.0, 0.38]:
-				orb_specs.append(_make_spec(position, _velocity_for("large_orb", orb_angle + off, 1.9, stage_bullet_speed), "large_orb"))
+				var orb_velocity := _velocity_for("large_orb", orb_angle + off, 1.9, stage_bullet_speed)
+				orb_specs.append(_make_spec(position, orb_velocity, "large_orb", {
+					"kind": "brake_restart", "brake": 0.025, "trigger_age": 52.0, "target_speed": orb_velocity.length() * 1.15, "aim_on_trigger": off == 0.0,
+				}))
 			return orb_specs
 		"final_dense":
 			var final_specs: Array = []
 			for i in range(10):
 				var final_angle := TAU / 10.0 * i + shoot_phase * 0.17
 				var final_family := "talisman" if i % 2 == 0 else "star"
-				final_specs.append(_make_spec(position, _velocity_for(final_family, final_angle, 2.35, stage_bullet_speed), final_family))
+				var final_velocity := _velocity_for(final_family, final_angle, 2.2, stage_bullet_speed)
+				final_specs.append(_make_spec(position, final_velocity, final_family, {
+					"kind": "curve" if i % 2 == 0 else "accelerate",
+					"turn_rate": 0.004 if i % 4 < 2 else -0.004,
+					"accel": 0.008, "max_speed": final_velocity.length() * 1.45,
+				}))
 			if shoot_phase % 3 == 0:
 				var aimed_angle := (player_position - position).angle()
 				for off in [-0.18, 0.0, 0.18]:
@@ -127,13 +143,15 @@ func bullet_specs(enemy: Dictionary, player_position: Vector2, stage_bullet_spee
 			var spiral_specs: Array = []
 			for i in range(8):
 				var spiral_angle := shoot_phase * 0.12 + TAU / 8.0 * i
-				spiral_specs.append(_make_spec(position, _velocity_for("butterfly", spiral_angle, 2.5, stage_bullet_speed), "butterfly"))
+				spiral_specs.append(_make_spec(position, _velocity_for("clock_gear", spiral_angle, 2.2, stage_bullet_speed), "clock_gear", {
+					"kind": "curve", "turn_rate": 0.009 if i % 2 == 0 else -0.009,
+				}))
 			return spiral_specs
 		_:
 			var fallback_angle := (player_position - position).angle()
 			return [_make_spec(position, _velocity_for("circle", fallback_angle, 2.5, stage_bullet_speed), "circle")]
 
-func _make_spec(position: Vector2, velocity: Vector2, family_id: String) -> Dictionary:
+func _make_spec(position: Vector2, velocity: Vector2, family_id: String, motion: Dictionary = {}) -> Dictionary:
 	var family: Dictionary = _database.bullet_family_by_id(family_id)
 	return {
 		"position": position,
@@ -142,6 +160,7 @@ func _make_spec(position: Vector2, velocity: Vector2, family_id: String) -> Dict
 		"color": family.get("color", Color.RED),
 		"family_id": family_id,
 		"lifetime": 350.0,
+		"motion": motion.duplicate(true),
 	}
 
 func _velocity_for(family_id: String, angle: float, base_speed: float, stage_bullet_speed: float) -> Vector2:

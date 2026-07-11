@@ -81,7 +81,8 @@ func _verify_executor() -> void:
 	enemy.pattern = "spiral"
 	var spiral: Array = executor.bullet_specs(enemy, Vector2(360.0, 540.0), 1.0)
 	_assert_equal(spiral.size(), 8, "spiral should emit 8 bullets.")
-	_assert_spec(spiral[0], "butterfly")
+	_assert_spec(spiral[0], "clock_gear")
+	_assert(String(spiral[0].motion.get("kind", "")) == "curve", "Spiral enemies should emit visibly curving gear bullets.")
 
 func _verify_main_spawn_contract() -> void:
 	var gm = load("res://autoload/game_manager.gd").new()
@@ -153,7 +154,11 @@ func _verify_main_collision_contract() -> void:
 	_assert_equal(gm.graze, 1, "Star bullets should be eligible for graze.")
 	_assert_equal(gm.score, 10, "Graze should award graze score for star bullets.")
 	_assert(not main_shell.player_just_hit, "Star graze setup should not count as a hit.")
-	_assert(bool(main_shell.bullet_pool[0].active), "Star graze bullet should remain active.")
+	var active_star_found := false
+	for bullet in main_shell.bullet_pool:
+		if bool(bullet.get("active", false)) and String(bullet.get("type", "")) == "star":
+			active_star_found = true
+	_assert(active_star_found, "Star graze bullet should remain active.")
 
 	main_shell.free()
 	gm.free()

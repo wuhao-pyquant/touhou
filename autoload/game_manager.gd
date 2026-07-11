@@ -66,7 +66,7 @@ const STAGE_MULTS := [
 	{"enemy_hp":1.20, "boss_hp":1.0, "bullet_speed":1.22},
 	{"enemy_hp":1.25, "boss_hp":1.0, "bullet_speed":1.28},
 ]
-const BOSS_HP_PER_SECOND := [32.0, 40.0, 50.0, 60.0, 72.0, 84.0]
+const BOSS_HP_PER_SECOND := [42.0, 46.0, 50.0, 54.0, 58.0, 62.0]
 
 const DEFAULT_PROTAGONIST_ID := "miko"
 const DEFAULT_SHOT_ID := "ofuda_trace"

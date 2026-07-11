@@ -94,6 +94,9 @@ const ENEMY_BULLET_ART_BY_FAMILY := {
 	"laser": "enemy_bullet_warning_ring",
 	"large_orb": "enemy_bullet_slow_orb",
 	"arrow": "enemy_bullet_fast_shard",
+	"clock_gear": "enemy_bullet_clock_gear",
+	"storm_arc": "enemy_bullet_storm_arc",
+	"spiral_seed": "enemy_bullet_spiral_seed",
 }
 
 const PLAYER_BULLET_ART_BY_BTYPE := {
@@ -905,7 +908,7 @@ func _ready():
 	_show_title()
 
 func _make_bullet() -> Dictionary:
-	return {"active":false,"x":0.0,"y":0.0,"vx":0.0,"vy":0.0,"radius":6.0,"color":Color.RED,"type":"circle","lifetime":600.0,"age":0.0,"damage":1.0,"homing":false,"btype":-1,"grazed":false}
+	return {"active":false,"x":0.0,"y":0.0,"vx":0.0,"vy":0.0,"radius":6.0,"color":Color.RED,"type":"circle","lifetime":600.0,"age":0.0,"damage":1.0,"homing":false,"btype":-1,"grazed":false,"boss_hit":false,"motion":{},"has_motion":false,"motion_triggered":false}
 
 func _show_title():
 	_resolve_singletons()
@@ -1063,7 +1066,8 @@ func _spawn_bullet_player(x: float, y: float, vx: float, vy: float, radius: floa
 	# Persisting player bullets use the bomb owner branch and survive hits.
 	b.type = "bomb" if persist else "player"
 	b.lifetime = lifetime; b.age = 0; b.damage = damage
-	b.homing = homing; b.btype = btype; b.grazed = false
+	b.homing = homing; b.btype = btype; b.grazed = false; b.boss_hit = false
+	b.motion = {}; b.has_motion = false; b.motion_triggered = false
 	if _active_bullet_membership.size() != bullet_pool.size():
 		_active_bullet_membership.resize(bullet_pool.size())
 	if _active_bullet_membership[i] == 0:
@@ -1072,7 +1076,7 @@ func _spawn_bullet_player(x: float, y: float, vx: float, vy: float, radius: floa
 	_active_index_initialized = true
 	return true
 
-func _spawn_bullet_enemy(x: float, y: float, vx: float, vy: float, radius: float = 6.0, color: Color = Color.RED, btype: String = "circle", lifetime: float = 350.0):
+func _spawn_bullet_enemy(x: float, y: float, vx: float, vy: float, radius: float = 6.0, color: Color = Color.RED, btype: String = "circle", lifetime: float = 350.0, motion: Dictionary = {}):
 	var i := _claim_free_bullet_slot()
 	if i < 0:
 		return false
@@ -1080,7 +1084,10 @@ func _spawn_bullet_enemy(x: float, y: float, vx: float, vy: float, radius: float
 	b.active = true; b.x = x; b.y = y; b.vx = vx; b.vy = vy
 	b.radius = maxf(0.001, radius); b.color = color; b.type = btype
 	b.lifetime = lifetime; b.age = 0; b.damage = 1.0
-	b.homing = false; b.btype = -1; b.grazed = false
+	b.homing = false; b.btype = -1; b.grazed = false; b.boss_hit = false
+	b.motion = motion.duplicate(true)
+	b.has_motion = not motion.is_empty()
+	b.motion_triggered = false
 	if _active_bullet_membership.size() != bullet_pool.size():
 		_active_bullet_membership.resize(bullet_pool.size())
 	if _active_bullet_membership[i] == 0:
@@ -1106,7 +1113,8 @@ func _spawn_enemy_bullet_spec(spec: Dictionary) -> void:
 		float(spec.radius),
 		spec.get("color", Color.RED),
 		String(spec.family_id),
-		float(spec.get("lifetime", 350.0))
+		float(spec.get("lifetime", 350.0)),
+		spec.get("motion", {})
 	)
 
 func _spawn_item(x: float, y: float, item_type: String = "power"):
@@ -1601,24 +1609,29 @@ func _bullets_ripple(mult: float):
 
 func _bullets_bubble(mult: float):
 	if int(boss.card_shot) % 8 == 0:
-		for i in range(10): _spawn_bullet_enemy(boss.x,boss.y,cos(boss.card_shot*0.03+TAU/10*i)*(1.5+i*0.2)*mult,sin(boss.card_shot*0.03+TAU/10*i)*(1.5+i*0.2)*mult,4,Color(0.16,0.39,1),"circle",480)
+		for i in range(10):
+			var speed: float = (1.5 + i * 0.16) * mult
+			var angle: float = float(boss.card_shot) * 0.03 + TAU / 10.0 * i
+			_spawn_bullet_enemy(boss.x, boss.y, cos(angle) * speed, sin(angle) * speed, 4, Color(0.82, 0.35, 1.0), "spiral_seed", 480, {"kind":"brake_restart", "brake":0.035, "trigger_age":46.0, "target_speed":speed * 1.1})
 	if int(boss.card_shot) % 22 == 0:
 		var a: float = (Vector2(player_x,player_y)-Vector2(boss.x,boss.y)).angle()
 		for off in [-0.4,-0.2,0,0.2,0.4]: _spawn_bullet_enemy(boss.x,boss.y,cos(a+off)*3.2*mult,sin(a+off)*3.2*mult,5,Color.YELLOW,"arrow")
 
 func _bullets_mist(mult: float):
-	if int(boss.card_shot) % 4 == 0:
+	if int(boss.card_shot) % 6 == 0:
 		for arm in range(3):
-			for i in range(7):
+			for i in range(5):
 				var a: float = TAU/3*arm+boss.card_shot*0.025+i*0.25
-				_spawn_bullet_enemy(boss.x,boss.y,cos(a)*2.0*mult,sin(a)*2.0*mult,3,Color(0.71,0.16,0.86) if arm==0 else (Color(0.16,0.39,1) if arm==1 else Color(0.16,0.86,0.94)))
+				_spawn_bullet_enemy(boss.x,boss.y,cos(a)*2.0*mult,sin(a)*2.0*mult,4,Color(0.71,0.16,0.86) if arm==0 else (Color(0.16,0.39,1) if arm==1 else Color(0.16,0.86,0.94)), "storm_arc", 430, {"kind":"curve", "turn_rate":(-0.005 if arm % 2 == 0 else 0.005)})
 
 func _bullets_mirror(mult: float):
 	if int(boss.card_shot) % 20 == 0:
 		for ab in [0.0,PI/2,PI/4,-PI/4]:
 			for d in [-1,1]: _spawn_bullet_enemy(boss.x,boss.y,cos(ab+d*0.3)*4.0*mult,sin(ab+d*0.3)*4.0*mult,6,Color.RED,"laser")
 	if int(boss.card_shot) % 8 == 0:
-		for i in range(24): _spawn_bullet_enemy(boss.x,boss.y,cos(TAU/24*i+boss.card_shot*0.02)*2.2*mult,sin(TAU/24*i+boss.card_shot*0.02)*2.2*mult,3,Color(0.16,0.39,1))
+		for i in range(20):
+			var a: float = TAU / 20.0 * i + float(boss.card_shot) * 0.02
+			_spawn_bullet_enemy(boss.x,boss.y,cos(a)*2.2*mult,sin(a)*2.2*mult,5,Color(0.95,0.3,0.55),"clock_gear",460,{"bounce_count":1})
 
 func _bullets_scarlet(mult: float):
 	if int(boss.card_shot) % 4 == 0:
@@ -1635,8 +1648,10 @@ func _bullets_midnight(mult: float):
 
 func _bullets_vortex(mult: float):
 	for arm in [-1,1]:
-		if int(boss.card_shot) % 4 == 0:
-			for i in range(10): _spawn_bullet_enemy(boss.x,boss.y,cos(boss.card_shot*0.035*arm+TAU/10*i)*(2.0+i*0.25)*mult,sin(boss.card_shot*0.035*arm+TAU/10*i)*(2.0+i*0.25)*mult,3,Color.RED if arm==1 else Color(0.71,0.2,0.24))
+		if int(boss.card_shot) % 6 == 0:
+			for i in range(8):
+				var a: float = float(boss.card_shot) * 0.035 * arm + TAU / 8.0 * i
+				_spawn_bullet_enemy(boss.x,boss.y,cos(a)*(2.0+i*0.2)*mult,sin(a)*(2.0+i*0.2)*mult,5,Color(0.95,0.3,0.55),"clock_gear",420,{"kind":"curve", "turn_rate":0.008*arm})
 	if int(boss.card_shot) % 18 == 0:
 		for i in range(28): _spawn_bullet_enemy(boss.x,boss.y,cos(TAU/28*i+boss.card_shot*0.02)*3.0*mult,sin(TAU/28*i+boss.card_shot*0.02)*3.0*mult,2,Color(1,0.24,0.24))
 
@@ -1647,10 +1662,14 @@ func _bullets_darkness(mult: float):
 		for i in range(4): _spawn_bullet_enemy(boss.x,boss.y,cos(boss.card_shot*0.04+TAU/4*i)*5.0*mult,sin(boss.card_shot*0.04+TAU/4*i)*5.0*mult,7,Color(1,0.24,0.24),"laser")
 
 func _bullets_apocalypse(mult: float):
-	if int(boss.card_shot) % 4 == 0:
-		for i in range(30): _spawn_bullet_enemy(boss.x,boss.y,cos(TAU/30*i+boss.card_shot*0.02)*2.0*mult,sin(TAU/30*i+boss.card_shot*0.02)*2.0*mult,2,Color(1,0.24,0.24))
-	if int(boss.card_shot) % 5 == 0:
-		for i in range(24): _spawn_bullet_enemy(boss.x,boss.y,cos(TAU/24*i-boss.card_shot*0.025)*2.5*mult,sin(TAU/24*i-boss.card_shot*0.025)*2.5*mult,2,Color.ORANGE)
+	if int(boss.card_shot) % 7 == 0:
+		for i in range(24):
+			var a: float = TAU / 24.0 * i + float(boss.card_shot) * 0.02
+			_spawn_bullet_enemy(boss.x,boss.y,cos(a)*1.65*mult,sin(a)*1.65*mult,4,Color(0.82,0.35,1.0),"spiral_seed",430,{"kind":"accelerate", "accel":0.012, "max_speed":3.2*mult})
+	if int(boss.card_shot) % 9 == 0:
+		for i in range(18):
+			var a: float = TAU / 18.0 * i - float(boss.card_shot) * 0.025
+			_spawn_bullet_enemy(boss.x,boss.y,cos(a)*2.3*mult,sin(a)*2.3*mult,4,Color(1.0,0.5,0.2),"arrow",360)
 	if int(boss.card_shot) % 20 == 0:
 		var a: float = (Vector2(player_x,player_y)-Vector2(boss.x,boss.y)).angle()
 		for off in [-0.5,-0.25,0,0.25,0.5]: _spawn_bullet_enemy(boss.x,boss.y,cos(a+off)*4.5*mult,sin(a+off)*4.5*mult,6,Color(0.71,0.2,0.24),"laser")
@@ -1665,7 +1684,7 @@ func _bullets_wind_aimed(mult: float):
 	if int(boss.card_shot) % 36 == 0:
 		for i in range(14):
 			var w: float = TAU / 14.0 * i + boss.card_shot * 0.015
-			_spawn_bullet_enemy(boss.x, boss.y, cos(w) * 2.1 * mult, sin(w) * 2.1 * mult, 3, Color(0.16, 0.86, 0.94), "rice", 360)
+			_spawn_bullet_enemy(boss.x, boss.y, cos(w) * 2.1 * mult, sin(w) * 2.1 * mult, 4, Color(0.35, 0.78, 1.0), "storm_arc", 360, {"kind":"curve", "turn_rate":(-0.006 if i % 2 == 0 else 0.006)})
 
 func _bullets_wind_lattice(mult: float):
 	if int(boss.card_shot) % 8 == 0:
@@ -1685,7 +1704,8 @@ func _bullets_rhythm_drum(mult: float):
 		for i in range(count):
 			var a: float = TAU / float(count) * i + boss.card_shot * 0.018
 			var family := "star" if count == 10 else "rice"
-			_spawn_bullet_enemy(boss.x, boss.y, cos(a) * 2.25 * mult, sin(a) * 2.25 * mult, 4, Color(0.45, 0.66, 1.0) if family == "star" else Color(0.16, 0.86, 0.94), family, 360)
+			var speed: float = 2.25 * mult
+			_spawn_bullet_enemy(boss.x, boss.y, cos(a) * speed, sin(a) * speed, 4, Color(0.45, 0.66, 1.0) if family == "star" else Color(0.16, 0.86, 0.94), family, 360, {"kind":"brake_restart", "brake":0.04, "trigger_age":30.0, "target_speed":speed})
 	if int(boss.card_shot) % 48 == 0:
 		var aimed: float = (Vector2(player_x, player_y) - Vector2(boss.x, boss.y)).angle()
 		for off in [-0.32, -0.16, 0.0, 0.16, 0.32]:
@@ -1695,7 +1715,8 @@ func _bullets_large_orb_gate(mult: float):
 	if int(boss.card_shot) % 38 == 0:
 		var aimed: float = (Vector2(player_x, player_y) - Vector2(boss.x, boss.y)).angle()
 		for off in [-0.44, 0.0, 0.44]:
-			_spawn_bullet_enemy(boss.x, boss.y, cos(aimed + off) * 1.55 * mult, sin(aimed + off) * 1.55 * mult, 10, Color(0.62, 0.38, 1.0), "large_orb", 520)
+			var speed: float = 1.55 * mult
+			_spawn_bullet_enemy(boss.x, boss.y, cos(aimed + off) * speed, sin(aimed + off) * speed, 10, Color(0.62, 0.38, 1.0), "large_orb", 520, {"kind":"brake_restart", "brake":0.02, "trigger_age":58.0, "target_speed":speed * 1.15, "aim_on_trigger":off == 0.0})
 	if int(boss.card_shot) % 9 == 0:
 		for i in range(8):
 			var a: float = TAU / 8.0 * i + boss.card_shot * 0.025
@@ -1707,7 +1728,8 @@ func _bullets_final_lantern(mult: float):
 			var a: float = TAU / 18.0 * i + boss.card_shot * 0.016
 			var family := "talisman" if i % 2 == 0 else "star"
 			var color := Color(0.95, 0.22, 0.25) if family == "talisman" else Color(0.45, 0.66, 1.0)
-			_spawn_bullet_enemy(boss.x, boss.y, cos(a) * 2.2 * mult, sin(a) * 2.2 * mult, 3, color, family, 380)
+			var motion: Dictionary = {"kind":"curve", "turn_rate":(-0.004 if i % 4 < 2 else 0.004)} if family == "talisman" else {"kind":"accelerate", "accel":0.008, "max_speed":3.0*mult}
+			_spawn_bullet_enemy(boss.x, boss.y, cos(a) * 2.05 * mult, sin(a) * 2.05 * mult, 4, color, family, 400, motion)
 	if int(boss.card_shot) % 28 == 0:
 		var aimed: float = (Vector2(player_x, player_y) - Vector2(boss.x, boss.y)).angle()
 		for off in [-0.42, -0.21, 0.0, 0.21, 0.42]:
@@ -1899,7 +1921,8 @@ func _update_bomb(delta: float):
 		for spec in bomb_executor.wave_specs(bc, player_bomb_phase):
 			_spawn_player_bullet_spec(spec)
 		if boss_alive and boss.get("phase", "") == "active" and not bool(boss.get("declaring", false)):
-			boss.hp -= float(bc.get("boss_damage_per_wave", 0.0))
+			var ratio_damage: float = float(boss.get("max_hp", boss.get("hp", 0.0))) * float(bc.get("boss_damage_ratio", 0.0)) / float(total_waves)
+			boss.hp -= ratio_damage if ratio_damage > 0.0 else float(bc.get("boss_damage_per_wave", 0.0))
 		player_bomb_phase += 1
 	_ensure_active_bullet_indices()
 	for bullet_index in active_bullet_indices:
@@ -1920,9 +1943,68 @@ func _update_bomb(delta: float):
 			audio_manager_ref.stop_sfx("%s_loop" % bomb_prefix)
 			audio_manager_ref.play_sfx("%s_finish" % bomb_prefix, -4.0)
 
+func _update_enemy_bullet_motion(b: Dictionary, dt: float) -> void:
+	var motion: Dictionary = b.get("motion", {})
+	if motion.is_empty():
+		return
+	var kind := String(motion.get("kind", "linear"))
+	if not motion.has("heading") and Vector2(float(b.vx), float(b.vy)).length_squared() > 0.0:
+		motion["heading"] = Vector2(float(b.vx), float(b.vy)).angle()
+	var trigger_age := float(motion.get("trigger_age", -1.0))
+	if not bool(b.get("motion_triggered", false)) and trigger_age >= 0.0 and float(b.age) >= trigger_age:
+		b.motion_triggered = true
+		var heading := float(motion.get("heading", Vector2(float(b.vx), float(b.vy)).angle()))
+		if bool(motion.get("aim_on_trigger", false)):
+			heading = (Vector2(player_x, player_y) - Vector2(float(b.x), float(b.y))).angle()
+		var target_speed := float(motion.get("target_speed", Vector2(float(b.vx), float(b.vy)).length()))
+		b.vx = cos(heading) * target_speed
+		b.vy = sin(heading) * target_speed
+	match kind:
+		"curve":
+			var turn := float(motion.get("turn_rate", 0.0)) * dt
+			var velocity := Vector2(float(b.vx), float(b.vy)).rotated(turn)
+			b.vx = velocity.x; b.vy = velocity.y
+		"accelerate":
+			var velocity := Vector2(float(b.vx), float(b.vy))
+			var speed := velocity.length()
+			if speed > 0.0:
+				speed = clampf(speed + float(motion.get("accel", 0.0)) * dt, 0.05, float(motion.get("max_speed", 8.0)))
+				velocity = velocity.normalized() * speed
+				b.vx = velocity.x; b.vy = velocity.y
+		"brake_restart":
+			if not bool(b.get("motion_triggered", false)):
+				var velocity := Vector2(float(b.vx), float(b.vy))
+				var speed := maxf(0.05, velocity.length() - float(motion.get("brake", 0.04)) * dt)
+				if velocity.length_squared() > 0.0:
+					velocity = velocity.normalized() * speed
+					b.vx = velocity.x; b.vy = velocity.y
+		"delayed_aim":
+			if not bool(b.get("motion_triggered", false)):
+				b.vx = 0.0; b.vy = 0.0
+	b.motion = motion
+
+func _apply_enemy_bullet_bounce(b: Dictionary) -> void:
+	var motion: Dictionary = b.get("motion", {})
+	var remaining := int(motion.get("bounce_count", 0))
+	if remaining <= 0:
+		return
+	var bounced := false
+	if float(b.x) <= 8.0 or float(b.x) >= SCREEN_W - 8.0:
+		b.x = clampf(float(b.x), 8.0, SCREEN_W - 8.0)
+		b.vx = -float(b.vx)
+		bounced = true
+	if float(b.y) <= 8.0 or float(b.y) >= SCREEN_H - 8.0:
+		b.y = clampf(float(b.y), 8.0, SCREEN_H - 8.0)
+		b.vy = -float(b.vy)
+		bounced = true
+	if bounced:
+		motion["bounce_count"] = remaining - 1
+		b.motion = motion
+
 func _update_bullets(delta: float, target: Vector2):
 	_ensure_active_bullet_indices()
 	_next_active_bullet_indices.clear()
+	var dt := delta * 60.0
 	for bullet_index in active_bullet_indices:
 		var b = bullet_pool[bullet_index]
 		if not b.active:
@@ -1973,8 +2055,13 @@ func _update_bullets(delta: float, target: Vector2):
 				na = clampf(na, -PI/2 - MAX_DEFLECT, -PI/2 + MAX_DEFLECT)
 				b.vx = cos(na) * spd
 				b.vy = sin(na) * spd
-		b.x += b.vx * delta * 60.0; b.y += b.vy * delta * 60.0
-		b.age += delta * 60.0
+		var has_enemy_motion: bool = bool(b.has_motion)
+		if has_enemy_motion:
+			_update_enemy_bullet_motion(b, dt)
+		b.x += b.vx * dt; b.y += b.vy * dt
+		if has_enemy_motion and int(b.motion.get("bounce_count", 0)) > 0:
+			_apply_enemy_bullet_bounce(b)
+		b.age += dt
 		var outside_retention_bounds: bool = b.x < -60 or b.x > SCREEN_W + 60 or b.y < -60 or b.y > SCREEN_H + 60
 		if outside_retention_bounds:
 			b.active = false
@@ -2152,13 +2239,17 @@ func _check_collisions(is_boss: bool):
 		if b.type == "player" or b.type == "bomb":
 			if is_boss and boss_alive:
 				if boss.declaring or boss.phase in ["entering","switching","defeated"]: continue
+				if b.type == "bomb" and bool(b.get("boss_hit", false)): continue
 				var boss_dx: float = float(b.x) - float(boss.x)
 				var boss_dy: float = float(b.y) - float(boss.y)
 				var boss_limit: float = float(b.radius) + _boss_collision_radius()
 				if boss_dx * boss_dx + boss_dy * boss_dy < boss_limit * boss_limit:
 					boss.hp -= b.damage
 					if audio_manager_ref: audio_manager_ref.play_sfx("boss_hit")
-					if b.type == "player": b.active = false
+					if b.type == "player":
+						b.active = false
+					else:
+						b.boss_hit = true
 			else:
 				for e in enemies:
 					if not e.alive or e.dying: continue

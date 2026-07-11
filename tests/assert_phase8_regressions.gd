@@ -53,18 +53,18 @@ func _run() -> void:
 		var effective_dps: float = salvo_damage * 60.0 / float(profile.fire_interval_frames) * float(hit_factors[shot_id])
 		minimum_dps = minf(minimum_dps, effective_dps)
 		maximum_dps = maxf(maximum_dps, effective_dps)
-	_assert(minimum_dps >= 115.0 and maximum_dps <= 150.0, "Six-shot effective DPS must remain in the 115-150 balance envelope.")
-	_assert(maximum_dps / minimum_dps <= 1.25, "No shot type may exceed another by more than 25% effective DPS.")
+	_assert(minimum_dps >= 140.0 and maximum_dps <= 150.0, "Six-shot effective DPS must remain in the 140-150 balance envelope.")
+	_assert(maximum_dps / minimum_dps <= 1.08, "No shot type may exceed another by more than 8% effective DPS.")
 	for stage in range(1, 7):
 		var spell_hp: float = gm.balanced_boss_card_hp(stage, 30.0, "spell")
 		var required_dps: float = spell_hp / 30.0
 		_assert(is_equal_approx(required_dps, float(gm.BOSS_HP_PER_SECOND[stage - 1])), "Boss HP must follow the stage DPS curve.")
-	var bomb_totals := []
+	var bomb_ratios := []
 	for protagonist_id in ["miko", "magician", "swordswoman"]:
 		var bomb: Dictionary = db.bomb_profile_for_protagonist(protagonist_id)
-		bomb_totals.append(float(bomb.boss_damage_per_wave) * float(bomb.waves))
-	for total in bomb_totals:
-		_assert(float(total) >= 220.0 and float(total) <= 300.0, "Bomb guaranteed Boss damage must stay in the 220-300 range.")
+		bomb_ratios.append(float(bomb.boss_damage_ratio))
+	for ratio in bomb_ratios:
+		_assert(float(ratio) >= 0.12 and float(ratio) <= 0.18, "Bomb guaranteed Boss damage must stay in the 12-18 percent range.")
 	main_shell.boss = {"radius": 28.0, "card_timer": 301.0, "card_shot": 0.0, "move_mode": "sweep"}
 	_assert(is_equal_approx(main_shell._boss_collision_radius(), 45.0), "Boss collision radius must cover the visible sprite core generously.")
 	_assert(main_shell._boss_timer_seconds() == 6, "Boss countdown must round remaining partial seconds upward.")

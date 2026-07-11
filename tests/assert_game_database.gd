@@ -47,8 +47,8 @@ func _init() -> void:
 		_assert(_has_cjk(String(s.display_name)), "Stage display_name should contain Chinese text: %s" % [s.display_name])
 
 	var bullet_families: Array = db.bullet_families()
-	if bullet_families.size() != 8:
-		_fail("Expected 8 enemy bullet families, got %d" % bullet_families.size())
+	if bullet_families.size() != 12:
+		_fail("Expected 12 enemy bullet families, got %d" % bullet_families.size())
 	for f in bullet_families:
 		_assert(_has_cjk(String(f.display_name)), "Bullet family display_name should contain Chinese text: %s" % [f.display_name])
 
