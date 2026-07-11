@@ -343,6 +343,44 @@ class Phase7LongformAudioTests(unittest.TestCase):
                 self.assertLessEqual(channel_report["join_jump"], channel_report["join_jump_limit"] + 1e-12)
                 self.assertLessEqual(channel_report["rms_delta_db"], 3.0 + 1e-12)
 
+    def test_render_circular_loop_repairs_only_local_join_energy_mismatch(self) -> None:
+        self.require_audio_api()
+        source = read_pcm16_wave(self.source_path)
+        quiet_start = CROSSFADE_FRAMES
+        quiet_stop = quiet_start + SAMPLE_RATE
+        for frame_index in range(quiet_start, quiet_stop):
+            ramp_progress = min(1.0, (frame_index - quiet_start) / int(round(0.05 * SAMPLE_RATE)))
+            gain = 1.0 + ((0.65 - 1.0) * 0.5 * (1.0 - math.cos(math.pi * ramp_progress)))
+            sample_index = frame_index * CHANNELS
+            for channel in range(CHANNELS):
+                source.samples[sample_index + channel] = clamp_pcm16(source.samples[sample_index + channel] * gain)
+
+        mismatch_source = self.temp_root / "source188_join_mismatch.wav"
+        repaired_master = self.temp_root / "loop180_join_repaired.wav"
+        write_pcm16_wave(mismatch_source, source)
+
+        report = render_circular_loop(
+            mismatch_source,
+            repaired_master,
+            GUIDE_SECONDS,
+            MASTER_SECONDS,
+            CROSSFADE_SECONDS,
+        )
+        analysis = analyze_loop_edges(repaired_master, repeat_count=10)
+
+        self.assertEqual(MASTER_FRAMES, report["frame_count"])
+        self.assertEqual("pass", analysis["status"])
+        self.assertTrue(report["join_energy_repairs"])
+        self.assertTrue(all(item["attenuation_db"] <= 0.0 for item in report["join_energy_repairs"]))
+        repair_labels = {item["label"] for item in report["join_energy_repairs"]}
+        for label in repair_labels:
+            total_attenuation = sum(
+                item["attenuation_db"] for item in report["join_energy_repairs"] if item["label"] == label
+            )
+            self.assertGreaterEqual(total_attenuation, -9.000001)
+        self.assertTrue(analysis["seam"]["passes"])
+        self.assertTrue(analysis["internal_join"]["passes"])
+
     def test_analyze_loop_edges_fails_large_jumps_against_thresholds(self) -> None:
         self.require_audio_api()
         analysis = analyze_loop_edges(self.bad_master_path, repeat_count=10)

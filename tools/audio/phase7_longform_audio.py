@@ -31,6 +31,11 @@ CANDIDATE_FRAMES = int(round(CANDIDATE_SECONDS * SAMPLE_RATE))
 GUIDE_CROSSFADE_FRAMES = int(round(GUIDE_CROSSFADE_SECONDS * SAMPLE_RATE))
 LOOP_CROSSFADE_FRAMES = int(round(LOOP_CROSSFADE_SECONDS * SAMPLE_RATE))
 PREVIEW_FRAMES = int(round(PREVIEW_WINDOW_SECONDS * 2.0 * SAMPLE_RATE))
+JOIN_REPAIR_WINDOW_FRAMES = SAMPLE_RATE
+JOIN_REPAIR_RAMP_FRAMES = int(round(0.05 * SAMPLE_RATE))
+JOIN_REPAIR_TARGET_DB = 2.5
+JOIN_REPAIR_MAX_ATTENUATION_DB = 9.0
+JOIN_REPAIR_MAX_PASSES = 3
 SECTION_STARTS_SECONDS = [0.0, 30.0, 60.0, 90.0, 120.0, 158.0]
 SECTION_NOMINAL_SECONDS = [31.0, 31.0, 31.0, 31.0, 39.0, 30.0]
 SECTION_EFFECTIVE_SECONDS = [30.0, 30.0, 30.0, 30.0, 38.0, 30.0]
@@ -468,6 +473,114 @@ def _analyze_loop_edges_data(master: WaveData, repeat_count: int) -> dict[str, A
     }
 
 
+def _circular_normalized_rms(samples: array, frame_start: int, frame_count: int, channel: int) -> float:
+    total_frames = len(samples) // CHANNELS
+    total = 0.0
+    for offset in range(frame_count):
+        frame_index = (frame_start + offset) % total_frames
+        normalized = samples[(frame_index * CHANNELS) + channel] / PCM_FULL_SCALE
+        total += normalized * normalized
+    return math.sqrt(total / frame_count) if frame_count else 0.0
+
+
+def _apply_circular_join_attenuation(samples: array, boundary_frame: int, side: str, factor: float) -> None:
+    total_frames = len(samples) // CHANNELS
+    ramp_frames = JOIN_REPAIR_RAMP_FRAMES
+    window_frames = JOIN_REPAIR_WINDOW_FRAMES
+
+    if side == "left":
+        frame_start = boundary_frame - window_frames
+        frame_count = window_frames + ramp_frames
+        hold_stop = window_frames
+    else:
+        frame_start = boundary_frame - ramp_frames
+        frame_count = ramp_frames + window_frames
+        hold_stop = window_frames
+
+    for offset in range(frame_count):
+        if offset < ramp_frames:
+            progress = offset / (ramp_frames - 1)
+            gain = 1.0 + ((factor - 1.0) * 0.5 * (1.0 - math.cos(math.pi * progress)))
+        elif offset < hold_stop:
+            gain = factor
+        else:
+            progress = (offset - hold_stop) / (ramp_frames - 1)
+            gain = factor + ((1.0 - factor) * 0.5 * (1.0 - math.cos(math.pi * progress)))
+
+        frame_index = (frame_start + offset) % total_frames
+        sample_index = frame_index * CHANNELS
+        for channel in range(CHANNELS):
+            samples[sample_index + channel] = _clamp_pcm16(samples[sample_index + channel] * gain)
+
+
+def _repair_join_energy(samples: array, boundary_frame: int, label: str) -> list[dict[str, Any]]:
+    total_frames = len(samples) // CHANNELS
+    adjustments: list[dict[str, Any]] = []
+    cumulative_attenuation_db = 0.0
+
+    for _ in range(JOIN_REPAIR_MAX_PASSES):
+        left_rms = [
+            _circular_normalized_rms(
+                samples,
+                boundary_frame - JOIN_REPAIR_WINDOW_FRAMES,
+                JOIN_REPAIR_WINDOW_FRAMES,
+                channel,
+            )
+            for channel in range(CHANNELS)
+        ]
+        right_rms = [
+            _circular_normalized_rms(
+                samples,
+                boundary_frame,
+                JOIN_REPAIR_WINDOW_FRAMES,
+                channel,
+            )
+            for channel in range(CHANNELS)
+        ]
+        deltas = [_rms_delta_db(left, right) for left, right in zip(left_rms, right_rms)]
+        if max(deltas) <= JOIN_REPAIR_TARGET_DB:
+            break
+
+        side = "left" if sum(left_rms) > sum(right_rms) else "right"
+        factors: list[float] = []
+        for left, right in zip(left_rms, right_rms):
+            louder, quieter = (left, right) if side == "left" else (right, left)
+            if louder > quieter and quieter > 0.0:
+                factors.append(min(1.0, (quieter * (10.0 ** (JOIN_REPAIR_TARGET_DB / 20.0))) / louder))
+        if not factors:
+            break
+
+        remaining_attenuation_db = JOIN_REPAIR_MAX_ATTENUATION_DB + cumulative_attenuation_db
+        if remaining_attenuation_db <= 0.0:
+            break
+        minimum_factor = 10.0 ** (-remaining_attenuation_db / 20.0)
+        factor = max(minimum_factor, min(factors))
+        if factor >= 0.999:
+            break
+        _apply_circular_join_attenuation(samples, boundary_frame % total_frames, side, factor)
+        attenuation_db = 20.0 * math.log10(factor)
+        cumulative_attenuation_db += attenuation_db
+        adjustments.append(
+            {
+                "label": label,
+                "boundary_frame": boundary_frame % total_frames,
+                "attenuated_side": side,
+                "attenuation_db": _round_metric(attenuation_db),
+                "window_frames": JOIN_REPAIR_WINDOW_FRAMES,
+                "ramp_frames": JOIN_REPAIR_RAMP_FRAMES,
+            }
+        )
+
+    return adjustments
+
+
+def _join_needs_energy_repair(join_report: dict[str, Any]) -> bool:
+    return any(
+        channel["join_jump"] <= channel["join_jump_limit"] and channel["rms_delta_db"] > 3.0
+        for channel in join_report["channels"]
+    )
+
+
 def render_circular_loop(source_path: Path, output_path: Path, source_seconds: float, master_seconds: float, crossfade_seconds: float) -> dict[str, Any]:
     _require(type(source_seconds) is float and source_seconds == GUIDE_SECONDS, "source_seconds must be 188.0")
     _require(type(master_seconds) is float and master_seconds == MASTER_SECONDS, "master_seconds must be 180.0")
@@ -505,6 +618,15 @@ def render_circular_loop(source_path: Path, output_path: Path, source_seconds: f
     _validate_wave_data(master, MASTER_FRAMES, label="master")
     _require_wave_metrics(master, "master")
     analysis = _analyze_loop_edges_data(master, repeat_count=10)
+    join_energy_repairs: list[dict[str, Any]] = []
+    if _join_needs_energy_repair(analysis["seam"]):
+        join_energy_repairs.extend(_repair_join_energy(master.samples, 0, "playback_seam"))
+        analysis = _analyze_loop_edges_data(master, repeat_count=10)
+    if _join_needs_energy_repair(analysis["internal_join"]):
+        join_energy_repairs.extend(
+            _repair_join_energy(master.samples, LOOP_CROSSFADE_FRAMES, "internal_join")
+        )
+        analysis = _analyze_loop_edges_data(master, repeat_count=10)
     _require(analysis["status"] == "pass", "rendered master failed loop edge analysis")
     write_pcm16_wave(output_path, master)
     analysis["path"] = str(output_path)
@@ -516,6 +638,7 @@ def render_circular_loop(source_path: Path, output_path: Path, source_seconds: f
         "channels": master.channels,
         "bits_per_sample": master.bits_per_sample,
         "crossfade_frames": LOOP_CROSSFADE_FRAMES,
+        "join_energy_repairs": join_energy_repairs,
         "silence_ratio": analysis["silence_ratio"],
         "max_contiguous_silence_seconds": analysis["max_contiguous_silence_seconds"],
         "dc_offset": analysis["dc_offset"],
