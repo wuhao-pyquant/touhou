@@ -230,7 +230,7 @@ class Phase7LongformQaTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, r"frame count"):
                     apply_constant_gain(Path("ffmpeg"), self.short_source, output_path, 0.0)
 
-    def test_master_and_analyze_writes_counts_atomic_outputs_and_non_blocking_repeat_warning(self) -> None:
+    def test_master_and_analyze_writes_counts_publishes_passing_outputs_and_non_blocking_repeat_warning(self) -> None:
         self.require_api()
         catalog = make_catalog()
         raw_sources: dict[str, Path] = {}
@@ -358,6 +358,175 @@ class Phase7LongformQaTests(unittest.TestCase):
             persisted = json.loads(report_path.read_text(encoding="utf-8"))
             self.assertEqual(report, persisted)
             self.assertIn("可能存在六段重复结构", html_path.read_text(encoding="utf-8"))
+
+    def test_master_and_analyze_failure_rerun_removes_previously_published_pair(self) -> None:
+        self.require_api()
+        catalog = make_catalog()
+        catalog["tracks"] = [catalog["tracks"][0]]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            staging_root = Path(temp_dir)
+            track = catalog["tracks"][0]
+            track_root = staging_root / "bgm_longform" / track["key"]
+            track_root.mkdir(parents=True, exist_ok=True)
+            source_path = track_root / f"bgm_{track['key']}_B_source188.wav"
+            master_path = track_root / f"bgm_{track['key']}_B_loop180_review.wav"
+            preview_path = track_root / f"bgm_{track['key']}_B_loop_transition.wav"
+            master_temp = master_path.with_suffix(".tmp.wav")
+            preview_temp = preview_path.with_suffix(".tmp.wav")
+            write_tone(source_path, 1.0, amplitude=0.2)
+            write_tone(master_path, 1.0, amplitude=0.19, frequency=330.0)
+            write_tone(preview_path, 0.5, amplitude=0.17, frequency=440.0)
+
+            measure_values = iter([
+                {"integrated_lufs": -18.0, "true_peak_dbtp": -2.0, "raw": {"input_i": -18.0, "input_tp": -2.0}},
+                {"integrated_lufs": -14.8, "true_peak_dbtp": -0.8, "raw": {"input_i": -14.8, "input_tp": -0.8}},
+            ])
+
+            def fake_render(source: Path, output: Path, *_args: Any) -> dict[str, Any]:
+                shutil.copyfile(source, output)
+                return {
+                    "path": str(output),
+                    "frame_count": read_frame_count(output),
+                    "sample_rate": SAMPLE_RATE,
+                    "channels": 2,
+                    "bits_per_sample": 16,
+                }
+
+            def fake_apply(_ffmpeg: Path, source: Path, output: Path, _gain: float) -> None:
+                shutil.copyfile(source, output)
+
+            def fake_preview(master: Path, output: Path, window_seconds: float = 15.0) -> dict[str, Any]:
+                self.assertEqual(15.0, window_seconds)
+                shutil.copyfile(self.short_preview, output)
+                return {
+                    "path": str(output),
+                    "frame_count": 30 * SAMPLE_RATE,
+                    "sample_rate": SAMPLE_RATE,
+                    "channels": 2,
+                    "bits_per_sample": 16,
+                    "window_seconds": 15.0,
+                }
+
+            with mock.patch.object(qa, "render_circular_loop", side_effect=fake_render):
+                with mock.patch.object(qa, "_resolve_ffmpeg_path", return_value=Path(r"C:\ffmpeg\bin\ffmpeg.exe")):
+                    with mock.patch.object(qa, "measure_loudness", side_effect=lambda _ffmpeg, _source: next(measure_values)):
+                        with mock.patch.object(qa, "apply_constant_gain", side_effect=fake_apply):
+                            with mock.patch.object(qa, "analyze_loop_edges", return_value={
+                                "path": "",
+                                "status": "pass",
+                                "frame_count": 180 * SAMPLE_RATE,
+                                "sample_rate": SAMPLE_RATE,
+                                "channels": 2,
+                                "bits_per_sample": 16,
+                                "repeat_count": 10,
+                                "silence_ratio": 0.01,
+                                "max_contiguous_silence_seconds": 0.0,
+                                "dc_offset": [0.0, 0.0],
+                                "peak_dbfs": -3.0,
+                                "seam": {"passes": True, "channels": []},
+                                "internal_join": {"passes": True, "channels": []},
+                                "wrap_transitions": [{"boundary_index": index + 1, "passes": True, "channels": []} for index in range(9)],
+                            }):
+                                with mock.patch.object(qa, "build_transition_preview", side_effect=fake_preview):
+                                    with mock.patch.object(qa, "_analyze_repeat_structure", return_value={"possible_six_repeat_structure": False, "pairs": []}):
+                                        report = master_and_analyze(catalog, staging_root, Path(r"C:\ffmpeg\bin\ffmpeg.exe"))
+
+            self.assertEqual("fail", report["tracks"][0]["status"])
+            self.assertFalse(master_path.exists())
+            self.assertFalse(preview_path.exists())
+            self.assertFalse(master_temp.exists())
+            self.assertFalse(preview_temp.exists())
+            self.assertIn("loudness", " ".join(report["tracks"][0]["errors"]).lower())
+
+    def test_master_and_analyze_second_replace_failure_removes_formal_pair_and_temps(self) -> None:
+        self.require_api()
+        catalog = make_catalog()
+        catalog["tracks"] = [catalog["tracks"][0]]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            staging_root = Path(temp_dir)
+            track = catalog["tracks"][0]
+            track_root = staging_root / "bgm_longform" / track["key"]
+            track_root.mkdir(parents=True, exist_ok=True)
+            source_path = track_root / f"bgm_{track['key']}_B_source188.wav"
+            master_path = track_root / f"bgm_{track['key']}_B_loop180_review.wav"
+            preview_path = track_root / f"bgm_{track['key']}_B_loop_transition.wav"
+            master_temp = master_path.with_suffix(".tmp.wav")
+            preview_temp = preview_path.with_suffix(".tmp.wav")
+            write_tone(source_path, 1.0, amplitude=0.2)
+            write_tone(master_path, 1.0, amplitude=0.19, frequency=330.0)
+            write_tone(preview_path, 0.5, amplitude=0.17, frequency=440.0)
+
+            def fake_render(source: Path, output: Path, *_args: Any) -> dict[str, Any]:
+                shutil.copyfile(source, output)
+                return {
+                    "path": str(output),
+                    "frame_count": read_frame_count(output),
+                    "sample_rate": SAMPLE_RATE,
+                    "channels": 2,
+                    "bits_per_sample": 16,
+                }
+
+            def fake_apply(_ffmpeg: Path, source: Path, output: Path, _gain: float) -> None:
+                shutil.copyfile(source, output)
+
+            def fake_preview(master: Path, output: Path, window_seconds: float = 15.0) -> dict[str, Any]:
+                self.assertEqual(15.0, window_seconds)
+                shutil.copyfile(self.short_preview, output)
+                return {
+                    "path": str(output),
+                    "frame_count": 30 * SAMPLE_RATE,
+                    "sample_rate": SAMPLE_RATE,
+                    "channels": 2,
+                    "bits_per_sample": 16,
+                    "window_seconds": 15.0,
+                }
+
+            real_replace = qa.os.replace
+            replace_call_count = 0
+
+            def fail_on_second_replace(source: Path, destination: Path) -> None:
+                nonlocal replace_call_count
+                replace_call_count += 1
+                if replace_call_count == 2:
+                    raise OSError("preview replace failed")
+                real_replace(source, destination)
+
+            with mock.patch.object(qa, "render_circular_loop", side_effect=fake_render):
+                with mock.patch.object(qa, "_resolve_ffmpeg_path", return_value=Path(r"C:\ffmpeg\bin\ffmpeg.exe")):
+                    with mock.patch.object(qa, "measure_loudness", side_effect=[
+                        {"integrated_lufs": -18.0, "true_peak_dbtp": -2.0, "raw": {"input_i": -18.0, "input_tp": -2.0}},
+                        {"integrated_lufs": -16.0, "true_peak_dbtp": -1.0, "raw": {"input_i": -16.0, "input_tp": -1.0}},
+                    ]):
+                        with mock.patch.object(qa, "apply_constant_gain", side_effect=fake_apply):
+                            with mock.patch.object(qa, "analyze_loop_edges", return_value={
+                                "path": "",
+                                "status": "pass",
+                                "frame_count": 180 * SAMPLE_RATE,
+                                "sample_rate": SAMPLE_RATE,
+                                "channels": 2,
+                                "bits_per_sample": 16,
+                                "repeat_count": 10,
+                                "silence_ratio": 0.01,
+                                "max_contiguous_silence_seconds": 0.0,
+                                "dc_offset": [0.0, 0.0],
+                                "peak_dbfs": -3.0,
+                                "seam": {"passes": True, "channels": []},
+                                "internal_join": {"passes": True, "channels": []},
+                                "wrap_transitions": [{"boundary_index": index + 1, "passes": True, "channels": []} for index in range(9)],
+                            }):
+                                with mock.patch.object(qa, "build_transition_preview", side_effect=fake_preview):
+                                    with mock.patch.object(qa, "_analyze_repeat_structure", return_value={"possible_six_repeat_structure": False, "pairs": []}):
+                                        with mock.patch.object(qa.os, "replace", side_effect=fail_on_second_replace):
+                                            report = master_and_analyze(catalog, staging_root, Path(r"C:\ffmpeg\bin\ffmpeg.exe"))
+
+            self.assertEqual("fail", report["tracks"][0]["status"])
+            self.assertFalse(master_path.exists())
+            self.assertFalse(preview_path.exists())
+            self.assertFalse(master_temp.exists())
+            self.assertFalse(preview_temp.exists())
+            self.assertIn("preview replace failed", report["tracks"][0]["errors"][0])
 
     def test_master_and_analyze_enforces_loudness_and_true_peak_boundaries(self) -> None:
         self.require_api()

@@ -107,6 +107,21 @@ def _cleanup_paths(*paths: Path) -> None:
             path.unlink()
 
 
+def _cleanup_track_artifacts(master_path: Path, preview_path: Path, master_temp: Path, preview_temp: Path) -> None:
+    _cleanup_paths(master_temp, preview_temp, master_path, preview_path)
+
+
+def _publish_formal_pair(master_temp: Path, preview_temp: Path, master_path: Path, preview_path: Path) -> None:
+    master_path.parent.mkdir(parents=True, exist_ok=True)
+    preview_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.replace(master_temp, master_path)
+        os.replace(preview_temp, preview_path)
+    except Exception:
+        _cleanup_track_artifacts(master_path, preview_path, master_temp, preview_temp)
+        raise
+
+
 def _mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
@@ -354,15 +369,13 @@ def master_and_analyze(catalog: dict[str, Any], staging_root: Path, ffmpeg: Path
             track_report["errors"] = errors
 
             if errors:
-                _cleanup_paths(master_temp, preview_temp)
+                _cleanup_track_artifacts(paths["master"], paths["preview"], master_temp, preview_temp)
             else:
-                paths["master"].parent.mkdir(parents=True, exist_ok=True)
-                os.replace(master_temp, paths["master"])
-                os.replace(preview_temp, paths["preview"])
+                _publish_formal_pair(master_temp, preview_temp, paths["master"], paths["preview"])
                 track_report["status"] = "pass"
         except Exception as exc:
             track_report["errors"] = [str(exc)]
-            _cleanup_paths(master_temp, preview_temp)
+            _cleanup_track_artifacts(paths["master"], paths["preview"], master_temp, preview_temp)
         finally:
             _cleanup_paths(raw_temp)
 
