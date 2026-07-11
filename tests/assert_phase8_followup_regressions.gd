@@ -52,7 +52,10 @@ func _run() -> void:
 	_assert(main_shell._boss_anchor_y() - 64.0 > main_shell.HUD_HEIGHT, "Boss artwork must not overlap the top HUD.")
 
 	main_shell.player_bombing = true
-	_assert(main_shell._item_magnetize_requested(true), "Shift collection must remain enabled while a bomb is active.")
+	main_shell.player_y = main_shell.SCREEN_H * 0.5
+	_assert(not main_shell._item_magnetize_requested(true), "Shift collection must not trigger below the top fifth of the screen.")
+	main_shell.player_y = main_shell.SCREEN_H * gm.ITEM_TOP_RATIO
+	_assert(main_shell._item_magnetize_requested(true), "Shift collection must trigger in the top fifth even while a bomb is active.")
 	main_shell._spawn_item(200.0, 300.0, "power")
 	Input.action_press("focus")
 	main_shell._update_items(1.0 / 60.0)
@@ -62,6 +65,8 @@ func _run() -> void:
 	for type_id in ["power", "point", "bomb_fragment", "life_fragment", "night_festival_seal", "full_power"]:
 		var marker: Dictionary = main_shell._item_effect_marker(type_id)
 		_assert(String(marker.get("label", "")) != "?", "Item %s needs an explicit effect marker." % type_id)
+	_assert(main_shell.SHOT_SELECTION_ART_BY_ID.size() == 6, "Every selectable shot needs a Phase 6 hand-painted icon mapping.")
+	_assert(main_shell.has_method("_draw_character_choice_cards") and main_shell.has_method("_draw_shot_choice_cards"), "Character and shot selection must use illustrated card renderers.")
 
 	audio.queue_free()
 	main_shell.free()

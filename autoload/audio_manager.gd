@@ -160,6 +160,9 @@ func set_pause_ducked(ducked: bool) -> void:
 		_bgm_fade_tween.kill()
 	_silence_inactive_bgm_players()
 	_sync_active_bgm_volume()
+	var active_player = bgm_players[_bgm_active_idx] if not bgm_players.is_empty() else null
+	if active_player:
+		active_player.stream_paused = ducked
 
 func configured_bgm_volume_db() -> float:
 	return _bgm_volume_db
@@ -241,6 +244,7 @@ func play_bgm(key: String) -> void:
 	new_p.stream = stream
 	new_p.volume_db = MIN_VOLUME_DB
 	new_p.play()
+	new_p.stream_paused = _pause_ducked
 	if _bgm_fade_tween and _bgm_fade_tween.is_valid():
 		_bgm_fade_tween.kill()
 	_bgm_fade_tween = create_tween()

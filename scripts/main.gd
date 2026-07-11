@@ -144,6 +144,15 @@ const SHOT_SFX_BY_ID := {
 	"returning_spirit_blades": "shot_swordswoman_blade",
 }
 
+const SHOT_SELECTION_ART_BY_ID := {
+	"ofuda_trace": "player_bullet_homing_charm",
+	"yin_yang_focus": "player_bullet_focus_lance",
+	"stardust_spread": "player_bullet_orbit_star",
+	"magic_laser": "player_bullet_focus_lance",
+	"sword_wave_fan": "player_bullet_spread_petal",
+	"returning_spirit_blades": "player_bullet_bomb_seed",
+}
+
 func _resolve_singletons() -> void:
 	var tree_root: Window = get_tree().root if is_inside_tree() and get_tree() else null
 	var sibling_root: Node = get_parent() if is_inside_tree() else null
@@ -328,6 +337,17 @@ func _draw_texture_rect_path(path: String, rect: Rect2, modulate: Color = Color.
 	draw_texture_rect(texture, rect, false, modulate)
 	return true
 
+func _draw_portrait_icon(path: String, rect: Rect2, modulate: Color = Color.WHITE) -> bool:
+	var texture := get_asset_texture(path)
+	if texture == null:
+		return false
+	var texture_size := texture.get_size()
+	var source_height := texture_size.y * 0.66
+	var source_width := minf(texture_size.x, source_height * rect.size.x / rect.size.y)
+	var source_rect := Rect2((texture_size.x - source_width) * 0.5, 0.0, source_width, source_height)
+	draw_texture_rect_region(texture, rect, source_rect, modulate)
+	return true
+
 func _draw_texture_centered(path: String, center: Vector2, size: Vector2, modulate: Color = Color.WHITE, rotation: float = 0.0) -> bool:
 	var texture := get_asset_texture(path)
 	if texture == null:
@@ -501,10 +521,10 @@ func _draw_item_effect_marker(font: Font, type_id: String, center: Vector2) -> v
 	var label := String(marker.label)
 	var font_size := 11 if label.length() > 1 else 13
 	var width := maxf(18.0, font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x + 7.0)
-	var badge := Rect2(center.x - width * 0.5, center.y + 5.0, width, 15.0)
-	draw_rect(badge, Color(0.015, 0.018, 0.03, 0.88))
+	var badge := Rect2(center.x - width * 0.5, center.y - 8.0, width, 16.0)
+	draw_rect(badge, Color(0.015, 0.018, 0.03, 0.72))
 	draw_rect(badge, marker.color, false, 1.5)
-	draw_string(font, Vector2(badge.position.x, badge.position.y + 12.0), label, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, Color.WHITE)
+	draw_string(font, Vector2(badge.position.x, badge.position.y + 12.5), label, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, Color.WHITE)
 
 func _draw_phase6_enemy_sprite(enemy: Dictionary, center: Vector2) -> bool:
 	var family_id := String(enemy.get("family_id", "low_yokai"))
@@ -594,7 +614,8 @@ func _focus_held() -> bool:
 	return Input.is_action_pressed("focus") or Input.is_key_pressed(KEY_SHIFT)
 
 func _item_magnetize_requested(focus_held: bool) -> bool:
-	return focus_held
+	var top_collection_line := SCREEN_H * float(game_manager_ref.ITEM_TOP_RATIO if game_manager_ref else 0.2)
+	return focus_held and player_y <= top_collection_line
 
 func _player_hitbox_radius() -> float:
 	_resolve_singletons()
@@ -2208,6 +2229,46 @@ func _draw_entry_detail_lines(font: Font, entries: Array, cursor: int, start_y: 
 	for i in range(min(detail_lines.size(), 4)):
 		draw_string(font, Vector2(78, y + i * 22.0), String(detail_lines[i]), HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color(0.78, 0.82, 0.88))
 
+func _draw_character_choice_cards(font: Font, entries: Array, cursor: int) -> void:
+	var card_width := 174.0
+	var card_height := 342.0
+	var gap := 18.0
+	var start_x := (SCREEN_W - card_width * entries.size() - gap * maxi(entries.size() - 1, 0)) * 0.5
+	for i in range(entries.size()):
+		var entry: Dictionary = entries[i]
+		var selected := i == cursor
+		var card := Rect2(start_x + i * (card_width + gap), 232.0, card_width, card_height)
+		draw_rect(card, Color(0.025, 0.035, 0.055, 0.90 if selected else 0.72))
+		draw_rect(card, Color(1.0, 0.68, 0.34, 0.96) if selected else Color(0.34, 0.78, 0.88, 0.52), false, 3.0 if selected else 1.5)
+		var assets := _protagonist_asset_paths(String(entry.get("id", "")))
+		var portrait_rect := Rect2(card.position.x + 12.0, card.position.y + 12.0, card_width - 24.0, 222.0)
+		_draw_portrait_icon(String(assets.get("portrait", "")), portrait_rect, Color.WHITE if selected else Color(0.78, 0.82, 0.88, 0.88))
+		draw_rect(portrait_rect, Color(1.0, 0.78, 0.45, 0.72) if selected else Color(0.42, 0.72, 0.82, 0.40), false, 1.5)
+		var label := String(entry.get("label", ""))
+		draw_string(font, Vector2(card.position.x + 8.0, card.position.y + 269.0), label, HORIZONTAL_ALIGNMENT_CENTER, card_width - 16.0, 21, Color.WHITE)
+		draw_string(font, Vector2(card.position.x + 10.0, card.position.y + 304.0), String(entry.get("description", "")), HORIZONTAL_ALIGNMENT_CENTER, card_width - 20.0, 14, Color(0.78, 0.84, 0.91))
+		if selected:
+			draw_circle(Vector2(card.end.x - 16.0, card.position.y + 16.0), 7.0, Color(1.0, 0.34, 0.28))
+
+func _draw_shot_choice_cards(font: Font, entries: Array, cursor: int) -> void:
+	var card_width := 250.0
+	var card_height := 286.0
+	var gap := 32.0
+	var start_x := (SCREEN_W - card_width * entries.size() - gap * maxi(entries.size() - 1, 0)) * 0.5
+	for i in range(entries.size()):
+		var entry: Dictionary = entries[i]
+		var selected := i == cursor
+		var card := Rect2(start_x + i * (card_width + gap), 274.0, card_width, card_height)
+		draw_rect(card, Color(0.025, 0.035, 0.055, 0.90 if selected else 0.72))
+		draw_rect(card, Color(1.0, 0.68, 0.34, 0.96) if selected else Color(0.34, 0.78, 0.88, 0.52), false, 3.0 if selected else 1.5)
+		var asset_id := String(SHOT_SELECTION_ART_BY_ID.get(String(entry.get("id", "")), "player_bullet_focus_lance"))
+		_draw_texture_centered(_bullet_asset_path(asset_id), Vector2(card.get_center().x, card.position.y + 91.0), Vector2(112.0, 112.0), Color.WHITE if selected else Color(0.76, 0.82, 0.90, 0.88))
+		var label := String(entry.get("label", ""))
+		draw_string(font, Vector2(card.position.x + 12.0, card.position.y + 176.0), label, HORIZONTAL_ALIGNMENT_CENTER, card_width - 24.0, 22, Color.WHITE)
+		draw_string(font, Vector2(card.position.x + 18.0, card.position.y + 214.0), String(entry.get("description", "")), HORIZONTAL_ALIGNMENT_CENTER, card_width - 36.0, 15, Color(0.78, 0.84, 0.91))
+		if selected:
+			draw_circle(Vector2(card.end.x - 18.0, card.position.y + 18.0), 8.0, Color(1.0, 0.34, 0.28))
+
 func _setting_value_text(entry: Dictionary) -> String:
 	match String(entry.get("type", "")):
 		"toggle":
@@ -2294,8 +2355,8 @@ func _draw_character_select_screen() -> void:
 	var mode_label: String = "\u6a21\u5f0f\uff1a\u7ec3\u4e60" if game_manager_ref.practice_mode else "\u6a21\u5f0f\uff1a\u6545\u4e8b"
 	_draw_ui_heading(font, "\u89d2\u8272\u9009\u62e9", mode_label, 34)
 	var entries: Array = ui_model.protagonist_entries()
-	_draw_menu_entries(font, entries, character_menu_cursor, 304.0, 92.0)
-	_draw_entry_detail_lines(font, entries, character_menu_cursor, 304.0, 92.0)
+	_draw_character_choice_cards(font, entries, character_menu_cursor)
+	_draw_entry_detail_lines(font, entries, character_menu_cursor, 592.0, 0.0)
 	var hint := "\u65b9\u5411\u952e\u9009\u62e9    Z \u786e\u8ba4    X/Esc \u8fd4\u56de\u6807\u9898"
 	_draw_control_hint(font, hint, SCREEN_H - 78.0)
 
@@ -2316,8 +2377,8 @@ func _draw_shot_select_screen() -> void:
 	var protagonist_label: String = _entry_label_by_id(protagonists, String(game_manager_ref.selected_protagonist_id))
 	_draw_ui_heading(font, "\u5c04\u51fb\u9009\u62e9", "\u5df2\u9009\u89d2\u8272\uff1a%s" % protagonist_label, 34)
 	var shots: Array = ui_model.shot_entries(String(game_manager_ref.selected_protagonist_id))
-	_draw_menu_entries(font, shots, shot_menu_cursor, 328.0, 92.0)
-	_draw_entry_detail_lines(font, shots, shot_menu_cursor, 328.0, 92.0)
+	_draw_shot_choice_cards(font, shots, shot_menu_cursor)
+	_draw_entry_detail_lines(font, shots, shot_menu_cursor, 594.0, 0.0)
 	var hint := "\u65b9\u5411\u952e\u9009\u62e9    Z \u5f00\u59cb    X/Esc \u8fd4\u56de\u89d2\u8272"
 	_draw_control_hint(font, hint, SCREEN_H - 78.0)
 

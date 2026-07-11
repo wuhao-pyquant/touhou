@@ -5,6 +5,7 @@ var failed := false
 class FakeBgmPlayer:
 	var volume_db: float = 0.0
 	var playing: bool = false
+	var stream_paused: bool = false
 
 	func play() -> void:
 		playing = true
@@ -84,6 +85,10 @@ func _verify_audio_manager_contract() -> void:
 	var bgm_player := AudioStreamPlayer.new()
 	var inactive_bgm_player := AudioStreamPlayer.new()
 	var players := [bgm_player, inactive_bgm_player]
+	get_root().add_child(bgm_player)
+	get_root().add_child(inactive_bgm_player)
+	bgm_player.stream = AudioStreamGenerator.new()
+	bgm_player.play()
 	audio.bgm_players = players
 	audio._bgm_active_idx = 0
 	audio.apply_settings(_phase2_settings())
@@ -101,8 +106,14 @@ func _verify_audio_manager_contract() -> void:
 	if not _assert(bgm_player.volume_db < _volume_db(0.25), "Pause ducking should lower active BGM volume."):
 		_free_audio_fixture(audio, players)
 		return
+	if not _assert(bgm_player.stream_paused, "Pausing gameplay should pause the active BGM stream position."):
+		_free_audio_fixture(audio, players)
+		return
 	audio.set_pause_ducked(false)
 	if not _assert_approx(bgm_player.volume_db, _volume_db(0.25), "Resuming should restore configured BGM volume."):
+		_free_audio_fixture(audio, players)
+		return
+	if not _assert(not bgm_player.stream_paused, "Resuming gameplay should resume the active BGM stream."):
 		_free_audio_fixture(audio, players)
 		return
 	_free_audio_fixture(audio, players)
