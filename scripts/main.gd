@@ -107,6 +107,15 @@ const BOMB_ART_PROFILE_BY_BEHAVIOR := {
 	"instant_slash": "swordswoman",
 }
 
+const SHOT_SFX_BY_ID := {
+	"ofuda_trace": "shot_miko_ofuda",
+	"yin_yang_focus": "shot_miko_orb",
+	"stardust_spread": "shot_magician_stardust",
+	"magic_laser": "shot_magician_laser",
+	"sword_wave_fan": "shot_swordswoman_wave",
+	"returning_spirit_blades": "shot_swordswoman_blade",
+}
+
 func _resolve_singletons() -> void:
 	var tree_root: Window = get_tree().root if is_inside_tree() and get_tree() else null
 	var sibling_root: Node = get_parent() if is_inside_tree() else null
@@ -160,10 +169,16 @@ func _menu_horizontal_delta() -> int:
 	return delta
 
 func _menu_confirm_pressed() -> bool:
-	return Input.is_action_just_pressed("shoot")
+	var pressed := Input.is_action_just_pressed("shoot")
+	if pressed and audio_manager_ref:
+		audio_manager_ref.play_sfx("menu_confirm")
+	return pressed
 
 func _menu_cancel_pressed() -> bool:
-	return Input.is_action_just_pressed("bomb") or Input.is_action_just_pressed("pause")
+	var pressed := Input.is_action_just_pressed("bomb") or Input.is_action_just_pressed("pause")
+	if pressed and audio_manager_ref:
+		audio_manager_ref.play_sfx("menu_back")
+	return pressed
 
 func _set_ui_state(next_state: String) -> void:
 	_resolve_singletons()
@@ -212,6 +227,8 @@ func _pause_gameplay(from_state: String) -> void:
 	_resolve_singletons()
 	if game_manager_ref:
 		game_manager_ref.enter_pause(from_state)
+	if audio_manager_ref:
+		audio_manager_ref.play_sfx("pause")
 	_set_pause_audio(true)
 
 func _resume_gameplay() -> void:
@@ -494,7 +511,10 @@ func _should_show_input_guide() -> bool:
 func _move_menu_cursor(cursor: int, delta: int, count: int) -> int:
 	if delta == 0:
 		return cursor
-	return ui_model.move_cursor(cursor, delta, count)
+	var next_cursor: int = ui_model.move_cursor(cursor, delta, count)
+	if next_cursor != cursor and audio_manager_ref:
+		audio_manager_ref.play_sfx("menu_move")
+	return next_cursor
 
 func _entry_index_by_id(entries: Array, id: String) -> int:
 	for i in range(entries.size()):
@@ -527,6 +547,17 @@ func _selected_bomb_profile() -> Dictionary:
 	if game_manager_ref and game_manager_ref.has_method("selected_bomb_profile"):
 		return game_manager_ref.selected_bomb_profile()
 	return {}
+
+func _bomb_sfx_prefix() -> String:
+	_resolve_singletons()
+	var protagonist_id := String(game_manager_ref.selected_protagonist_id) if game_manager_ref else "miko"
+	return "bomb_%s" % protagonist_id
+
+func _stop_bomb_sfx() -> void:
+	if not audio_manager_ref:
+		return
+	for protagonist_id in ["miko", "magician", "swordswoman"]:
+		audio_manager_ref.stop_sfx("bomb_%s_loop" % protagonist_id)
 
 func _enemy_bullet_types() -> Array:
 	if _enemy_bullet_type_cache_source != game_database_ref or _enemy_bullet_type_ids_cache.is_empty():
@@ -718,6 +749,7 @@ func _start_game():
 	if audio_manager_ref: audio_manager_ref.bgm_stage_mid(1)
 
 func _reset_player():
+	_stop_bomb_sfx()
 	player_x = SCREEN_W * 0.5
 	player_y = SCREEN_H * 0.5625
 	player_invincible = false; player_invincible_timer = 0.0
@@ -799,6 +831,9 @@ func _spawn_bullet_enemy(x: float, y: float, vx: float, vy: float, radius: float
 			b.active = true; b.x = x; b.y = y; b.vx = vx; b.vy = vy
 			b.radius = maxf(0.001, radius); b.color = color; b.type = btype
 			b.lifetime = lifetime; b.age = 0; b.damage = 1.0
+			if btype == "laser" and audio_manager_ref:
+				if not audio_manager_ref.play_sfx("laser_warning"):
+					audio_manager_ref.play_sfx("laser_activate")
 			return
 
 func _stage_enemy_hp_mult() -> float:
@@ -1072,6 +1107,8 @@ func _start_boss_card():
 	boss.card_timer = c.time * 60.0; boss.card_shot = 0.0
 	boss.declaring = true; boss.declare_timer = 90.0
 	boss.phase = "active"
+	if audio_manager_ref:
+		audio_manager_ref.play_sfx("spell_announce")
 
 func _update_boss_entity(delta: float):
 	# All boss timing constants are authored in FRAMES (e.g. declare_timer=90
@@ -1151,7 +1188,7 @@ func _boss_card_clear():
 		boss.timer = 0.0
 	else:
 		boss.phase = "switching"; boss.timer = 0.0
-	if audio_manager_ref: audio_manager_ref.play_sfx("kill", -5.0)
+	if audio_manager_ref: audio_manager_ref.play_sfx("boss_phase_clear", -5.0)
 
 func _boss_card_timeout():
 	for b in bullet_pool:
@@ -1162,7 +1199,7 @@ func _boss_card_timeout():
 		boss.timer = 0.0
 	else:
 		boss.phase = "switching"; boss.timer = 0.0
-	if audio_manager_ref: audio_manager_ref.play_sfx("kill", -7.0)
+	if audio_manager_ref: audio_manager_ref.play_sfx("boss_phase_clear", -7.0)
 
 func _boss_fire_pattern(delta: float):
 	var c: Dictionary = boss.cards[boss.card_idx]
@@ -1469,7 +1506,8 @@ func _shoot():
 	# Throttle shoot SFX so 20 Hz fire doesn't sound like a machine-gun
 	_sfx_shoot_skip = (_sfx_shoot_skip + 1) % 2
 	if _sfx_shoot_skip == 0 and audio_manager_ref:
-		audio_manager_ref.play_sfx("shoot", -12.0)
+		var shot_sfx := String(SHOT_SFX_BY_ID.get(String(shot_profile.get("id", "")), "shot_miko_ofuda"))
+		audio_manager_ref.play_sfx(shot_sfx, -12.0)
 
 func _shoot_spread(level: int, dmg_val: float):
 	var spd: float = -8.0; var r: float = 4.0; var c: Color = Color(0.71,0.31,1.0)
@@ -1509,7 +1547,10 @@ func _start_bomb():
 	player_bomb_timer = int(player_bomb_config.duration) / 60.0
 	player_bomb_phase = 0; player_bomb_wave_timer = 0.0; player_bomb_radius = 0.0
 	player_invincible = true; player_invincible_timer = int(player_bomb_config.duration) / 60.0
-	if audio_manager_ref: audio_manager_ref.play_sfx("bomb", -4.0)
+	if audio_manager_ref:
+		var bomb_prefix := _bomb_sfx_prefix()
+		audio_manager_ref.play_sfx("%s_start" % bomb_prefix, -4.0)
+		audio_manager_ref.play_sfx("%s_loop" % bomb_prefix, -7.0)
 
 func _update_bomb(delta: float):
 	player_bomb_timer -= delta; player_bomb_wave_timer -= delta
@@ -1535,6 +1576,10 @@ func _update_bomb(delta: float):
 		# window starts ticking normally, giving the player a brief grace
 		# period during and after the bomb release.
 		player_bombing = false
+		if audio_manager_ref:
+			var bomb_prefix := _bomb_sfx_prefix()
+			audio_manager_ref.stop_sfx("%s_loop" % bomb_prefix)
+			audio_manager_ref.play_sfx("%s_finish" % bomb_prefix, -4.0)
 
 func _update_bullets(delta: float, target: Vector2):
 	for b in bullet_pool:
@@ -1740,30 +1785,35 @@ func _check_collisions(is_boss: bool):
 				if boss.declaring or boss.phase in ["entering","switching","defeated"]: continue
 				if Vector2(b.x,b.y).distance_to(Vector2(boss.x,boss.y)) < b.radius + boss.radius*0.7:
 					boss.hp -= b.damage
+					if audio_manager_ref: audio_manager_ref.play_sfx("boss_hit")
 					if b.type == "player": b.active = false
 			else:
 				for e in enemies:
 					if not e.alive or e.dying: continue
 					if Vector2(b.x,b.y).distance_to(Vector2(e.x,e.y)) < b.radius + e.radius:
 						e.hp -= b.damage
+						if audio_manager_ref: audio_manager_ref.play_sfx("enemy_hit")
 						if b.type == "player": b.active = false
 						if e.hp <= 0 and not e.dying:
 							e.dying = true; e.death_timer = 8.0
 							_drop_item(e.x, e.y, e.strong, String(e.get("drop_tier", "")))
 							game_manager_ref.score += int(game_database_ref.scoring_rules().enemy_defeat) if game_database_ref else 50
-							if audio_manager_ref: audio_manager_ref.play_sfx("kill", -6.0 if e.strong else -8.0)
+							if audio_manager_ref: audio_manager_ref.play_sfx("enemy_defeat", -6.0 if e.strong else -8.0)
 						break
 		elif _is_enemy_bullet_type(String(b.type)):
 			if not player_invincible and Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < b.radius + player_hitbox_radius:
 				player_deathbomb_primed = true; player_deathbomb_timer = game_manager_ref.DEATHBOMB_WINDOW/60.0
 				player_just_hit = true; b.active = false
-				if audio_manager_ref: audio_manager_ref.play_sfx("hit", -2.0)
+				if audio_manager_ref:
+					audio_manager_ref.play_sfx("player_hit", -2.0)
+					audio_manager_ref.play_sfx("deathbomb_window")
 
 	# Graze
 	for b in bullet_pool:
 		if b.active and _is_enemy_bullet_type(String(b.type)):
 			if Vector2(b.x,b.y).distance_to(Vector2(player_x,player_y)) < player_graze_radius + b.radius:
 				game_manager_ref.graze += 1; game_manager_ref.score += _score_value("graze", 10)
+				if audio_manager_ref: audio_manager_ref.play_sfx("graze")
 
 	# Item collection
 	for it in items:
@@ -1788,7 +1838,14 @@ func _collect(it: Dictionary):
 func _collect_item(it: Dictionary):
 	it.collected = true
 	it.alive = false
-	item_reward_system.apply_collection(String(it.type), game_manager_ref, float(it.get("y", player_y)), game_manager_ref.SCREEN_H * game_manager_ref.ITEM_TOP_RATIO)
+	var result: Dictionary = item_reward_system.apply_collection(String(it.type), game_manager_ref, float(it.get("y", player_y)), game_manager_ref.SCREEN_H * game_manager_ref.ITEM_TOP_RATIO)
+	if audio_manager_ref:
+		audio_manager_ref.play_sfx("item_collect")
+		var resource_delta: Dictionary = result.get("resource_delta", {})
+		if int(resource_delta.get("lives", 0)) > 0:
+			audio_manager_ref.play_sfx("life_gain")
+		if int(resource_delta.get("bombs", 0)) > 0:
+			audio_manager_ref.play_sfx("bomb_gain")
 
 func _draw_ui_background(accent: Color) -> void:
 	draw_rect(Rect2(0, 0, SCREEN_W, SCREEN_H), Color(0.04, 0.05, 0.08))
