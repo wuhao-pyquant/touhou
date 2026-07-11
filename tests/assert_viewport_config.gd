@@ -124,7 +124,7 @@ func _verify_boss_hud_geometry(main: Node2D) -> void:
 	var expected_hp_w: float = clampf(main.SCREEN_W * 560.0 / 720.0, 320.0, 680.0)
 	_assert(is_equal_approx(base_hp.size.x, expected_hp_w), "HP bar width should follow viewport width ratio")
 	_assert(is_equal_approx(base_hp.position.x, (main.SCREEN_W - expected_hp_w) * 0.5), "HP bar should stay centered by viewport")
-	_assert(is_equal_approx(base_hp.position.y, main.SCREEN_H * (92.0 / 960.0)), "HP bar should sit below the resource HUD")
+	_assert(is_equal_approx(base_hp.position.y, main.SCREEN_H * (14.0 / 960.0)), "HP bar should sit near the top of the separate playfield")
 	_assert(is_equal_approx(base_hp.size.y, 14.0), "HP bar height should remain fixed at 14")
 
 	var base_indicator_w: float = main._boss_indicator_width()
@@ -150,7 +150,7 @@ func _run() -> void:
 	var width := int(ProjectSettings.get_setting("display/window/size/viewport_width"))
 	var height := int(ProjectSettings.get_setting("display/window/size/viewport_height"))
 	_assert(width == 720, "Expected viewport_width 720, got %d" % width)
-	_assert(height == 960, "Expected viewport_height 960, got %d" % height)
+	_assert(height == 1038, "Expected viewport_height 1038 with external HUD, got %d" % height)
 
 	var gm_script = load("res://autoload/game_manager.gd")
 	if gm_script == null:

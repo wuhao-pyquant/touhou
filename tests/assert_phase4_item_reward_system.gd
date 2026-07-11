@@ -64,12 +64,13 @@ func _verify_reward_system() -> void:
 			return
 
 	_assert_equal(rewards.choose_drop("light", 0.01), "power", "light low roll mismatch.")
-	_assert_equal(rewards.choose_drop("light", 0.60), "bomb_fragment", "light bomb fragment roll mismatch.")
-	_assert_equal(rewards.choose_drop("light", 0.75), "life_fragment", "light life fragment boundary mismatch.")
-	_assert_equal(rewards.choose_drop("light", 0.80), "night_festival_seal", "light seal boundary mismatch.")
-	_assert_equal(rewards.choose_drop("light", 0.95), "full_power", "light full power boundary mismatch.")
+	_assert_equal(rewards.choose_drop("light", 0.60), "point", "light point roll mismatch.")
+	_assert_equal(rewards.choose_drop("light", 0.80), "bomb_fragment", "light bomb fragment roll mismatch.")
+	_assert_equal(rewards.choose_drop("light", 0.88), "life_fragment", "light life fragment boundary mismatch.")
+	_assert_equal(rewards.choose_drop("light", 0.95), "night_festival_seal", "light seal boundary mismatch.")
+	_assert_equal(rewards.choose_drop("light", 0.995), "full_power", "light full power boundary mismatch.")
 	_assert_equal(rewards.choose_drop("rich", 0.05), "point", "rich low roll mismatch.")
-	_assert_equal(rewards.choose_drop("rich", 0.30), "bomb_refill", "rich bomb refill roll mismatch.")
+	_assert_equal(rewards.choose_drop("rich", 0.315), "bomb_refill", "rich bomb refill roll mismatch.")
 
 	var gm = load("res://autoload/game_manager.gd").new()
 	_assert(gm.has_method("reset"), "GameManager should have reset.")
@@ -158,10 +159,10 @@ func _verify_main_item_contract() -> void:
 			main_shell.free()
 			gm.free()
 			return
-	_assert_equal(main_shell._drop_item_type(false, 0.80, "light"), "night_festival_seal", "Main drop helper should use database light table.")
-	_assert_equal(main_shell._drop_item_type(true, 0.30, "rich"), "bomb_refill", "Main drop helper should use rich table.")
+	_assert_equal(main_shell._drop_item_type(false, 0.95, "light"), "night_festival_seal", "Main drop helper should use database light table.")
+	_assert_equal(main_shell._drop_item_type(true, 0.315, "rich"), "bomb_refill", "Main drop helper should use rich table.")
 	main_shell.items.clear()
-	main_shell._drop_item(10.0, 20.0, false, "light", 0.80)
+	main_shell._drop_item(10.0, 20.0, false, "light", 0.95)
 	_assert_equal(main_shell.items.size(), 1, "Main drop helper should append one item.")
 	_assert_equal(String(main_shell.items[0].type), "night_festival_seal", "Main drop item should respect explicit tier and roll.")
 	main_shell._collect_item({"alive": true, "collected": false, "type": "night_festival_seal", "x": 0.0, "y": 420.0})

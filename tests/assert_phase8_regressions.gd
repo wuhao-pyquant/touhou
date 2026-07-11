@@ -66,7 +66,7 @@ func _run() -> void:
 	for total in bomb_totals:
 		_assert(float(total) >= 220.0 and float(total) <= 300.0, "Bomb guaranteed Boss damage must stay in the 220-300 range.")
 	main_shell.boss = {"radius": 28.0, "card_timer": 301.0, "card_shot": 0.0, "move_mode": "sweep"}
-	_assert(is_equal_approx(main_shell._boss_collision_radius(), 35.0), "Boss collision radius must match the visible sprite core.")
+	_assert(is_equal_approx(main_shell._boss_collision_radius(), 45.0), "Boss collision radius must cover the visible sprite core generously.")
 	_assert(main_shell._boss_timer_seconds() == 6, "Boss countdown must round remaining partial seconds upward.")
 	main_shell._update_boss_movement_target()
 	var first_target := Vector2(main_shell.boss.target_x, main_shell.boss.target_y)

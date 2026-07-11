@@ -40,8 +40,10 @@ const HUD_HEIGHT := 78.0
 const GAMEPLAY_TOP := 82.0
 const BULLET_POOL_GROWTH := 2048
 const MAX_COMBAT_EFFECTS := 96
+const GRAZE_BOMB_FRAGMENT_INTERVAL := 90
+const GRAZE_LIFE_FRAGMENT_INTERVAL := 300
 const SHOT_NAMES_ZH := ["\u6563\u5c04", "\u8d2f\u901a", "\u8ffd\u8e2a"]
-const BOSS_HP_BAR_Y_RATIO := 92.0 / 960.0
+const BOSS_HP_BAR_Y_RATIO := 14.0 / 960.0
 const BOSS_HP_BAR_H := 14.0
 const BOSS_HP_BAR_WIDTH_RATIO := 560.0 / 720.0
 const BOSS_HP_BAR_WIDTH_MIN := 320.0
@@ -221,6 +223,7 @@ func _set_ui_state(next_state: String) -> void:
 	_resolve_singletons()
 	if game_manager_ref:
 		game_manager_ref.state = next_state
+	_sync_canvas_origin(next_state)
 
 func _open_settings(return_state: String) -> void:
 	_resolve_singletons()
@@ -272,6 +275,7 @@ func _pause_gameplay(from_state: String) -> void:
 	_resolve_singletons()
 	if game_manager_ref:
 		game_manager_ref.enter_pause(from_state)
+	_sync_canvas_origin("paused")
 	if audio_manager_ref:
 		audio_manager_ref.play_sfx("pause")
 	_set_pause_audio(true)
@@ -280,6 +284,7 @@ func _resume_gameplay() -> void:
 	_resolve_singletons()
 	if game_manager_ref:
 		game_manager_ref.resume_from_pause()
+	_sync_canvas_origin(String(game_manager_ref.state if game_manager_ref else "stage"))
 	_set_pause_audio(false)
 
 func _bullet_draw_color(base: Color, alpha_override: float = -1.0) -> Color:
@@ -359,6 +364,9 @@ func _draw_texture_centered(path: String, center: Vector2, size: Vector2, modula
 
 func _full_screen_rect() -> Rect2:
 	return Rect2(0, 0, SCREEN_W, SCREEN_H)
+
+func _display_rect() -> Rect2:
+	return Rect2(0, 0, SCREEN_W, SCREEN_H + HUD_HEIGHT)
 
 func _stage_background_paths(stage_id: int) -> Dictionary:
 	if _stage_background_path_cache.has(stage_id):
@@ -451,18 +459,23 @@ func _current_boss_assets() -> Dictionary:
 	return _boss_asset_paths(_current_boss_asset_id())
 
 func _draw_phase6_stage_background(spell_state: bool) -> void:
+	_draw_phase6_stage_background_rect(spell_state, _full_screen_rect())
+
+func _draw_phase6_stage_background_rect(spell_state: bool, target_rect: Rect2) -> void:
 	var layers: Dictionary = _stage_background_paths(_active_stage())
 	var drew_any := false
-	drew_any = _draw_texture_rect_path(String(layers.get("far", "")), _full_screen_rect(), Color(1, 1, 1, 1.0)) or drew_any
-	drew_any = _draw_texture_rect_path(String(layers.get("mid", "")), _full_screen_rect(), Color(1, 1, 1, 0.82)) or drew_any
+	drew_any = _draw_texture_rect_path(String(layers.get("far", "")), target_rect, Color(1, 1, 1, 1.0)) or drew_any
+	drew_any = _draw_texture_rect_path(String(layers.get("mid", "")), target_rect, Color(1, 1, 1, 0.82)) or drew_any
 	if spell_state:
-		drew_any = _draw_texture_rect_path(String(layers.get("spell", "")), _full_screen_rect(), Color(1, 1, 1, 0.36)) or drew_any
-	drew_any = _draw_texture_rect_path(String(layers.get("near", "")), _full_screen_rect(), Color(1, 1, 1, 0.24)) or drew_any
+		drew_any = _draw_texture_rect_path(String(layers.get("spell", "")), target_rect, Color(1, 1, 1, 0.36)) or drew_any
+	drew_any = _draw_texture_rect_path(String(layers.get("near", "")), target_rect, Color(1, 1, 1, 0.24)) or drew_any
 	if not drew_any:
-		draw_rect(_full_screen_rect(), Color(0.02, 0.03, 0.06))
+		draw_rect(target_rect, Color(0.02, 0.03, 0.06))
 
 func _draw_phase6_boss_aura() -> void:
 	if not boss_alive or not boss.has("phase") or boss.get("phase", "") == "defeated":
+		return
+	if float(boss.get("y", -60.0)) < 96.0:
 		return
 	var aura_path := String(_current_boss_assets().get("spell_aura", ""))
 	var aura_size := Vector2.ONE * (250.0 if bool(boss.get("declaring", false)) else 190.0)
@@ -566,6 +579,9 @@ func _draw_phase6_player_sprite(center: Vector2) -> bool:
 func _draw_phase6_ui_fullscreen(asset_id: String, alpha: float = 1.0) -> bool:
 	return _draw_texture_rect_path(_ui_asset_path(asset_id), _full_screen_rect(), Color(1, 1, 1, alpha))
 
+func _draw_phase6_ui_window(asset_id: String, alpha: float = 1.0) -> bool:
+	return _draw_texture_rect_path(_ui_asset_path(asset_id), _display_rect(), Color(1, 1, 1, alpha))
+
 func _draw_phase6_spell_banner(font: Font) -> void:
 	if not boss_alive or not bool(boss.get("declaring", false)):
 		return
@@ -597,15 +613,18 @@ func _draw_boss_status(font: Font) -> void:
 	draw_string(font, Vector2(SCREEN_W - 64.0, y), "%02d" % timer_seconds, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 20, timer_color)
 
 func _draw_gameplay_hud(font: Font, gm: Object) -> void:
-	draw_rect(Rect2(0, 0, SCREEN_W, HUD_HEIGHT), Color(0.025, 0.03, 0.055, 0.88))
-	draw_line(Vector2(0, HUD_HEIGHT), Vector2(SCREEN_W, HUD_HEIGHT), Color(0.82, 0.64, 0.34, 0.58), 2.0)
-	draw_string(font, Vector2(12, 24), "SCORE  %09d" % gm.score, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 17, Color(1.0, 0.88, 0.42))
-	draw_string(font, Vector2(250, 24), "GRAZE  %05d" % gm.graze, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color(0.46, 0.90, 1.0))
-	draw_string(font, Vector2(12, 55), "POWER  %02d/50  Lv.%d  %s" % [gm.shared_power, gm.power_level(), _gameplay_shot_label()], HORIZONTAL_ALIGNMENT_LEFT, 400.0, 15, Color(0.82, 0.62, 1.0))
+	var hud_origin_y := -HUD_HEIGHT
+	draw_string(font, Vector2(12, hud_origin_y + 24), "SCORE  %09d" % gm.score, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 17, Color(1.0, 0.88, 0.42))
+	draw_string(font, Vector2(250, hud_origin_y + 24), "GRAZE  %05d" % gm.graze, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color(0.46, 0.90, 1.0))
+	draw_string(font, Vector2(12, hud_origin_y + 55), "POWER  %02d/50  Lv.%d  %s" % [gm.shared_power, gm.power_level(), _gameplay_shot_label()], HORIZONTAL_ALIGNMENT_LEFT, 400.0, 15, Color(0.82, 0.62, 1.0))
 	var life_text := "残机  %s  [%d/5]" % ["♥".repeat(gm.lives), gm.life_fragments]
 	var bomb_text := "炸弹  %s  [%d/3]" % ["◆".repeat(gm.bombs), gm.bomb_fragments]
-	draw_string(font, Vector2(430, 24), life_text, HORIZONTAL_ALIGNMENT_LEFT, SCREEN_W - 440.0, 16, Color(1.0, 0.48, 0.62))
-	draw_string(font, Vector2(430, 55), bomb_text, HORIZONTAL_ALIGNMENT_LEFT, SCREEN_W - 440.0, 16, Color(1.0, 0.72, 0.25))
+	draw_string(font, Vector2(430, hud_origin_y + 24), life_text, HORIZONTAL_ALIGNMENT_LEFT, SCREEN_W - 440.0, 16, Color(1.0, 0.48, 0.62))
+	draw_string(font, Vector2(430, hud_origin_y + 55), bomb_text, HORIZONTAL_ALIGNMENT_LEFT, SCREEN_W - 440.0, 16, Color(1.0, 0.72, 0.25))
+
+func _draw_gameplay_hud_background() -> void:
+	draw_rect(Rect2(0, -HUD_HEIGHT, SCREEN_W, HUD_HEIGHT), Color(0.025, 0.03, 0.055, 0.94))
+	draw_line(Vector2(0, 0), Vector2(SCREEN_W, 0), Color(0.82, 0.64, 0.34, 0.68), 1.5)
 
 func _should_show_focus_hitbox() -> bool:
 	return not player_bombing and (_settings_bool("always_show_focus_hitbox", false) or _focus_held())
@@ -634,7 +653,7 @@ func _player_graze_radius() -> float:
 	return 10.0
 
 func _boss_collision_radius() -> float:
-	return maxf(34.0, float(boss.get("radius", 28.0)) * 1.25)
+	return maxf(45.0, float(boss.get("radius", 28.0)) * 1.6)
 
 func _spawn_combat_effect(kind: String, position: Vector2, radius: float, color: Color) -> void:
 	if combat_effects.size() >= MAX_COMBAT_EFFECTS:
@@ -820,7 +839,7 @@ func _screen_center_x() -> float:
 	return SCREEN_W * 0.5
 
 func _boss_anchor_y() -> float:
-	return SCREEN_H * (150.0 / 960.0)
+	return SCREEN_H * (130.0 / 960.0)
 
 func _centered_text_x(font: Font, text: String) -> float:
 	return maxf(0.0, (SCREEN_W - font.get_string_size(text).x) * 0.5)
@@ -891,6 +910,7 @@ func _make_bullet() -> Dictionary:
 func _show_title():
 	_resolve_singletons()
 	game_manager_ref.state = "title"
+	_sync_canvas_origin("title")
 	game_manager_ref.practice_mode = false
 	game_manager_ref.settings_return_state = "title"
 	main_menu_cursor = 0
@@ -915,6 +935,7 @@ func _start_game():
 	game_manager_ref.apply_selected_shot()
 	_apply_runtime_settings()
 	game_manager_ref.state = "stage"
+	_sync_canvas_origin("stage")
 	var starting_stage := selected_practice_stage if selected_practice_mode else 1
 	_set_active_stage(starting_stage)
 	stage_timer = 0.0
@@ -1067,8 +1088,7 @@ func _spawn_bullet_enemy(x: float, y: float, vx: float, vy: float, radius: float
 		_active_bullet_membership[i] = 1
 	_active_index_initialized = true
 	if btype == "laser" and audio_manager_ref:
-		if not audio_manager_ref.play_sfx("laser_warning"):
-			audio_manager_ref.play_sfx("laser_activate")
+		audio_manager_ref.play_sfx("laser_warning", -12.0)
 	return true
 
 func _stage_enemy_hp_mult() -> float:
@@ -1096,13 +1116,7 @@ func _spawn_enemy(x: float, y: float, hp: float = 5.0, pattern: String = "aimed"
 	var cfg: Dictionary = enemy_pattern_executor.spawn_config(pattern, hp, _stage_enemy_hp_mult(), strong)
 	var ehp: float = float(cfg.hp)
 	var radius := float(cfg.radius)
-	var visible_half_height := clampf(radius * 1.9, 21.0, 41.0)
-	var safe_y := maxf(y, GAMEPLAY_TOP + visible_half_height)
-	var safe_move_data := move_data.duplicate(true)
-	if safe_move_data.has("center_y"):
-		var orbit_radius := float(safe_move_data.get("radius", 0.0))
-		safe_move_data.center_y = maxf(float(safe_move_data.center_y), GAMEPLAY_TOP + visible_half_height + orbit_radius)
-	enemies.append({"alive":true,"x":x,"y":safe_y,"hp":ehp,"max_hp":ehp,"radius":radius,"vx":vx,"vy":vy,"move_timer":0.0,"move":move,"move_data":safe_move_data,"pattern":pattern,"shoot_timer":randf_range(0,30),"shoot_phase":0,"strong":strong,"dying":false,"death_timer":0.0,"family_id":String(cfg.family_id),"drop_tier":String(cfg.drop_tier),"shoot_interval":float(cfg.shoot_interval)})
+	enemies.append({"alive":true,"x":x,"y":y,"hp":ehp,"max_hp":ehp,"radius":radius,"vx":vx,"vy":vy,"move_timer":0.0,"move":move,"move_data":move_data.duplicate(true),"pattern":pattern,"shoot_timer":randf_range(0,30),"shoot_phase":0,"strong":strong,"dying":false,"death_timer":0.0,"family_id":String(cfg.family_id),"drop_tier":String(cfg.drop_tier),"shoot_interval":float(cfg.shoot_interval)})
 
 func _nearest_enemy(px: float, py: float) -> Vector2:
 	var best: float = 99999.0; var best_v: Vector2 = Vector2(px, py - 100)
@@ -1255,8 +1269,13 @@ func _process(delta: float):
 			if Input.is_action_just_pressed("shoot"): _show_title()
 		"paused":
 			_update_pause_menu()
+	_sync_canvas_origin(String(gm.state if gm else "title"))
 	_update_performance_counters()
 	queue_redraw()
+
+func _sync_canvas_origin(state: String) -> void:
+	var gameplay_state := state in ["stage", "boss", "stage_clear", "final_clear", "game_over", "paused"]
+	position = Vector2(0.0, HUD_HEIGHT if gameplay_state else 0.0)
 
 func _update_stage(delta: float):
 	if Input.is_action_just_pressed("pause"):
@@ -1366,6 +1385,7 @@ func _start_boss_card():
 	var c: Dictionary = boss.cards[boss.card_idx]
 	boss.card_name = c.name; boss.card_hp = c.hp; boss.max_hp = c.hp; boss.hp = c.hp
 	boss.card_timer = c.time * 60.0; boss.card_shot = 0.0
+	boss.last_countdown_second = -1
 	boss.move_mode = _boss_movement_mode(c)
 	boss.declaring = true; boss.declare_timer = 90.0
 	boss.phase = "active"
@@ -1450,11 +1470,22 @@ func _boss_active(delta: float):
 	if boss.declaring: return
 	var dt: float = delta * 60.0
 	boss.card_timer -= dt
+	_update_boss_countdown_cue()
 	if boss.card_timer <= 0: _boss_card_timeout()
 	boss.card_shot += dt
 	if boss.card_idx < boss.cards.size():
 		_boss_fire_pattern(delta)
 	if boss.hp <= 0: _boss_card_clear()
+
+func _update_boss_countdown_cue() -> void:
+	var seconds_left := _boss_timer_seconds()
+	if seconds_left <= 0 or seconds_left > 5:
+		return
+	if int(boss.get("last_countdown_second", -1)) == seconds_left:
+		return
+	boss.last_countdown_second = seconds_left
+	if audio_manager_ref:
+		audio_manager_ref.play_sfx("menu_move", -12.0 if seconds_left > 1 else -9.0)
 
 func _boss_switching(delta: float):
 	boss.timer += delta * 60.0
@@ -1944,7 +1975,13 @@ func _update_bullets(delta: float, target: Vector2):
 				b.vy = sin(na) * spd
 		b.x += b.vx * delta * 60.0; b.y += b.vy * delta * 60.0
 		b.age += delta * 60.0
-		if b.age > b.lifetime or b.x < -60 or b.x > SCREEN_W + 60 or b.y < -60 or b.y > SCREEN_H + 60:
+		var outside_retention_bounds: bool = b.x < -60 or b.x > SCREEN_W + 60 or b.y < -60 or b.y > SCREEN_H + 60
+		if outside_retention_bounds:
+			b.active = false
+		elif b.type == "player" or b.type == "bomb":
+			if b.age > b.lifetime:
+				b.active = false
+		elif b.age > 1800.0 and b.age > b.lifetime:
 			b.active = false
 		if b.active:
 			_next_active_bullet_indices.append(bullet_index)
@@ -1974,8 +2011,6 @@ func _update_enemies(delta: float):
 				if e.move_timer < lim: e.x += e.vx * delta * 60.0; e.y += e.vy * delta * 60.0
 				else: e.y += sin(e.move_timer*0.03)*0.3*delta*60.0
 		e.x = clampf(e.x, 24, SCREEN_W - 24)
-		var visible_half_height := clampf(float(e.radius) * 1.9, 21.0, 41.0)
-		e.y = maxf(float(e.y), GAMEPLAY_TOP + visible_half_height)
 		if e.y > SCREEN_H + 40:
 			e.alive = false
 
@@ -2158,6 +2193,7 @@ func _check_collisions(is_boss: bool):
 			elif distance_squared < graze_limit * graze_limit and not bool(b.get("grazed", false)):
 				b.grazed = true
 				game_manager_ref.graze += 1; game_manager_ref.score += _score_value("graze", 10)
+				_settle_realtime_graze_rewards(game_manager_ref.graze)
 				if audio_manager_ref: audio_manager_ref.play_sfx("graze")
 
 	# Item collection
@@ -2165,6 +2201,29 @@ func _check_collisions(is_boss: bool):
 		if it.collected or not it.alive: continue
 		if Vector2(it.x,it.y).distance_to(Vector2(player_x,player_y)) < it.radius + 24.0:
 			_collect(it)
+
+func _settle_realtime_graze_rewards(graze_total: int) -> void:
+	var granted_fragment := false
+	if graze_total > 0 and graze_total % GRAZE_BOMB_FRAGMENT_INTERVAL == 0:
+		game_manager_ref.bomb_fragments += 1
+		if game_manager_ref.bomb_fragments >= 3:
+			if game_manager_ref.bombs < 5:
+				game_manager_ref.bombs += 1
+				game_manager_ref.bomb_fragments -= 3
+			elif game_manager_ref.bomb_fragments > 2:
+				game_manager_ref.bomb_fragments = 2
+		granted_fragment = true
+	if graze_total > 0 and graze_total % GRAZE_LIFE_FRAGMENT_INTERVAL == 0:
+		game_manager_ref.life_fragments += 1
+		if game_manager_ref.life_fragments >= 5:
+			if game_manager_ref.lives < 6:
+				game_manager_ref.lives += 1
+				game_manager_ref.life_fragments -= 5
+			elif game_manager_ref.life_fragments > 4:
+				game_manager_ref.life_fragments = 4
+		granted_fragment = true
+	if granted_fragment and audio_manager_ref:
+		audio_manager_ref.play_sfx("item_collect", -10.0)
 
 func _drop_item_type(strong: bool, roll: float, drop_tier: String = "") -> String:
 	var tier := drop_tier
@@ -2193,7 +2252,7 @@ func _collect_item(it: Dictionary):
 			audio_manager_ref.play_sfx("bomb_gain")
 
 func _draw_ui_background(accent: Color) -> void:
-	draw_rect(Rect2(0, 0, SCREEN_W, SCREEN_H), Color(0.04, 0.05, 0.08))
+	draw_rect(_display_rect(), Color(0.04, 0.05, 0.08))
 	draw_rect(Rect2(0, 0, SCREEN_W, SCREEN_H * 0.34), Color(accent.r, accent.g, accent.b, 0.18))
 	draw_circle(Vector2(SCREEN_W * 0.5, SCREEN_H * 0.22), SCREEN_W * 0.18, Color(accent.r, accent.g, accent.b, 0.18))
 	draw_line(Vector2(84, SCREEN_H * 0.18), Vector2(SCREEN_W - 84, SCREEN_H * 0.18), Color(1, 1, 1, 0.22), 2)
@@ -2286,9 +2345,10 @@ func _draw_settings_entries(font: Font, entries: Array, cursor: int) -> void:
 		var y: float = start_y + row_height * i
 		var selected: bool = i == cursor
 		var row_rect := Rect2(54, y - 30.0, SCREEN_W - 108.0, 62.0)
+		draw_rect(row_rect, Color(0.025, 0.035, 0.055, 0.88 if selected else 0.72))
+		draw_rect(row_rect, Color(1.0, 0.68, 0.34, 0.96) if selected else Color(0.34, 0.78, 0.88, 0.46), false, 2.5 if selected else 1.25)
 		if selected:
-			draw_rect(row_rect, Color(0.18, 0.42, 0.62, 0.34))
-			draw_rect(row_rect, Color(0.68, 0.88, 1.0, 0.78), false, 2)
+			draw_circle(Vector2(row_rect.end.x - 16.0, row_rect.position.y + 14.0), 6.0, Color(1.0, 0.34, 0.28))
 		var marker: String = "\u25b6" if selected else " "
 		var label_color := Color.WHITE if selected else Color(0.84, 0.88, 0.94)
 		draw_string(font, Vector2(78, y), "%s %s" % [marker, String(entry.get("label", ""))], HORIZONTAL_ALIGNMENT_LEFT, -1.0, 20, label_color)
@@ -2342,7 +2402,7 @@ func _draw_title_screen() -> void:
 	var font := SystemFont.new()
 	_draw_ui_background(Color(0.55, 0.14, 0.22))
 	_draw_texture_rect_path(_ui_asset_path("title_key_art"), Rect2(0, 0, SCREEN_W, SCREEN_H * 0.46), Color(1, 1, 1, 0.38))
-	_draw_phase6_ui_fullscreen("main_menu_frame", 0.82)
+	_draw_phase6_ui_window("main_menu_frame", 0.82)
 	_draw_ui_heading(font, "\u4e1c\u65b9\u5f39\u5e55", "\u6807\u9898\u83dc\u5355", 38)
 	_draw_menu_entries(font, ui_model.main_menu_entries(), main_menu_cursor, 314.0, 76.0)
 	var hint := "\u65b9\u5411\u952e\u9009\u62e9    Z \u786e\u8ba4    X/Esc \u8fd4\u56de"
@@ -2351,7 +2411,7 @@ func _draw_title_screen() -> void:
 func _draw_character_select_screen() -> void:
 	var font := SystemFont.new()
 	_draw_ui_background(Color(0.16, 0.38, 0.56))
-	_draw_phase6_ui_fullscreen("character_select_frame", 0.84)
+	_draw_phase6_ui_window("character_select_frame", 0.84)
 	var mode_label: String = "\u6a21\u5f0f\uff1a\u7ec3\u4e60" if game_manager_ref.practice_mode else "\u6a21\u5f0f\uff1a\u6545\u4e8b"
 	_draw_ui_heading(font, "\u89d2\u8272\u9009\u62e9", mode_label, 34)
 	var entries: Array = ui_model.protagonist_entries()
@@ -2363,7 +2423,7 @@ func _draw_character_select_screen() -> void:
 func _draw_practice_select_screen() -> void:
 	var font := SystemFont.new()
 	_draw_ui_background(Color(0.18, 0.42, 0.36))
-	_draw_phase6_ui_fullscreen("main_menu_frame", 0.68)
+	_draw_phase6_ui_window("main_menu_frame", 0.68)
 	_draw_ui_heading(font, "关卡练习", "已到达关卡可选择", 34)
 	var entries: Array = ui_model.practice_stage_entries(game_manager_ref.STAGE_NAMES, game_manager_ref.highest_reached_stage)
 	_draw_menu_entries(font, entries, practice_menu_cursor, 282.0, 76.0)
@@ -2372,7 +2432,7 @@ func _draw_practice_select_screen() -> void:
 func _draw_shot_select_screen() -> void:
 	var font := SystemFont.new()
 	_draw_ui_background(Color(0.46, 0.32, 0.12))
-	_draw_phase6_ui_fullscreen("main_menu_frame", 0.50)
+	_draw_phase6_ui_window("main_menu_frame", 0.50)
 	var protagonists: Array = ui_model.protagonist_entries()
 	var protagonist_label: String = _entry_label_by_id(protagonists, String(game_manager_ref.selected_protagonist_id))
 	_draw_ui_heading(font, "\u5c04\u51fb\u9009\u62e9", "\u5df2\u9009\u89d2\u8272\uff1a%s" % protagonist_label, 34)
@@ -2384,8 +2444,9 @@ func _draw_shot_select_screen() -> void:
 
 func _draw_settings_screen() -> void:
 	var font := SystemFont.new()
-	_draw_ui_background(Color(0.12, 0.38, 0.44))
-	_draw_phase6_ui_fullscreen("main_menu_frame", 0.42)
+	_draw_phase6_stage_background_rect(false, _display_rect())
+	draw_rect(_display_rect(), Color(0.01, 0.015, 0.025, 0.70))
+	_draw_phase6_ui_window("main_menu_frame", 0.82)
 	var subtitle := "\u5de6\u53f3\u8c03\u6574    Z \u5207\u6362    X/Esc \u8fd4\u56de" if _should_show_input_guide() else ""
 	_draw_ui_heading(font, "\u8bbe\u7f6e", subtitle, 34)
 	_draw_settings_entries(font, ui_model.settings_entries(game_manager_ref.settings), settings_menu_cursor)
@@ -2393,7 +2454,7 @@ func _draw_settings_screen() -> void:
 func _draw_pause_overlay() -> void:
 	var entries: Array = ui_model.pause_menu_entries()
 	var font := SystemFont.new()
-	draw_rect(Rect2(0, 0, SCREEN_W, SCREEN_H), Color(0.0, 0.0, 0.0, 0.56))
+	draw_rect(Rect2(0, -HUD_HEIGHT, SCREEN_W, SCREEN_H + HUD_HEIGHT), Color(0.0, 0.0, 0.0, 0.56))
 	_draw_phase6_ui_fullscreen("pause_panel", 0.76)
 	var row_height := 54.0
 	var panel_width: float = minf(420.0, SCREEN_W - 80.0)
@@ -2440,12 +2501,14 @@ func _draw():
 				return
 	var font := SystemFont.new()
 	_draw_phase6_stage_background(gm_ui != null and gm_ui.state == "boss")
+	_draw_gameplay_hud_background()
 	_draw_combat_effects()
 	_draw_phase6_boss_aura()
 	_draw_phase6_bomb_plate()
 	# Items
 	for it in items:
 		if not it.alive or it.birth > 0: continue
+		if float(it.y) < 20.0: continue
 		var ix: int = int(it.x); var iy: int = int(it.y)
 		if _draw_phase6_item_sprite(it, Vector2(ix, iy)):
 			_draw_item_effect_marker(font, String(it.type), Vector2(ix, iy))
@@ -2483,6 +2546,8 @@ func _draw():
 	# Enemies
 	for e in enemies:
 		if not e.alive or e.dying: continue
+		var enemy_visual_half := clampf(float(e.radius) * 1.9, 21.0, 41.0)
+		if float(e.y) < enemy_visual_half: continue
 		var ix: int = int(e.x); var iy: int = int(e.y)
 		if _draw_phase6_enemy_sprite(e, Vector2(ix, iy)):
 			continue
@@ -2498,7 +2563,8 @@ func _draw():
 	# Boss body stays below live bullets so spell patterns remain readable.
 	if boss_alive and boss.has("phase") and boss.get("phase", "") != "defeated":
 		var boss_center := Vector2(float(boss.get("x", _screen_center_x())), float(boss.get("y", _boss_anchor_y())))
-		if not _draw_phase6_boss_sprite(boss_center):
+		var boss_visual_half := clampf(float(boss.get("radius", 28.0)) * 1.9, 43.0, 64.0)
+		if boss_center.y >= boss_visual_half and not _draw_phase6_boss_sprite(boss_center):
 			var ix: int = int(boss_center.x); var iy: int = int(boss_center.y)
 			var col: Color = Color.WHITE if boss.flash > 0 else Color(0.86,0.24,0.24)
 			var pts: PackedVector2Array = PackedVector2Array()
@@ -2511,6 +2577,7 @@ func _draw():
 	for bullet_index in active_bullet_indices:
 		var b = bullet_pool[bullet_index]
 		if not b.active: continue
+		if float(b.y) < maxf(float(b.radius) * 2.3, 8.0): continue
 		if _draw_phase6_bullet_sprite(b):
 			continue
 		if b.type == "player":
