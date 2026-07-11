@@ -21,6 +21,7 @@ func _init() -> void:
 		return
 	var constants: Dictionary = audio_script.get_script_constant_map()
 	var paths: Dictionary = constants.get("BGM_PATHS", {})
+	var audio_loader = audio_script.new()
 	if not _assert(paths.size() == 12, "AudioManager must expose exactly 12 Phase 7 BGM paths."):
 		return
 
@@ -32,7 +33,7 @@ func _init() -> void:
 				return
 			if not _assert(ResourceLoader.exists(expected_path), "Missing runtime BGM: %s" % expected_path):
 				return
-			var stream = load(expected_path)
+			var stream = audio_loader._load_audio_stream(expected_path)
 			if not _assert(stream is AudioStreamOggVorbis, "Runtime BGM must import as Ogg Vorbis: %s" % key):
 				return
 			if not _assert(stream.loop, "Runtime BGM must loop: %s" % key):
@@ -40,4 +41,5 @@ func _init() -> void:
 			if not _assert(absf(stream.get_length() - 180.0) <= 0.05, "Runtime BGM must be 180 seconds: %s" % key):
 				return
 
+	audio_loader.free()
 	quit(0)

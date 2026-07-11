@@ -62,7 +62,10 @@ func _ready() -> void:
 	# initial chunk of each track NOW (during level-load / initial boot) so
 	# the first real play() call has zero latency and zero frame hitch later.
 	for key in BGM_PATHS.keys():
-		var s = load(BGM_PATHS[key])
+		var s = _load_audio_stream(BGM_PATHS[key])
+		if s == null:
+			push_error("AudioManager: failed to load BGM: %s" % BGM_PATHS[key])
+			continue
 		_bgm_cache[key] = s
 		# Prime the stream to pre-decode (uses bgm_players[1] as scratch).
 		bgm_players[1].stream = s
@@ -77,6 +80,24 @@ func _ready() -> void:
 		"bgm_volume": _bgm_volume,
 		"sfx_volume": _sfx_volume,
 	})
+
+func _load_audio_stream(path: String) -> AudioStream:
+	# Source-project runs can have stale or missing .godot imports after a
+	# checkout. Read the source audio directly; exported builds use imports.
+	if not OS.has_feature("standalone") and FileAccess.file_exists(path):
+		var absolute_path := ProjectSettings.globalize_path(path)
+		match path.get_extension().to_lower():
+			"ogg":
+				var ogg := AudioStreamOggVorbis.load_from_file(absolute_path)
+				if ogg:
+					ogg.loop = true
+					return ogg
+			"wav":
+				var wav := AudioStreamWAV.load_from_file(absolute_path)
+				if wav:
+					return wav
+	var imported := ResourceLoader.load(path)
+	return imported as AudioStream
 
 func _volume_to_db(volume: float) -> float:
 	if volume <= 0.0:
@@ -162,7 +183,7 @@ func _load_sfx_manifest() -> void:
 		var cue: Dictionary = cue_value
 		var key := String(cue.get("key", ""))
 		var path := String(cue.get("path", ""))
-		var stream = load(path)
+		var stream = _load_audio_stream(path)
 		if key == "" or stream == null:
 			push_error("AudioManager: invalid SFX cue %s at %s" % [key, path])
 			continue

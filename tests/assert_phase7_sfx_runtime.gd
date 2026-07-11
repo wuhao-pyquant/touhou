@@ -25,6 +25,7 @@ func _load_manifest() -> Dictionary:
 	return parsed
 
 func _verify_assets(manifest: Dictionary) -> void:
+	var audio_loader = load("res://autoload/audio_manager.gd").new()
 	var cues: Array = manifest.get("cues", [])
 	_assert(int(manifest.get("cue_count", 0)) == 32, "Phase 7 must expose exactly 32 accepted SFX cues.")
 	_assert(cues.size() == 32, "Phase 7 SFX manifest cue array must contain 32 entries.")
@@ -37,7 +38,7 @@ func _verify_assets(manifest: Dictionary) -> void:
 		_assert(key != "" and not keys.has(key), "SFX cue keys must be non-empty and unique: %s" % key)
 		keys[key] = true
 		_assert(ResourceLoader.exists(path), "SFX resource is missing: %s" % path)
-		var stream = load(path)
+		var stream = audio_loader._load_audio_stream(path)
 		_assert(stream is AudioStreamWAV, "SFX resource must import as AudioStreamWAV: %s" % path)
 		if stream is AudioStreamWAV:
 			_assert(stream.mix_rate == 44100, "SFX sample rate must be 44.1 kHz: %s" % path)
@@ -45,6 +46,7 @@ func _verify_assets(manifest: Dictionary) -> void:
 		if bool(cue.get("loop", false)):
 			loop_count += 1
 	_assert(loop_count == 3, "Exactly three bomb sustain cues must loop.")
+	audio_loader.free()
 
 func _verify_runtime(manifest: Dictionary) -> void:
 	var audio = root.get_node_or_null("AudioManager")

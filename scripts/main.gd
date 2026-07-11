@@ -7,6 +7,7 @@ var active_bullet_indices: Array[int] = []
 var _next_active_bullet_indices: Array[int] = []
 var _active_bullet_membership := PackedByteArray()
 var _active_index_initialized := false
+var _bullet_spawn_cursor := 0
 var enemies: Array = []
 var items: Array = []
 var combat_effects: Array = []
@@ -33,7 +34,11 @@ var _sfx_shoot_skip: int = 0
 var player_deathbomb_primed: bool = false
 var player_deathbomb_timer: float = 0.0
 var MAX_BULLETS: int = 12000
+var bullet_pool_hard_capacity: int = 24000
 const PLAYFIELD_MARGIN := 16.0
+const HUD_HEIGHT := 78.0
+const GAMEPLAY_TOP := 82.0
+const BULLET_POOL_GROWTH := 2048
 const MAX_COMBAT_EFFECTS := 96
 const SHOT_NAMES_ZH := ["\u6563\u5c04", "\u8d2f\u901a", "\u8ffd\u8e2a"]
 const BOSS_HP_BAR_Y_RATIO := 92.0 / 960.0
@@ -98,6 +103,9 @@ const PLAYER_BULLET_ART_BY_BTYPE := {
 
 const ITEM_ART_BY_TYPE := {
 	"power": "item_power_small",
+	"bullet_spread": "item_power_large",
+	"bullet_linear": "item_power_large",
+	"bullet_homing": "item_power_large",
 	"point": "item_score_small",
 	"bomb_refill": "item_bomb_fragment",
 	"bomb_fragment": "item_bomb_fragment",
@@ -105,6 +113,20 @@ const ITEM_ART_BY_TYPE := {
 	"life_fragment": "item_life_fragment",
 	"night_festival_seal": "item_story_token",
 	"full_power": "item_full_power",
+}
+
+const ITEM_EFFECT_MARKERS := {
+	"power": {"label": "P", "color": Color(1.0, 0.30, 0.32)},
+	"bullet_spread": {"label": "P", "color": Color(0.82, 0.42, 1.0)},
+	"bullet_linear": {"label": "P", "color": Color(1.0, 0.34, 0.34)},
+	"bullet_homing": {"label": "P", "color": Color(0.30, 1.0, 0.58)},
+	"point": {"label": "点", "color": Color(0.34, 0.76, 1.0)},
+	"bomb_refill": {"label": "B+", "color": Color(1.0, 0.72, 0.22)},
+	"bomb_fragment": {"label": "B", "color": Color(1.0, 0.50, 0.20)},
+	"life": {"label": "命+", "color": Color(1.0, 0.42, 0.66)},
+	"life_fragment": {"label": "命", "color": Color(1.0, 0.54, 0.72)},
+	"night_festival_seal": {"label": "印", "color": Color(0.94, 0.30, 0.38)},
+	"full_power": {"label": "MAX", "color": Color(1.0, 0.86, 0.28)},
 }
 
 const BOMB_ART_PROFILE_BY_BEHAVIOR := {
@@ -468,8 +490,21 @@ func _draw_phase6_bomb_plate() -> void:
 func _draw_phase6_item_sprite(item: Dictionary, center: Vector2) -> bool:
 	var type_id := String(item.get("type", ""))
 	var asset_id := String(ITEM_ART_BY_TYPE.get(type_id, "item_score_small"))
-	var size := Vector2.ONE * (32.0 if type_id in ["full_power", "bomb_refill", "life"] else 26.0)
+	var size := Vector2.ONE * (38.0 if type_id in ["full_power", "bomb_refill", "life"] else 34.0)
 	return _draw_texture_centered(_item_asset_path(asset_id), center, size)
+
+func _item_effect_marker(type_id: String) -> Dictionary:
+	return ITEM_EFFECT_MARKERS.get(type_id, {"label": "?", "color": Color.WHITE})
+
+func _draw_item_effect_marker(font: Font, type_id: String, center: Vector2) -> void:
+	var marker := _item_effect_marker(type_id)
+	var label := String(marker.label)
+	var font_size := 11 if label.length() > 1 else 13
+	var width := maxf(18.0, font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x + 7.0)
+	var badge := Rect2(center.x - width * 0.5, center.y + 5.0, width, 15.0)
+	draw_rect(badge, Color(0.015, 0.018, 0.03, 0.88))
+	draw_rect(badge, marker.color, false, 1.5)
+	draw_string(font, Vector2(badge.position.x, badge.position.y + 12.0), label, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, Color.WHITE)
 
 func _draw_phase6_enemy_sprite(enemy: Dictionary, center: Vector2) -> bool:
 	var family_id := String(enemy.get("family_id", "low_yokai"))
@@ -542,8 +577,8 @@ func _draw_boss_status(font: Font) -> void:
 	draw_string(font, Vector2(SCREEN_W - 64.0, y), "%02d" % timer_seconds, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 20, timer_color)
 
 func _draw_gameplay_hud(font: Font, gm: Object) -> void:
-	draw_rect(Rect2(0, 0, SCREEN_W, 78.0), Color(0.025, 0.03, 0.055, 0.88))
-	draw_line(Vector2(0, 78), Vector2(SCREEN_W, 78), Color(0.82, 0.64, 0.34, 0.58), 2.0)
+	draw_rect(Rect2(0, 0, SCREEN_W, HUD_HEIGHT), Color(0.025, 0.03, 0.055, 0.88))
+	draw_line(Vector2(0, HUD_HEIGHT), Vector2(SCREEN_W, HUD_HEIGHT), Color(0.82, 0.64, 0.34, 0.58), 2.0)
 	draw_string(font, Vector2(12, 24), "SCORE  %09d" % gm.score, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 17, Color(1.0, 0.88, 0.42))
 	draw_string(font, Vector2(250, 24), "GRAZE  %05d" % gm.graze, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color(0.46, 0.90, 1.0))
 	draw_string(font, Vector2(12, 55), "POWER  %02d/50  Lv.%d  %s" % [gm.shared_power, gm.power_level(), _gameplay_shot_label()], HORIZONTAL_ALIGNMENT_LEFT, 400.0, 15, Color(0.82, 0.62, 1.0))
@@ -553,7 +588,13 @@ func _draw_gameplay_hud(font: Font, gm: Object) -> void:
 	draw_string(font, Vector2(430, 55), bomb_text, HORIZONTAL_ALIGNMENT_LEFT, SCREEN_W - 440.0, 16, Color(1.0, 0.72, 0.25))
 
 func _should_show_focus_hitbox() -> bool:
-	return not player_bombing and (_settings_bool("always_show_focus_hitbox", false) or Input.is_key_pressed(KEY_SHIFT))
+	return not player_bombing and (_settings_bool("always_show_focus_hitbox", false) or _focus_held())
+
+func _focus_held() -> bool:
+	return Input.is_action_pressed("focus") or Input.is_key_pressed(KEY_SHIFT)
+
+func _item_magnetize_requested(focus_held: bool) -> bool:
+	return focus_held
 
 func _player_hitbox_radius() -> float:
 	_resolve_singletons()
@@ -758,7 +799,7 @@ func _screen_center_x() -> float:
 	return SCREEN_W * 0.5
 
 func _boss_anchor_y() -> float:
-	return SCREEN_H * (130.0 / 960.0)
+	return SCREEN_H * (150.0 / 960.0)
 
 func _centered_text_x(font: Font, text: String) -> float:
 	return maxf(0.0, (SCREEN_W - font.get_string_size(text).x) * 0.5)
@@ -933,6 +974,7 @@ func _clear_bullets():
 	_next_active_bullet_indices.clear()
 	if not _active_bullet_membership.is_empty():
 		_active_bullet_membership.fill(0)
+	_bullet_spawn_cursor = 0
 	_active_index_initialized = true
 
 func _rebuild_active_bullet_indices() -> void:
@@ -949,46 +991,64 @@ func _ensure_active_bullet_indices() -> void:
 	if not _active_index_initialized:
 		_rebuild_active_bullet_indices()
 
-func _spawn_bullet_player(x: float, y: float, vx: float, vy: float, radius: float = 5.0, color: Color = Color(0,0.7,1), damage: float = 1.0, homing: bool = false, btype: int = -1, persist: bool = false, lifetime: float = 100.0):
+func _claim_free_bullet_slot() -> int:
 	_ensure_active_bullet_indices()
-	for i in range(bullet_pool.size()):
-		var b = bullet_pool[i]
-		if not b.active:
-			b.active = true; b.x = x; b.y = y; b.vx = vx; b.vy = vy
-			b.radius = radius; b.color = color
-			# `persist=true` makes the bullet survive enemy/boss hits (it
-			# pierces). Implemented via type="bomb" so the existing collision
-			# branch `if b.type == "player": b.active=false` skips it.
-			b.type = "bomb" if persist else "player"
-			b.lifetime = lifetime; b.age = 0; b.damage = damage
-			b.homing = homing; b.btype = btype; b.grazed = false
-			if _active_bullet_membership.size() != bullet_pool.size():
-				_active_bullet_membership.resize(bullet_pool.size())
-			if _active_bullet_membership[i] == 0:
-				active_bullet_indices.append(i)
-				_active_bullet_membership[i] = 1
-			_active_index_initialized = true
-			return
+	var pool_size := bullet_pool.size()
+	if pool_size <= 0:
+		return -1
+	for offset in range(pool_size):
+		var index := (_bullet_spawn_cursor + offset) % pool_size
+		if not bool(bullet_pool[index].get("active", false)):
+			_bullet_spawn_cursor = (index + 1) % pool_size
+			return index
+	if pool_size < bullet_pool_hard_capacity:
+		var previous_size := pool_size
+		var new_size := mini(pool_size + BULLET_POOL_GROWTH, bullet_pool_hard_capacity)
+		for _index in range(previous_size, new_size):
+			bullet_pool.append(_make_bullet())
+		_active_bullet_membership.resize(new_size)
+		_bullet_spawn_cursor = (previous_size + 1) % new_size
+		return previous_size
+	return -1
+
+func _spawn_bullet_player(x: float, y: float, vx: float, vy: float, radius: float = 5.0, color: Color = Color(0,0.7,1), damage: float = 1.0, homing: bool = false, btype: int = -1, persist: bool = false, lifetime: float = 100.0):
+	var i := _claim_free_bullet_slot()
+	if i < 0:
+		return false
+	var b = bullet_pool[i]
+	b.active = true; b.x = x; b.y = y; b.vx = vx; b.vy = vy
+	b.radius = radius; b.color = color
+	# Persisting player bullets use the bomb owner branch and survive hits.
+	b.type = "bomb" if persist else "player"
+	b.lifetime = lifetime; b.age = 0; b.damage = damage
+	b.homing = homing; b.btype = btype; b.grazed = false
+	if _active_bullet_membership.size() != bullet_pool.size():
+		_active_bullet_membership.resize(bullet_pool.size())
+	if _active_bullet_membership[i] == 0:
+		active_bullet_indices.append(i)
+		_active_bullet_membership[i] = 1
+	_active_index_initialized = true
+	return true
 
 func _spawn_bullet_enemy(x: float, y: float, vx: float, vy: float, radius: float = 6.0, color: Color = Color.RED, btype: String = "circle", lifetime: float = 350.0):
-	_ensure_active_bullet_indices()
-	for i in range(bullet_pool.size()):
-		var b = bullet_pool[i]
-		if not b.active:
-			b.active = true; b.x = x; b.y = y; b.vx = vx; b.vy = vy
-			b.radius = maxf(0.001, radius); b.color = color; b.type = btype
-			b.lifetime = lifetime; b.age = 0; b.damage = 1.0
-			b.homing = false; b.btype = -1; b.grazed = false
-			if _active_bullet_membership.size() != bullet_pool.size():
-				_active_bullet_membership.resize(bullet_pool.size())
-			if _active_bullet_membership[i] == 0:
-				active_bullet_indices.append(i)
-				_active_bullet_membership[i] = 1
-			_active_index_initialized = true
-			if btype == "laser" and audio_manager_ref:
-				if not audio_manager_ref.play_sfx("laser_warning"):
-					audio_manager_ref.play_sfx("laser_activate")
-			return
+	var i := _claim_free_bullet_slot()
+	if i < 0:
+		return false
+	var b = bullet_pool[i]
+	b.active = true; b.x = x; b.y = y; b.vx = vx; b.vy = vy
+	b.radius = maxf(0.001, radius); b.color = color; b.type = btype
+	b.lifetime = lifetime; b.age = 0; b.damage = 1.0
+	b.homing = false; b.btype = -1; b.grazed = false
+	if _active_bullet_membership.size() != bullet_pool.size():
+		_active_bullet_membership.resize(bullet_pool.size())
+	if _active_bullet_membership[i] == 0:
+		active_bullet_indices.append(i)
+		_active_bullet_membership[i] = 1
+	_active_index_initialized = true
+	if btype == "laser" and audio_manager_ref:
+		if not audio_manager_ref.play_sfx("laser_warning"):
+			audio_manager_ref.play_sfx("laser_activate")
+	return true
 
 func _stage_enemy_hp_mult() -> float:
 	_resolve_singletons()
@@ -1014,7 +1074,14 @@ func _spawn_item(x: float, y: float, item_type: String = "power"):
 func _spawn_enemy(x: float, y: float, hp: float = 5.0, pattern: String = "aimed", move: String = "straight", vx: float = 0.0, vy: float = 1.5, move_data: Dictionary = {}, strong: bool = false):
 	var cfg: Dictionary = enemy_pattern_executor.spawn_config(pattern, hp, _stage_enemy_hp_mult(), strong)
 	var ehp: float = float(cfg.hp)
-	enemies.append({"alive":true,"x":x,"y":y,"hp":ehp,"max_hp":ehp,"radius":float(cfg.radius),"vx":vx,"vy":vy,"move_timer":0.0,"move":move,"move_data":move_data,"pattern":pattern,"shoot_timer":randf_range(0,30),"shoot_phase":0,"strong":strong,"dying":false,"death_timer":0.0,"family_id":String(cfg.family_id),"drop_tier":String(cfg.drop_tier),"shoot_interval":float(cfg.shoot_interval)})
+	var radius := float(cfg.radius)
+	var visible_half_height := clampf(radius * 1.9, 21.0, 41.0)
+	var safe_y := maxf(y, GAMEPLAY_TOP + visible_half_height)
+	var safe_move_data := move_data.duplicate(true)
+	if safe_move_data.has("center_y"):
+		var orbit_radius := float(safe_move_data.get("radius", 0.0))
+		safe_move_data.center_y = maxf(float(safe_move_data.center_y), GAMEPLAY_TOP + visible_half_height + orbit_radius)
+	enemies.append({"alive":true,"x":x,"y":safe_y,"hp":ehp,"max_hp":ehp,"radius":radius,"vx":vx,"vy":vy,"move_timer":0.0,"move":move,"move_data":safe_move_data,"pattern":pattern,"shoot_timer":randf_range(0,30),"shoot_phase":0,"strong":strong,"dying":false,"death_timer":0.0,"family_id":String(cfg.family_id),"drop_tier":String(cfg.drop_tier),"shoot_interval":float(cfg.shoot_interval)})
 
 func _nearest_enemy(px: float, py: float) -> Vector2:
 	var best: float = 99999.0; var best_v: Vector2 = Vector2(px, py - 100)
@@ -1692,7 +1759,7 @@ func _update_player(delta: float):
 
 	if player_bombing: _update_bomb(delta)
 
-	var focus: bool = Input.is_key_pressed(KEY_SHIFT)
+	var focus: bool = _focus_held()
 	var speed: float = game_manager_ref.selected_speed_low() if focus else game_manager_ref.selected_speed_high()
 	var dx: float = Input.get_axis("move_left", "move_right")
 	var dy: float = Input.get_axis("move_up", "move_down")
@@ -1715,7 +1782,7 @@ func _update_player(delta: float):
 func _shoot():
 	var shot_profile := _selected_shot_profile()
 	var level: int = game_manager_ref.power_level()
-	var focused := Input.is_key_pressed(KEY_SHIFT)
+	var focused := _focus_held()
 	var specs: Array = _shot_executor_fire_pattern(shot_profile, level, focused, Vector2(player_x, player_y))
 	for spec in specs:
 		_spawn_player_bullet_spec(spec)
@@ -1886,6 +1953,8 @@ func _update_enemies(delta: float):
 				if e.move_timer < lim: e.x += e.vx * delta * 60.0; e.y += e.vy * delta * 60.0
 				else: e.y += sin(e.move_timer*0.03)*0.3*delta*60.0
 		e.x = clampf(e.x, 24, SCREEN_W - 24)
+		var visible_half_height := clampf(float(e.radius) * 1.9, 21.0, 41.0)
+		e.y = maxf(float(e.y), GAMEPLAY_TOP + visible_half_height)
 		if e.y > SCREEN_H + 40:
 			e.alive = false
 
@@ -1913,6 +1982,9 @@ func _update_items(delta: float):
 		if it.collected: continue
 		it.anim += 0.06 * delta * 60.0
 		if it.birth > 0: it.birth -= delta * 60.0
+		if not bool(it.get("magnetized", false)) and _item_magnetize_requested(_focus_held()):
+			it.magnetized = true
+			it.floating = false
 
 		# Phase 1 - float straight up to the top 1/5 of the screen (target_y).
 		# This is reached both at spawn from enemy drops (y around e.y) and at
@@ -1932,17 +2004,8 @@ func _update_items(delta: float):
 				it.x = clampf(it.x,11, SCREEN_W - 11)
 			continue
 
-		# Phase 2 - drifting at the top. A permanent "magnetized" flag turns
-		# on the first time the player holds Shift in the upper area (y<128)
-		# while this item is in mid-flight. Once magnetized, the item flies
-		# toward the player EVERY subsequent frame regardless of whether
-		# Shift is still held or where the player is - exactly so the player
-		# can tap Shift once at the top and then dive back down to dodge
-		# while the items continue to be vacuumed up.
-		# `magnetized` is missing on legacy items (init -> false).
-		if it.get("magnetized", false) == false:
-			if Input.is_key_pressed(KEY_SHIFT) and player_y < 128.0:
-				it["magnetized"] = true
+		# Shift permanently magnetizes a drop from any phase, including while
+		# a bomb is active. This makes collection independent of bomb visuals.
 		if it.get("magnetized", false):
 			var a: float = (Vector2(player_x,player_y)-Vector2(it.x,it.y)).angle()
 			it.vx = cos(a)*20.0; it.vy = sin(a)*20.0
@@ -1994,7 +2057,7 @@ func _count_bullet_draw_groups() -> int:
 		var b = bullet_pool[bullet_index]
 		if not b.active:
 			continue
-		groups["%s:%s" % [String(b.type), String(b.get("btype", ""))]] = true
+		groups["%s:%s" % [String(b.type), str(b.get("btype", ""))]] = true
 	return groups.size()
 
 func _update_performance_counters() -> void:
@@ -2013,7 +2076,7 @@ func _update_performance_counters() -> void:
 			player_bullet_count += 1
 		else:
 			enemy_bullet_count += 1
-		draw_groups["%s:%s" % [String(b.type), String(b.get("btype", ""))]] = true
+		draw_groups["%s:%s" % [String(b.type), str(b.get("btype", ""))]] = true
 	monitor.reset_frame()
 	monitor.set_counter("fps", int(Engine.get_frames_per_second()))
 	monitor.set_counter("player_bullets", player_bullet_count)
@@ -2314,6 +2377,7 @@ func _draw():
 			"settings":
 				_draw_settings_screen()
 				return
+	var font := SystemFont.new()
 	_draw_phase6_stage_background(gm_ui != null and gm_ui.state == "boss")
 	_draw_combat_effects()
 	_draw_phase6_boss_aura()
@@ -2323,6 +2387,7 @@ func _draw():
 		if not it.alive or it.birth > 0: continue
 		var ix: int = int(it.x); var iy: int = int(it.y)
 		if _draw_phase6_item_sprite(it, Vector2(ix, iy)):
+			_draw_item_effect_marker(font, String(it.type), Vector2(ix, iy))
 			continue
 		match it.type:
 			"power": draw_circle(Vector2(ix,iy),9,Color.RED); draw_circle(Vector2(ix,iy),9,Color.WHITE,false,2)
@@ -2352,6 +2417,7 @@ func _draw():
 				var hex: PackedVector2Array = PackedVector2Array()
 				for i in range(6): hex.append(Vector2(ix+cos(TAU/6*i-PI/6)*10,iy+sin(TAU/6*i-PI/6)*10))
 				draw_colored_polygon(hex,game_manager_ref.BULLET_COLORS[bt]); draw_polyline(hex,Color.WHITE,2,true)
+		_draw_item_effect_marker(font, String(it.type), Vector2(ix, iy))
 
 	# Enemies
 	for e in enemies:
@@ -2453,7 +2519,6 @@ func _draw():
 
 
 	var gm = game_manager_ref
-	var font = SystemFont.new()
 	_draw_phase6_spell_banner(font)
 	_draw_gameplay_hud(font, gm)
 	_draw_boss_status(font)
