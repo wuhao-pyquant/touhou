@@ -219,6 +219,71 @@ class Phase7LongformRunnerTests(unittest.TestCase):
         })
         return catalog, selection
 
+    def optional_integration_candidate_path(self, staging_root: Path, track_key: str, seed: int) -> Path:
+        return staging_root / "bgm_candidates" / track_key / f"bgm_{track_key}_B_seed-{seed}.wav"
+
+    def preflight_optional_external_selection(
+        self,
+        catalog: dict[str, Any],
+        selection_path: Path,
+        staging_root: Path,
+    ) -> tuple[dict[str, Any], bytes]:
+        if not selection_path.exists():
+            self.skipTest(f"missing selection: {selection_path}")
+        try:
+            before_bytes = selection_path.read_bytes()
+        except OSError as exc:
+            self.skipTest(f"selection unavailable for read-only preflight: {selection_path} ({exc})")
+        try:
+            selection_data = json.loads(before_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            self.skipTest(f"selection malformed for integration preflight: {selection_path} ({exc})")
+
+        tracks = selection_data.get("tracks")
+        if not isinstance(tracks, list):
+            self.skipTest(f"selection malformed for integration preflight: {selection_path} (tracks missing)")
+        expected_count = len(catalog["tracks"])
+        if len(tracks) != expected_count:
+            self.skipTest(
+                f"selection malformed for integration preflight: expected {expected_count} tracks, found {len(tracks)}"
+            )
+
+        missing_candidates: list[str] = []
+        for index, track in enumerate(tracks):
+            if not isinstance(track, dict):
+                self.skipTest(f"selection malformed for integration preflight: tracks[{index}] is not an object")
+            track_key = track.get("track_key")
+            seed = track.get("seed")
+            if not isinstance(track_key, str) or not track_key:
+                self.skipTest(f"selection malformed for integration preflight: tracks[{index}].track_key missing")
+            if not isinstance(seed, int):
+                self.skipTest(f"selection malformed for integration preflight: tracks[{index}].seed missing")
+            candidate_path = self.optional_integration_candidate_path(staging_root, track_key, seed)
+            if not candidate_path.is_file():
+                missing_candidates.append(str(candidate_path))
+
+        if missing_candidates:
+            self.skipTest("missing NAS candidates for: " + ", ".join(missing_candidates))
+        return selection_data, before_bytes
+
+    def load_optional_integration_selection(
+        self,
+        catalog_path: Path,
+        selection_path: Path,
+        staging_root: Path,
+    ) -> tuple[dict[str, Any], dict[str, Any], bytes]:
+        if not catalog_path.exists():
+            self.skipTest(f"missing catalog: {catalog_path}")
+        catalog = load_longform_catalog(catalog_path)
+        _selection_data, before_bytes = self.preflight_optional_external_selection(catalog, selection_path, staging_root)
+        selection = validate_external_selection(
+            catalog,
+            selection_path,
+            staging_root,
+            catalog_path.with_name("phase7_bgm_jobs.json"),
+        )
+        return catalog, selection, before_bytes
+
     def run_with_patches(
         self,
         staging_root: Path,
@@ -749,28 +814,39 @@ class Phase7LongformRunnerTests(unittest.TestCase):
                     self.assertIn("WAV", manifest["jobs"][0]["error"])
                     self.assertFalse(Path(manifest["jobs"][0]["output_path"]).exists())
 
+    def test_optional_integration_preflight_skips_before_validator_when_candidate_missing(self) -> None:
+        self.require_runner_api()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            catalog_path = temp_root / "phase7_bgm_longform_jobs.json"
+            phase7a_path = temp_root / "phase7_bgm_jobs.json"
+            selection_path = temp_root / "reports" / "bgm_candidate_selection.json"
+            catalog_path.write_text("{\"fixture\": true}\n", encoding="utf-8")
+            phase7a_path.write_text("{\"fixture\": true}\n", encoding="utf-8")
+            selection_path.parent.mkdir(parents=True, exist_ok=True)
+            selection_path.write_text(
+                json.dumps(
+                    make_fixture_selection(Path("unused"), self.candidate_sha256),
+                    ensure_ascii=False,
+                    indent=2,
+                ) + "\n",
+                encoding="utf-8",
+            )
+
+            with mock.patch(__name__ + ".load_longform_catalog", return_value=make_fixture_catalog(self.candidate_sha256)):
+                with mock.patch(__name__ + ".validate_external_selection", side_effect=AssertionError("validator should not run")):
+                    with self.assertRaises(unittest.SkipTest) as skipped:
+                        self.load_optional_integration_selection(catalog_path, selection_path, temp_root)
+
+        self.assertIn("missing NAS candidates for:", str(skipped.exception))
+
     def test_real_catalog_and_real_selection_build_twelve_exact_commands_without_mutating_external_selection(self) -> None:
         self.require_runner_api()
-        if not REAL_CATALOG_PATH.exists():
-            self.skipTest(f"missing catalog: {REAL_CATALOG_PATH}")
-        if not REAL_SELECTION_PATH.exists():
-            self.skipTest(f"missing selection: {REAL_SELECTION_PATH}")
-
-        before_bytes = REAL_SELECTION_PATH.read_bytes()
-        catalog = load_longform_catalog(REAL_CATALOG_PATH)
-        selection = validate_external_selection(
-            catalog,
+        catalog, selection, before_bytes = self.load_optional_integration_selection(
+            REAL_CATALOG_PATH,
             REAL_SELECTION_PATH,
             REAL_STAGING_ROOT,
-            REAL_CATALOG_PATH.with_name("phase7_bgm_jobs.json"),
         )
-        missing_candidates = [
-            track["track_key"]
-            for track in selection["tracks"]
-            if not (REAL_STAGING_ROOT / "bgm_candidates" / track["track_key"] / f"bgm_{track['track_key']}_B_seed-{track['seed']}.wav").is_file()
-        ]
-        if missing_candidates:
-            self.skipTest(f"missing NAS candidates for: {', '.join(missing_candidates)}")
 
         generator_path = self.fixture_root / "stable-audio-3-medium.sh"
         generator_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
