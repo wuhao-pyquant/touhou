@@ -46,6 +46,8 @@ CANDIDATE_FRAMES = int(round(CANDIDATE_SECONDS * SAMPLE_RATE))
 REAL_STAGING_ROOT = Path(r"Z:\temp\godot_touhou_phase7")
 REAL_SELECTION_PATH = REAL_STAGING_ROOT / "reports" / "bgm_candidate_selection.json"
 REAL_CATALOG_PATH = ROOT / "audio" / "production" / "phase7_bgm_longform_jobs.json"
+CANONICAL_WINDOWS_ROOT = r"Z:\temp\godot_touhou_phase7"
+CANONICAL_MACOS_ROOT = "/Volumes/personal_folder/temp/godot_touhou_phase7"
 
 
 def sha256_file(path: Path) -> str:
@@ -121,8 +123,8 @@ def make_fixture_selection(candidate_path: Path, candidate_sha256: str) -> dict[
                 "title_zh": "测试曲目",
                 "variant": "B",
                 "seed": 2026071102,
-                "candidate_path_windows": str(candidate_path),
-                "candidate_path_macos": "/Volumes/personal_folder/temp/godot_touhou_phase7/bgm_candidates/stage1_mid/bgm_stage1_mid_B_seed-2026071102.wav",
+                "candidate_path_windows": rf"{CANONICAL_WINDOWS_ROOT}\bgm_candidates\stage1_mid\bgm_stage1_mid_B_seed-2026071102.wav",
+                "candidate_path_macos": f"{CANONICAL_MACOS_ROOT}/bgm_candidates/stage1_mid/bgm_stage1_mid_B_seed-2026071102.wav",
                 "sha256": candidate_sha256,
                 "qa_status": "pass",
                 "status": "selected",
@@ -183,6 +185,40 @@ class Phase7LongformRunnerTests(unittest.TestCase):
         selection = make_fixture_selection(candidate_path, self.candidate_sha256)
         return catalog, selection
 
+    def make_two_track_fixture(self, staging_root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+        catalog, selection = self.make_patched_inputs(staging_root)
+        second_key = "stage1_boss"
+        second_seed = 2026071112
+        second_candidate_dir = staging_root / "bgm_candidates" / second_key
+        second_candidate_dir.mkdir(parents=True, exist_ok=True)
+        second_candidate_path = second_candidate_dir / f"bgm_{second_key}_B_seed-{second_seed}.wav"
+        shutil.copyfile(self.candidate_fixture, second_candidate_path)
+        catalog["tracks"].append({
+            "key": second_key,
+            "stage": 1,
+            "phase": "boss",
+            "title_zh": "测试二号",
+            "bpm": 172,
+            "voice_policy": "instrumental_only",
+            "prompt": "Original 30-second boss motif at 172 BPM.",
+            "longform_development": "Develop the boss motif across six sections.",
+            "selected_variant": "B",
+            "selected_seed": second_seed,
+            "selected_sha256": self.candidate_sha256,
+        })
+        selection["tracks"].append({
+            "track_key": second_key,
+            "title_zh": "测试二号",
+            "variant": "B",
+            "seed": second_seed,
+            "candidate_path_windows": rf"{CANONICAL_WINDOWS_ROOT}\bgm_candidates\{second_key}\bgm_{second_key}_B_seed-{second_seed}.wav",
+            "candidate_path_macos": f"{CANONICAL_MACOS_ROOT}/bgm_candidates/{second_key}/bgm_{second_key}_B_seed-{second_seed}.wav",
+            "sha256": self.candidate_sha256,
+            "qa_status": "pass",
+            "status": "selected",
+        })
+        return catalog, selection
+
     def run_with_patches(
         self,
         staging_root: Path,
@@ -191,8 +227,11 @@ class Phase7LongformRunnerTests(unittest.TestCase):
         force: bool = False,
         subprocess_side_effect: Any | None = None,
         capture_manifest: bool = False,
+        fixture_factory: Any | None = None,
+        which_side_effect: Any | None = None,
     ) -> tuple[int, dict[str, Any], list[dict[str, Any]]]:
-        catalog, selection = self.make_patched_inputs(staging_root)
+        factory = self.make_patched_inputs if fixture_factory is None else fixture_factory
+        catalog, selection = factory(staging_root)
         manifest_snapshots: list[dict[str, Any]] = []
         original_writer = runner.write_json_atomic
 
@@ -209,6 +248,8 @@ class Phase7LongformRunnerTests(unittest.TestCase):
             patchers.append(mock.patch.object(runner.subprocess, "run", side_effect=subprocess_side_effect))
         if capture_manifest:
             patchers.append(mock.patch.object(runner, "write_json_atomic", side_effect=capture_writer))
+        if which_side_effect is not None:
+            patchers.append(mock.patch.object(runner.shutil, "which", side_effect=which_side_effect))
 
         catalog_path = staging_root / "phase7_bgm_longform_jobs.json"
         selection_path = staging_root / "bgm_candidate_selection.json"
@@ -221,8 +262,11 @@ class Phase7LongformRunnerTests(unittest.TestCase):
             elif len(patchers) == 4:
                 with patchers[3]:
                     exit_code = run_longform_catalog(catalog_path, selection_path, staging_root, generator, force)
-            else:
+            elif len(patchers) == 5:
                 with patchers[3], patchers[4]:
+                    exit_code = run_longform_catalog(catalog_path, selection_path, staging_root, generator, force)
+            else:
+                with patchers[3], patchers[4], patchers[5]:
                     exit_code = run_longform_catalog(catalog_path, selection_path, staging_root, generator, force)
 
         manifest_path = staging_root / "reports" / "longform_generation_manifest.json"
@@ -338,6 +382,89 @@ class Phase7LongformRunnerTests(unittest.TestCase):
             statuses = [snapshot["jobs"][0]["status"] for snapshot in snapshots if snapshot["jobs"]]
             self.assertEqual(["planned", "guide_ready", "generating", "generated"], statuses[:4])
             self.assertTrue(all(snapshot["jobs"][0]["status"] for snapshot in snapshots if snapshot["jobs"]))
+
+    def test_run_longform_catalog_uses_local_staging_candidate_not_serialized_windows_or_macos_paths(self) -> None:
+        self.require_runner_api()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            staging_root = Path(temp_dir)
+
+            def fake_subprocess(command: list[str], check: bool = False) -> subprocess.CompletedProcess:
+                out_path = Path(command[command.index("--out") + 1])
+                shutil.copyfile(self.source_fixture, out_path)
+                return subprocess.CompletedProcess(command, 0)
+
+            exit_code, manifest, _ = self.run_with_patches(
+                staging_root,
+                [sys.executable, str(staging_root / "unused_generator.py")],
+                subprocess_side_effect=fake_subprocess,
+            )
+
+            self.assertEqual(0, exit_code)
+            self.assertEqual(
+                str(staging_root / "bgm_candidates" / "stage1_mid" / "bgm_stage1_mid_B_seed-2026071102.wav"),
+                manifest["jobs"][0]["candidate_path"],
+            )
+
+    def test_run_longform_catalog_resolves_path_only_generator_and_preserves_args(self) -> None:
+        self.require_runner_api()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            staging_root = Path(temp_dir)
+            generator_path = self.write_fake_generator(
+                staging_root / "stable-audio-3-medium.sh",
+                "import shutil, sys\n"
+                "out = sys.argv[sys.argv.index('--out') + 1]\n"
+                f"shutil.copyfile(r'{self.source_fixture}', out)\n",
+            )
+            captured_commands: list[list[str]] = []
+
+            def fake_subprocess(command: list[str], check: bool = False) -> subprocess.CompletedProcess:
+                captured_commands.append(list(command))
+                out_path = Path(command[command.index("--out") + 1])
+                shutil.copyfile(self.source_fixture, out_path)
+                return subprocess.CompletedProcess(command, 0)
+
+            exit_code, manifest, _ = self.run_with_patches(
+                staging_root,
+                ["stable-audio-3-medium.sh", "--profile", "longform"],
+                subprocess_side_effect=fake_subprocess,
+                which_side_effect=lambda name: str(generator_path) if name == "stable-audio-3-medium.sh" else None,
+            )
+
+            self.assertEqual(0, exit_code)
+            self.assertEqual(str(generator_path.resolve()), manifest["jobs"][0]["generator"][0])
+            self.assertEqual("--profile", manifest["jobs"][0]["generator"][1])
+            self.assertEqual("longform", manifest["jobs"][0]["generator"][2])
+            self.assertEqual(str(generator_path.resolve()), manifest["jobs"][0]["fingerprint"]["generator"][0])
+            self.assertEqual(str(generator_path.resolve()), manifest["jobs"][0]["fingerprint"]["generator_script_path"])
+            self.assertEqual(str(generator_path.resolve()), captured_commands[0][0])
+
+    def test_run_longform_catalog_handles_keyboard_interrupt_persists_failure_and_stops_remaining_jobs(self) -> None:
+        self.require_runner_api()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            staging_root = Path(temp_dir)
+            retained_partial = staging_root / "bgm_longform" / "stage1_mid" / "bgm_stage1_mid_B_source188.partial.wav"
+
+            def fake_subprocess(command: list[str], check: bool = False) -> subprocess.CompletedProcess:
+                out_path = Path(command[command.index("--out") + 1])
+                write_pcm16_wave(out_path, SOURCE_FRAMES, left=111, right=-222)
+                raise KeyboardInterrupt()
+
+            exit_code, manifest, _ = self.run_with_patches(
+                staging_root,
+                [sys.executable, str(staging_root / "unused_generator.py")],
+                subprocess_side_effect=fake_subprocess,
+                fixture_factory=self.make_two_track_fixture,
+            )
+
+            self.assertEqual(1, exit_code)
+            self.assertEqual(1, manifest["failure_count"])
+            self.assertIn("completed_at_unix", manifest)
+            self.assertEqual(1, len(manifest["jobs"]))
+            self.assertEqual("generation_failed", manifest["jobs"][0]["status"])
+            self.assertIn("KeyboardInterrupt", manifest["jobs"][0]["error"])
+            self.assertIn("finished_at_unix", manifest["jobs"][0])
+            self.assertEqual("retained_for_next_cleanup", manifest["jobs"][0]["partial_cleanup"])
+            self.assertTrue(retained_partial.exists())
 
     def test_run_longform_catalog_skips_existing_valid_source_only_when_prior_fingerprint_matches_exactly(self) -> None:
         self.require_runner_api()

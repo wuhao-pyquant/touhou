@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -14,7 +15,11 @@ import phase7_longform_audio
 import phase7_longform_catalog
 from phase7_longform_audio import GUIDE_FRAMES, SAMPLE_RATE, read_pcm16_wave
 from phase7_longform_audio import build_macro_guide
-from phase7_longform_catalog import load_longform_catalog, validate_external_selection
+from phase7_longform_catalog import (
+    load_longform_catalog,
+    local_candidate_path,
+    validate_external_selection,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 PHASE7A_CATALOG_PATH = ROOT / "audio" / "production" / "phase7_bgm_jobs.json"
@@ -107,25 +112,16 @@ def _compose_longform_prompt(catalog: dict[str, Any], track: dict[str, Any]) -> 
 def _resolve_generator(generator: list[str]) -> list[str]:
     if not generator:
         raise ValueError("generator must not be empty")
-    resolved: list[str] = []
-    for item in generator:
-        candidate = Path(item)
-        if candidate.exists():
-            resolved.append(str(candidate.resolve()))
-        else:
-            resolved.append(item)
-    return resolved
-
-
-def _generator_script_path(generator: list[str]) -> Path:
-    for item in reversed(generator):
-        candidate = Path(item)
-        if candidate.exists() and candidate.is_file():
-            return candidate.resolve()
-    candidate = Path(generator[0])
-    if candidate.exists() and candidate.is_file():
-        return candidate.resolve()
-    raise ValueError("generator script path must exist for fingerprinting")
+    first = generator[0]
+    first_path = Path(first)
+    if first_path.exists() and first_path.is_file():
+        resolved_first = str(first_path.resolve())
+    else:
+        which_path = shutil.which(first)
+        if which_path is None:
+            raise ValueError(f"generator executable could not be resolved: {first}")
+        resolved_first = str(Path(which_path).resolve())
+    return [resolved_first, *generator[1:]]
 
 
 def _validate_exact_wave(path: Path, label: str) -> dict[str, Any]:
@@ -189,7 +185,7 @@ def _control_file_fingerprint(catalog_path: Path) -> list[dict[str, Any]]:
 
 def _build_fingerprint(
     catalog_path: Path,
-    generator: list[str],
+    resolved_generator: list[str],
     defaults: dict[str, Any],
     track: dict[str, Any],
     selected_sha256: str,
@@ -197,8 +193,7 @@ def _build_fingerprint(
     negative_prompt: str,
     longform_prompt: str,
 ) -> dict[str, Any]:
-    resolved_generator = _resolve_generator(generator)
-    generator_script = _generator_script_path(generator)
+    generator_script = Path(resolved_generator[0])
     return {
         "selected_sha256": selected_sha256,
         "guide_sha256": guide_sha256,
@@ -298,7 +293,7 @@ def run_longform_catalog(
         try:
             selection = validate_external_selection(catalog, selection_path, staging_root)
             selection_track = _selection_by_key(selection)[track_key]
-            candidate_path = Path(selection_track["candidate_path_windows"])
+            candidate_path = local_candidate_path(staging_root, track_key, selection_track["seed"])
             longform_prompt = _compose_longform_prompt(catalog, track)
             job["longform_prompt"] = longform_prompt
             job["candidate_path"] = str(candidate_path)
@@ -307,7 +302,7 @@ def run_longform_catalog(
             job["guide_wave"] = guide["wave"]
             job["fingerprint"] = _build_fingerprint(
                 Path(catalog_path),
-                generator,
+                resolved_generator,
                 catalog["defaults"],
                 track,
                 selection_track["sha256"],
@@ -350,7 +345,7 @@ def run_longform_catalog(
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         command = build_longform_command(
-            generator,
+            resolved_generator,
             catalog["defaults"],
             job,
             guide_path,
@@ -365,6 +360,19 @@ def run_longform_catalog(
         try:
             completed = subprocess.run(command, check=False)
             job["exit_code"] = completed.returncode
+        except KeyboardInterrupt:
+            job["finished_at_unix"] = int(time.time())
+            job["status"] = "generation_failed"
+            job["error"] = "KeyboardInterrupt: generation interrupted"
+            if partial_path.exists():
+                job["partial_cleanup"] = "retained_for_next_cleanup"
+            else:
+                job["partial_cleanup"] = "not_present"
+            failures += 1
+            manifest["completed_at_unix"] = int(time.time())
+            manifest["failure_count"] = failures
+            write_json_atomic(manifest_path, manifest)
+            return 1
         except OSError as exc:
             job["finished_at_unix"] = int(time.time())
             job["status"] = "generation_failed"

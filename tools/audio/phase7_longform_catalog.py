@@ -9,6 +9,8 @@ from phase7_catalog import TRACK_KEYS, load_catalog as load_phase7a_catalog
 
 ROOT = Path(__file__).resolve().parents[2]
 PHASE7A_CATALOG_PATH = ROOT / "audio" / "production" / "phase7_bgm_jobs.json"
+CANONICAL_WINDOWS_ROOT = r"Z:\temp\godot_touhou_phase7"
+CANONICAL_MACOS_ROOT = "/Volumes/personal_folder/temp/godot_touhou_phase7"
 
 APPROVED_DEFAULTS = {
     "source_seconds": 188.0,
@@ -173,11 +175,24 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def serialized_candidate_paths(track_key: str, seed: int) -> tuple[str, str]:
+    filename = f"bgm_{track_key}_B_seed-{seed}.wav"
+    windows_path = rf"{CANONICAL_WINDOWS_ROOT}\bgm_candidates\{track_key}\{filename}"
+    macos_path = f"{CANONICAL_MACOS_ROOT}/bgm_candidates/{track_key}/{filename}"
+    return windows_path, macos_path
+
+
+def local_candidate_path(staging_root: Path, track_key: str, seed: int) -> Path:
+    return staging_root / "bgm_candidates" / track_key / f"bgm_{track_key}_B_seed-{seed}.wav"
+
+
 def _require_exact_keys(obj: dict[str, Any], allowed_keys: set[str], subject: str) -> None:
     unknown_keys = sorted(set(obj.keys()) - allowed_keys)
     _require(not unknown_keys, f"{subject} contains unknown keys: {', '.join(unknown_keys)}")
     missing_keys = sorted(allowed_keys - set(obj.keys()))
     _require(not missing_keys, f"{subject} is missing keys: {', '.join(missing_keys)}")
+
+
 def validate_longform_catalog(data: dict[str, Any]) -> None:
     _require(isinstance(data, dict), "catalog root must be an object")
     _require_exact_keys(data, CATALOG_ALLOWED_KEYS, "catalog")
@@ -355,9 +370,8 @@ def validate_external_selection(catalog: dict[str, Any], selection_path: Path, s
         status = record.get("status")
         _require(isinstance(status, str) and status.strip(), f"selection.{key}.status must be a non-empty string")
         _require(status == "selected", f"selection.{key}.status must be selected")
-        expected_candidate_filename = f"bgm_{key}_B_seed-{seed}.wav"
-        expected_candidate_path = staging_root / "bgm_candidates" / key / expected_candidate_filename
-        expected_candidate_path_macos = f"/Volumes/personal_folder/temp/godot_touhou_phase7/bgm_candidates/{key}/{expected_candidate_filename}"
+        expected_candidate_path_windows, expected_candidate_path_macos = serialized_candidate_paths(key, seed)
+        candidate_local_path = local_candidate_path(staging_root, key, seed)
         candidate_path_macos = record.get("candidate_path_macos")
         _require(
             isinstance(candidate_path_macos, str) and candidate_path_macos.strip(),
@@ -374,11 +388,11 @@ def validate_external_selection(catalog: dict[str, Any], selection_path: Path, s
             f"selection.{key}.candidate_path_windows must be a non-empty string",
         )
         _require(
-            candidate_path_windows == str(expected_candidate_path),
-            f"selection.{key}.candidate_path_windows must be {expected_candidate_path}",
+            candidate_path_windows == expected_candidate_path_windows,
+            f"selection.{key}.candidate_path_windows must be {expected_candidate_path_windows}",
         )
-        _require(expected_candidate_path.is_file(), f"selection.{key}.candidate_path_windows file is missing")
-        actual_sha256 = _sha256_file(expected_candidate_path)
+        _require(candidate_local_path.is_file(), f"selection.{key}.candidate local file is missing")
+        actual_sha256 = _sha256_file(candidate_local_path)
         _require(actual_sha256 == sha256, f"selection.{key}.candidate bytes do not match sha256")
 
     return data

@@ -12,6 +12,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools" / "audio"))
 
+CANONICAL_WINDOWS_ROOT = r"Z:\temp\godot_touhou_phase7"
+CANONICAL_MACOS_ROOT = "/Volumes/personal_folder/temp/godot_touhou_phase7"
+
 from phase7_catalog import load_catalog as load_phase7a_catalog
 
 try:
@@ -204,8 +207,8 @@ class Phase7LongformCatalogTests(unittest.TestCase):
                     "title_zh": track["title_zh"],
                     "variant": "B",
                     "seed": seed,
-                    "candidate_path_windows": str(candidate_path),
-                    "candidate_path_macos": f"/Volumes/personal_folder/temp/godot_touhou_phase7/bgm_candidates/{key}/bgm_{key}_B_seed-{seed}.wav",
+                    "candidate_path_windows": rf"{CANONICAL_WINDOWS_ROOT}\bgm_candidates\{key}\bgm_{key}_B_seed-{seed}.wav",
+                    "candidate_path_macos": f"{CANONICAL_MACOS_ROOT}/bgm_candidates/{key}/bgm_{key}_B_seed-{seed}.wav",
                     "sha256": track["selected_sha256"],
                     "qa_status": "pass",
                     "status": "selected",
@@ -270,6 +273,19 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         validated = validate_external_selection(data, self.selection_path, self.staging_root)
         self.assertTrue(validated["selection_complete"])
         self.assertEqual(EXPECTED_TRACK_ORDER, [track["track_key"] for track in validated["tracks"]])
+
+    def test_validate_external_selection_accepts_canonical_serialized_paths_with_temp_local_staging_bytes(self) -> None:
+        catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
+        self.addCleanup(temp_dir.cleanup)
+        validated = validate_external_selection(catalog, selection_path, staging_root)
+        self.assertEqual(
+            rf"{CANONICAL_WINDOWS_ROOT}\bgm_candidates\stage1_mid\bgm_stage1_mid_B_seed-2026071102.wav",
+            validated["tracks"][0]["candidate_path_windows"],
+        )
+        self.assertEqual(
+            f"{CANONICAL_MACOS_ROOT}/bgm_candidates/stage1_mid/bgm_stage1_mid_B_seed-2026071102.wav",
+            validated["tracks"][0]["candidate_path_macos"],
+        )
 
     def test_validate_longform_catalog_rejects_wrong_selected_variant(self) -> None:
         data = self.clone_data()
@@ -473,7 +489,7 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
         self.addCleanup(temp_dir.cleanup)
         data = json.loads(selection_path.read_text(encoding="utf-8"))
-        data["tracks"][0]["candidate_path_windows"] = str(staging_root / "wrong" / "candidate.wav")
+        data["tracks"][0]["candidate_path_windows"] = rf"{CANONICAL_WINDOWS_ROOT}\wrong\candidate.wav"
         selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, r"selection\.stage1_mid\.candidate_path_windows must be .*bgm_stage1_mid_B_seed-2026071102\.wav"):
             validate_external_selection(catalog, selection_path, staging_root)
@@ -482,8 +498,7 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
         self.addCleanup(temp_dir.cleanup)
         data = json.loads(selection_path.read_text(encoding="utf-8"))
-        expected = str(staging_root / "bgm_candidates" / "stage1_mid" / "bgm_stage1_mid_B_seed-2026071102.wav")
-        data["tracks"][0]["candidate_path_windows"] = expected.replace("\\", "/")
+        data["tracks"][0]["candidate_path_windows"] = f"{CANONICAL_WINDOWS_ROOT}/bgm_candidates/stage1_mid/bgm_stage1_mid_B_seed-2026071102.wav"
         selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, r"selection\.stage1_mid\.candidate_path_windows must be .*bgm_stage1_mid_B_seed-2026071102\.wav"):
             validate_external_selection(catalog, selection_path, staging_root)
@@ -492,7 +507,7 @@ class Phase7LongformCatalogTests(unittest.TestCase):
         catalog, selection_path, staging_root, temp_dir = self.build_temp_selection_fixture()
         self.addCleanup(temp_dir.cleanup)
         data = json.loads(selection_path.read_text(encoding="utf-8"))
-        data["tracks"][0]["candidate_path_macos"] = "/Volumes/personal_folder/temp/godot_touhou_phase7/wrong/stage1_mid.wav"
+        data["tracks"][0]["candidate_path_macos"] = f"{CANONICAL_MACOS_ROOT}/wrong/stage1_mid.wav"
         selection_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         with self.assertRaisesRegex(
             ValueError,
