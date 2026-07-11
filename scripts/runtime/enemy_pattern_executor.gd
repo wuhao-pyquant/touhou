@@ -34,7 +34,7 @@ func spawn_config(pattern: String, base_hp: float, stage_hp_mult: float, strong:
 	var family: Dictionary = _database.enemy_family_by_id(family_id)
 	if family.is_empty():
 		family = _database.enemy_family_by_id("low_yokai")
-	var hp := base_hp * 2.0 * maxf(0.1, stage_hp_mult)
+	var hp := base_hp * 1.5 * maxf(0.1, stage_hp_mult)
 	var shoot_interval := maxf(24.0, float(family.get("shoot_interval", 60.0)) * (0.8 if strong else 1.0))
 	return {
 		"family_id": family_id,

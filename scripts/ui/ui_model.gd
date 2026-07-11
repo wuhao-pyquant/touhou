@@ -14,6 +14,18 @@ func main_menu_entries() -> Array:
 		{"id": "exit", "label": "退出游戏", "description": "关闭游戏"},
 	]
 
+func practice_stage_entries(stage_names: Array, highest_reached_stage: int) -> Array:
+	var entries: Array = []
+	var unlocked_count := clampi(highest_reached_stage, 1, stage_names.size())
+	for i in range(unlocked_count):
+		entries.append({
+			"id": "stage_%d" % (i + 1),
+			"stage": i + 1,
+			"label": "第 %d 关  %s" % [i + 1, String(stage_names[i])],
+			"description": "从本关开始练习，击破 Boss 后结束",
+		})
+	return entries
+
 func pause_menu_entries() -> Array:
 	return [
 		{"id": "continue", "label": "继续", "description": "返回当前战斗"},

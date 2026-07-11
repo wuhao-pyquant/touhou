@@ -121,10 +121,10 @@ func _verify_main_player_layout(gm: Object, root_gm: Node, main_scene: PackedSce
 
 func _verify_boss_hud_geometry(main: Node2D) -> void:
 	var base_hp: Rect2 = main._boss_hp_bar_rect()
-	var expected_hp_w: float = clampf(main.SCREEN_W * 200.0 / 720.0, 120.0, 360.0)
+	var expected_hp_w: float = clampf(main.SCREEN_W * 560.0 / 720.0, 320.0, 680.0)
 	_assert(is_equal_approx(base_hp.size.x, expected_hp_w), "HP bar width should follow viewport width ratio")
 	_assert(is_equal_approx(base_hp.position.x, (main.SCREEN_W - expected_hp_w) * 0.5), "HP bar should stay centered by viewport")
-	_assert(is_equal_approx(base_hp.position.y, main.SCREEN_H * (28.0 / 960.0)), "HP bar Y should be viewport-driven")
+	_assert(is_equal_approx(base_hp.position.y, main.SCREEN_H * (92.0 / 960.0)), "HP bar should sit below the resource HUD")
 	_assert(is_equal_approx(base_hp.size.y, 14.0), "HP bar height should remain fixed at 14")
 
 	var base_indicator_w: float = main._boss_indicator_width()
@@ -140,8 +140,8 @@ func _verify_boss_hud_geometry(main: Node2D) -> void:
 	main.boss = {"x": main.SCREEN_W + 250.0}
 	var right_rect: Rect2 = main._boss_indicator_rect()
 	_assert(is_equal_approx(right_rect.position.x, main.SCREEN_W - 16.0 - base_indicator_w), "Indicator should clamp to right playfield margin")
-	_assert(is_equal_approx(right_rect.position.y, main.SCREEN_H * (610.0 / 960.0)), "Indicator Y should be viewport-derived")
-	_assert(is_equal_approx(right_rect.size.y, main.SCREEN_H * (24.0 / 960.0)), "Indicator height should be viewport-derived")
+	_assert(is_equal_approx(right_rect.position.y, main.SCREEN_H - right_rect.size.y - 6.0), "Indicator should stay at the bottom edge")
+	_assert(is_equal_approx(right_rect.size.y, main.SCREEN_H * (10.0 / 960.0)), "Indicator height should remain compact")
 
 func _init() -> void:
 	call_deferred("_run")

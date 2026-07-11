@@ -9,6 +9,7 @@ const MAX_BULLETS := 12000
 const STATE_TITLE := "title"
 const STATE_CHARACTER_SELECT := "character_select"
 const STATE_SHOT_SELECT := "shot_select"
+const STATE_PRACTICE_SELECT := "practice_select"
 const STATE_SETTINGS := "settings"
 const STATE_PAUSED := "paused"
 const STATE_STAGE := "stage"
@@ -59,12 +60,13 @@ const STAGE_NAMES := [
 ]
 const STAGE_MULTS := [
 	{"enemy_hp":1.0, "boss_hp":1.0, "bullet_speed":1.0},
-	{"enemy_hp":1.25, "boss_hp":1.18, "bullet_speed":1.08},
-	{"enemy_hp":1.5, "boss_hp":1.36, "bullet_speed":1.16},
-	{"enemy_hp":1.8, "boss_hp":1.58, "bullet_speed":1.25},
-	{"enemy_hp":2.15, "boss_hp":1.85, "bullet_speed":1.34},
-	{"enemy_hp":2.55, "boss_hp":2.15, "bullet_speed":1.45},
+	{"enemy_hp":1.05, "boss_hp":1.0, "bullet_speed":1.05},
+	{"enemy_hp":1.10, "boss_hp":1.0, "bullet_speed":1.10},
+	{"enemy_hp":1.15, "boss_hp":1.0, "bullet_speed":1.16},
+	{"enemy_hp":1.20, "boss_hp":1.0, "bullet_speed":1.22},
+	{"enemy_hp":1.25, "boss_hp":1.0, "bullet_speed":1.28},
 ]
+const BOSS_HP_PER_SECOND := [32.0, 40.0, 50.0, 60.0, 72.0, 84.0]
 
 const DEFAULT_PROTAGONIST_ID := "miko"
 const DEFAULT_SHOT_ID := "ofuda_trace"
@@ -85,6 +87,11 @@ func playfield_rect() -> Rect2:
 func stage_count() -> int:
 	return STAGE_NAMES.size()
 
+func balanced_boss_card_hp(stage: int, time_seconds: float, kind: String) -> float:
+	var index := clampi(stage - 1, 0, BOSS_HP_PER_SECOND.size() - 1)
+	var kind_multiplier := 0.88 if kind == "nonspell" else 1.0
+	return maxf(1.0, time_seconds * BOSS_HP_PER_SECOND[index] * kind_multiplier)
+
 # --- Runtime state ---
 var score: int = 0
 var graze: int = 0
@@ -100,6 +107,8 @@ var state: String = STATE_TITLE
 var selected_protagonist_id: String = DEFAULT_PROTAGONIST_ID
 var selected_shot_id: String = DEFAULT_SHOT_ID
 var practice_mode: bool = false
+var practice_stage: int = 1
+var highest_reached_stage: int = 1
 var pause_return_state: String = STATE_STAGE
 var settings_return_state: String = STATE_TITLE
 var settings: Dictionary = DEFAULT_SETTINGS.duplicate(true)
@@ -169,8 +178,12 @@ func reset_run_config() -> void:
 	selected_protagonist_id = DEFAULT_PROTAGONIST_ID
 	selected_shot_id = DEFAULT_SHOT_ID
 	practice_mode = false
+	practice_stage = 1
 	pause_return_state = STATE_STAGE
 	settings_return_state = STATE_TITLE
+
+func unlock_stage(stage: int) -> void:
+	highest_reached_stage = maxi(highest_reached_stage, clampi(stage, 1, stage_count()))
 
 func enter_pause(from_state: String) -> void:
 	pause_return_state = from_state

@@ -48,7 +48,7 @@ func _verify_executor() -> void:
 
 	var cfg: Dictionary = executor.spawn_config("ring", 10.0, 1.5, false)
 	_assert_equal(String(cfg.family_id), "formation_shooter", "Spawn config family mismatch.")
-	_assert(abs(float(cfg.hp) - 30.0) <= 0.001, "Spawn config should preserve existing 2x HP and apply stage hp mult, got %f" % float(cfg.hp))
+	_assert(abs(float(cfg.hp) - 22.5) <= 0.001, "Spawn config should apply the Phase 8 1.5x HP baseline and stage multiplier, got %f" % float(cfg.hp))
 	_assert_equal(String(cfg.drop_tier), "standard", "Formation shooter drop tier mismatch.")
 	_assert(float(cfg.shoot_interval) >= 24.0, "Spawn config shoot interval should be bounded.")
 
@@ -103,7 +103,7 @@ func _verify_main_spawn_contract() -> void:
 	var enemy: Dictionary = main_shell.enemies[0]
 	_assert_equal(String(enemy.family_id), "formation_shooter", "Main enemy should include family_id.")
 	_assert_equal(String(enemy.drop_tier), "standard", "Main enemy should include drop_tier.")
-	_assert(float(enemy.hp) > 20.0, "Stage 6 enemy HP should apply stage hp multiplier after existing 2x baseline.")
+	_assert(is_equal_approx(float(enemy.hp), 18.75), "Stage 6 enemy HP should apply the Phase 8 1.5x baseline and bounded stage multiplier.")
 	_assert(float(enemy.shoot_interval) >= 24.0, "Main enemy should include bounded shoot_interval.")
 	main_shell.bullet_pool = []
 	for i in range(8):

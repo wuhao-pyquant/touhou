@@ -144,7 +144,7 @@ func _verify_reward_system() -> void:
 
 func _verify_main_item_contract() -> void:
 	var main_source := FileAccess.get_file_as_string("res://scripts/main.gd")
-	_assert(main_source.contains('"Seals: %d" % gm.night_festival_seals'), "Gameplay HUD should show Night Festival Seal count.")
+	_assert(main_source.contains('"%s  |  夜祭印 %d" % [gm.STAGE_NAMES[gm.current_stage - 1], gm.night_festival_seals]'), "Gameplay HUD should show Night Festival Seal count.")
 
 	var gm = load("res://autoload/game_manager.gd").new()
 	var main_script = load("res://scripts/main.gd")

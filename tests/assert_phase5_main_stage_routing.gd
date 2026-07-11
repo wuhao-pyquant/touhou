@@ -87,7 +87,8 @@ func _assert_boss_cards(main_shell: Node, stage_index: int) -> void:
 		for key in ["name", "hp", "time", "pattern", "kind", "stage_index", "boss_id", "base_hp"]:
 			_assert(card.has(key), "Stage %d boss card missing %s: %s" % [stage_index, key, card])
 		_assert_chinese_first(String(card.name), "stage %d boss card name" % stage_index)
-		_assert(float(card.hp) >= float(card.base_hp), "Stage %d card hp should be loaded from base hp with stage multiplier." % stage_index)
+		var expected_hp: float = gm.balanced_boss_card_hp(stage_index, float(card.time), String(card.kind))
+		_assert(is_equal_approx(float(card.hp), expected_hp), "Stage %d card hp should use the Phase 8 time-to-clear curve." % stage_index)
 		if String(card.kind) == "nonspell":
 			nonspells += 1
 		elif String(card.kind) == "spell":

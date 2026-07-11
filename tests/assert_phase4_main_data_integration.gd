@@ -68,6 +68,7 @@ func _activate_bullet(main_shell: Node, idx: int, type_id: String, x: float, y: 
 	var bullet: Dictionary = main_shell.bullet_pool[idx]
 	bullet.active = true
 	bullet.type = type_id
+	main_shell._active_index_initialized = false
 	bullet.x = x
 	bullet.y = y
 	bullet.vx = 0.0
