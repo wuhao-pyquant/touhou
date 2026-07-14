@@ -59,16 +59,14 @@ func _new_main_with_pool() -> Node:
 	main_shell.enemies = []
 	main_shell.game_database_ref = FakeGameDatabase.new(37, EXPECTED_FAMILIES)
 	main_shell.game_database = main_shell.game_database_ref
-	main_shell.bullet_pool = []
-	for i in range(32):
-		main_shell.bullet_pool.append(main_shell._make_bullet())
+	main_shell.bullet_world.configure(32, 32, 32)
+	main_shell._sync_bullet_world_compatibility_views()
 	return main_shell
 
 func _activate_bullet(main_shell: Node, idx: int, type_id: String, x: float, y: float, radius: float = 5.0) -> void:
-	var bullet: Dictionary = main_shell.bullet_pool[idx]
+	var bullet: Dictionary = main_shell.bullet_world.pool[idx]
 	bullet.active = true
 	bullet.type = type_id
-	main_shell._active_index_initialized = false
 	bullet.x = x
 	bullet.y = y
 	bullet.vx = 0.0
@@ -76,7 +74,9 @@ func _activate_bullet(main_shell: Node, idx: int, type_id: String, x: float, y: 
 	bullet.radius = radius
 	bullet.age = 0.0
 	bullet.lifetime = 120.0
-	main_shell.bullet_pool[idx] = bullet
+	main_shell.bullet_world.pool[idx] = bullet
+	main_shell.bullet_world.rebuild_active_order()
+	main_shell._sync_bullet_world_compatibility_views()
 
 func _free_main(main_shell: Node) -> void:
 	var gm = main_shell.game_manager_ref
