@@ -30,6 +30,7 @@ public static class FakeGodot {
     if(mode=="sleep")Thread.Sleep(TimeSpan.FromSeconds(seconds));
     if(mode=="fatal"||mode=="fatal-nonzero")Console.WriteLine("Program crashed: fake marker");
     if(mode=="parser")Console.Error.WriteLine("Parser Error: fake marker");
+    if(mode=="capture-overflow")Console.WriteLine(new string('X',262145));
     string log=Value(args,"--log-file",null);if(log!=null)File.WriteAllText(log,"fake log\n");
     return mode=="nonzero"||mode=="fatal-nonzero"?17:0;
   }
