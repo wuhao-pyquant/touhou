@@ -1,0 +1,60 @@
+{
+  "id": "M1-godot-test-guard-architecture-implementation",
+  "objective": "Implement the architecture frozen by deep_reviewer run 20260714T184331Z-M1-godot-test-guard-architecture-freeze-deep_reviewer-6410e14f. Replace the rejected same-process runner in candidate 095653c19ee299208c4eb5387d6cada3bb1d65d2 with a bounded two-process supervisor/worker design contained in tools/testing/invoke_godot_test.ps1. Preserve that PowerShell file as the only public entrypoint and do not add a Python production runner. The supervisor must do only syntax/bounds checks, spawn the same script in a private worker mode, drain capped protocol pipes asynchronously, acquire one fail-closed Global mutex after an authenticated READY frame, send GO, enforce the hard monotonic deadline on the retained worker handle, force-kill on expiry, accept exactly one authenticated FINAL frame only after worker exit, release the mutex only after confirmed worker exit, and emit exactly one compact public JSON object. Add-Type, native inventory, Resolve-Path/canonical file I/O, engine creation, capture, and cleanup must exist only in the killable worker. The worker must retain canonical executable/project handles, watch the supervisor, take fail-closed native inventories, optionally clean only verified same-project headless processes by retained handles, create a KILL_ON_JOB_CLOSE job, create the engine suspended and atomically assigned with PROC_THREAD_ATTRIBUTE_JOB_LIST plus HANDLE_LIST, verify job membership/image/creation identity before ResumeThread, monitor root/job/capture/fatal output, terminate and prove the job empty on every failure, then emit a bounded authenticated FINAL frame. There is no create-then-assign fallback and unsupported JOB_LIST hosts fail LaunchFailure without resuming an engine. Implement only the frozen rules and focused fake-engine matrix; launch real Godot zero times.",
+  "mode": "write",
+  "allowed_paths": [
+    "tools/testing/invoke_godot_test.ps1",
+    "tools/testing/tests/fake_engine.py",
+    "tools/testing/tests/test_invoke_godot_test.py"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "tools/agents/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "content/**",
+    "docs/**",
+    "tests/**",
+    ".godot/**"
+  ],
+  "dependency_commit": "095653c19ee299208c4eb5387d6cada3bb1d65d2",
+  "acceptance_commands": [
+    "python -m unittest tools.testing.tests.test_invoke_godot_test -v",
+    "$ErrorActionPreference='Stop'; $tokens=$null; $errors=$null; $null=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/testing/invoke_godot_test.ps1'),[ref]$tokens,[ref]$errors); if($errors.Count -ne 0){throw ($errors|Out-String)}; Write-Host 'POWERSHELL_PARSE=pass'",
+    "$changed=@(git status --porcelain -uall|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $allowed=@('tools/testing/invoke_godot_test.ps1','tools/testing/tests/fake_engine.py','tools/testing/tests/test_invoke_godot_test.py'); $outside=@($changed|Where-Object{$_-notin $allowed}); if($outside.Count -ne 0){throw \"Outside changes: $($outside -join ',')\"}; $temps=@(Get-ChildItem tools/testing/tests -Force -Directory -ErrorAction SilentlyContinue|Where-Object Name -Match '^(?:_test_work|\\.invoke_godot_test_)'); if($temps.Count -ne 0){throw \"Temporary test artifacts remain: $($temps.Name -join ',')\"}; Write-Host 'PATH_SCOPE=pass'",
+    "git diff --check 095653c19ee299208c4eb5387d6cada3bb1d65d2 -- tools/testing/invoke_godot_test.ps1 tools/testing/tests/fake_engine.py tools/testing/tests/test_invoke_godot_test.py"
+  ],
+  "output_requirements": [
+    "Map the frozen supervisor states S0-S6 and worker states W0-W8 to exact functions or regions and focused tests",
+    "Report the atomic JOB_LIST-before-resume path, retained-handle identity rules, native ABI assertions, fail-closed inventory behavior, timeout/cleanup ordering, protocol authentication and caps, and mutex lifecycle",
+    "Report every focused test name and result, all acceptance exit codes, exact changed files, zero temporary artifacts, and real Godot launch count zero",
+    "Do not convert a frozen requirement into a residual risk; if a required Windows primitive cannot be implemented, fail the ticket without launching an engine"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "The architecture gate is frozen, not advisory. Candidate 095653c is rejected and must not be used for a real Godot smoke. Modify exactly the three allowed files; private helper roles must stay inside invoke_godot_test.ps1.",
+    "Public parameters remain GodotPath, ProjectPath, GodotArgument with GodotArguments alias, GodotArgumentJson, TimeoutSeconds default 120, LogFile, CleanupExisting, and PollMilliseconds default 100. Exactly one argument form is accepted. Reject NULs, excessive input, non-file GodotPath, missing project.godot, and caller-supplied --headless/--path/--log-file forms. Old fixture/native/mutex/Python-compatibility switches may be removed or retained only as InvalidInput tombstones and must never weaken production behavior.",
+    "Supervisor S0-S6: start monotonic timing before work; perform syntax-only checks; start same-script worker with random 256-bit nonce and capped async pipe drains; validate one READY; acquire only Global\\GodotTestRunner_v1_<SHA256(project volume and file ID)> with WaitOne(0), treating denial/contention/abandonment as LockContention; send nonce-matched GO; wait on retained worker handle to T, kill at T, wait at most 1000 ms emergency grace, never synchronously drain after the deadline; validate one FINAL only after exit; release mutex only after confirmed worker exit; emit exactly one public JSON line.",
+    "Worker W0-W8: compile native code only in worker and assert ABI; retain and validate supervisor PID plus creation FILETIME and kill self from a native watcher on supervisor exit/deadline; canonicalize and retain executable/project handles; READY then no mutation before GO; complete inventory; optional verified cleanup and second inventory; create/configure job; create engine suspended atomically in job; verify membership/image/creation then ResumeThread; monitor retained root handle, job active count, bounded captures, fatal output, and deadline; terminate job when needed, prove zero active processes, close capture/process/thread/job handles in order, then FINAL.",
+    "Containment uses a sole non-inheritable job handle with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE and no breakaway flags. CreateProcessW must use STARTUPINFOEXW, PROC_THREAD_ATTRIBUTE_JOB_LIST 0x0002000D, PROC_THREAD_ATTRIBUTE_HANDLE_LIST 0x00020002, CREATE_SUSPENDED, EXTENDED_STARTUPINFO_PRESENT, explicit lpApplicationName, and only intended stdout/stderr inherited handles. Never create then AssignProcessToJobObject. Any pre-resume failure terminates the job and proves it empty.",
+    "Inventory and cleanup use Toolhelp only as a basename prefilter, then retained process handles with canonical image and creation FILETIME. Access denial or unverifiable live same-basename process is CleanupFailure and blocks launch. Do not kill from PID, parent PID, fixture data, or an unverified reopened handle. Process32First failure and Process32Next errors other than ERROR_NO_MORE_FILES fail closed. ParentProcessId is informational only.",
+    "Command lines come from the retained process handle with validated UNICODE_STRING bounds and CommandLineToArgvW parsing. Inspect options before standalone --. Exact --headless is required; --headless=* is ambiguous. A headless same-image process must contain exactly one nonempty absolute project path across --path VALUE or --path=VALUE. Missing, duplicate, relative, inaccessible, or malformed values are CleanupFailure. Compare opened directory file identity, not path spelling.",
+    "Native runtime assertions are mandatory before native use. PROCESSENTRY32W sizes are x86 556/x64 568 with pointer-correct offsets; JOBOBJECT_BASIC_LIMIT_INFORMATION ActiveProcessLimit is DWORD and total sizes are x86 48/x64 64; IO_COUNTERS is 48; JOBOBJECT_EXTENDED_LIMIT_INFORMATION is x86 112/x64 144; UNICODE_STRING is 8/16; STARTUPINFOW 68/104; STARTUPINFOEXW 72/112; PROCESS_INFORMATION 16/24. Focused helpers must exercise System32 x64 and SysWOW64 x86 PowerShell where available and fail explicitly when a required configured helper is unavailable.",
+    "TimeoutSeconds is one budget from the supervisor first statement through startup, compile, canonicalization, mutex, inventory, cleanup, launch, execution, capture, fatal scan, and cleanup. Reserve R=min(2000ms,max(250ms,ceil(T/10))) for worker teardown; supervisor wall bound is T plus at most 1000 ms. Deadline during preexisting CLEANUP_BEGIN is CleanupFailure; engine deadline with proven containment cleanup is Timeout.",
+    "Protocol stdout is only newline-delimited authenticated GTR1 READY/PHASE/FINAL frames: version, nonce, bounded base64url JSON, SHA-256, max 16 KiB. Reject partial, duplicate, extra, wrong-nonce, inconsistent-category, or bad-hash frames. Engine output never shares the protocol pipe. Supervisor constructs the authoritative result with exactly status, category, processExitCode, elapsedSeconds, project, logPath, cleanedPids.",
+    "Exit precedence is CleanupFailure/7, Timeout/2, LockContention/4, InvalidInput/6, PreexistingHeadlessProcess/5, LaunchFailure/8, FatalOutput/3, ProcessFailure/1, Success/0. Success requires zero root exit, empty job, complete output, no fatal marker, and verified cleanup.",
+    "Focused matrix must include one test for each frozen blocker: supervisor bounds native/file hangs and releases mutex; partial frame yields one JSON; Global denial/contention/abandonment never use Local; job-attribute failure never resumes; kill after atomic create before resume leaves no process; post-create identity failure kills suspended job; inherited-stream orphan cannot extend watchdog; mixed-image child/grandchild job cleanup; inaccessible same-basename blocks; Toolhelp first/next errors block; Windows quoting and duplicate path fail closed; canonical project/exact image preserve collateral processes; retained handle prevents PID-reuse kill; tombstones/private fault seams cannot authorize kill; invalid input/create/resume failures have exact categories; x86/x64 native layouts pass; cleanup failure overrides timeout/fatal/nonzero; success requires root exit/job empty/complete output with fatal over nonzero. Fault seams may only force failures or pauses and cannot inject authority.",
+    "Run the focused fake-engine suite once after implementation plus the listed parse/path/diff checks. Do not run a full project suite and do not launch Godot. A separate static deep re-review is required before the release lead may run one real guarded smoke.",
+    "This is a fresh test_performance ticket and must begin at its profile default gpt-5.6-terra/high. If it fails, resume this same session/worktree at escalation level 1; do not create a replacement Agent or ticket. A successful run closes the lineage and later fresh tickets return to the profile default."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
