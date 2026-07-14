@@ -1,0 +1,48 @@
+{
+  "id": "M1-content-design-freeze",
+  "objective": "Freeze the authored M1 combat-content design for the approved Windows 1.0 v3 scope; this is a content deliverable, not a new project plan. Inspect scripts/data/game_database.gd and scripts/data/stage_content_database.gd and preserve the existing six stage IDs, six midboss IDs, six boss IDs, phase IDs, character roles, locations, and story premise. Create exactly three artifacts: content/design/m1_stage_beats.json, content/design/m1_phase_cards.json, and docs/content/m1-design-freeze.md. The stage-beat artifact must contain exactly six ordered stages. Each stage must have exactly three named combat segments, an actually fought midboss placement, a boss-front climax, an 18-24 event authored beat sequence, Normal and Hard route descriptions, the stage's approved identity, its explicit score route, and no combat gap greater than 180 simulation frames except a declared transition. Stage identities are fixed: stage 1 lantern queues/aimed induction/cross-return and high collection; stage 2 abacus rebounds/booth lanes/kill order; stage 3 telegraphed delayed bullets/afterimage memory routes with no invisible collision; stage 4 wind arcs/newsprint grids/rapid lateral lane changes without pushing the player; stage 5 fixed-simulation drum beats/orb gates/rhythm cuts with a 3:2 Hard variant; stage 6 structurally transforms and combines the first five grammars rather than copying and accelerating them. The phase-card artifact must contain exactly the current 40 combat phases split into 26 spells and 14 nonspells: the six midbosses each retain one nonspell and one spell, and the six bosses retain their existing card counts. Every phase card must include its existing unique phase ID and display name, owner and encounter role, kind, stage index, design intent, deterministic random-stream ID, emitter composition, ordered phase timeline, bullet motion rules, boss movement timeline, explicit Normal structure, a non-numeric Hard topology change, score route, capture or failure condition, telegraph frames (Normal at least 12, Hard at least 8), and a canonical design structure_fingerprint input. All 26 spells must be mechanically distinct; shared low-level emitters are allowed, but no two spell cards may have the same complete timeline/fingerprint. Nonspells may reuse their stage grammar but may not duplicate a complete timeline/fingerprint. Every delayed turn, acceleration, rebound, or route activation must name its visible warning. Stage 6 phase cards must identify the earlier grammar they transform and the structural transformation. The markdown artifact must explain the six-stage escalation, the 40-phase index, player-learning progression, fairness/readability rules, high-score routes, and implementation evidence expected from later runtime tickets without rewriting milestones, schedules, agent policy, or the readiness ledger.",
+  "mode": "write",
+  "allowed_paths": [
+    "content/design/m1_stage_beats.json",
+    "content/design/m1_phase_cards.json",
+    "docs/content/m1-design-freeze.md"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "tests/**",
+    "tools/**",
+    "docs/production/**"
+  ],
+  "dependency_commit": "b1b5e66a4482321435ceebc4d25870c1b3a542fb",
+  "acceptance_commands": [
+    "$beats = Get-Content -Raw 'content/design/m1_stage_beats.json' | ConvertFrom-Json; if ($beats.stages.Count -ne 6) { throw 'Expected 6 stages' }; foreach ($stage in $beats.stages) { if ($stage.segments.Count -ne 3) { throw \"Stage $($stage.stage_index) must have 3 segments\" }; if ($stage.beats.Count -lt 18 -or $stage.beats.Count -gt 24) { throw \"Stage $($stage.stage_index) must have 18-24 beats\" }; if (-not $stage.midboss -or -not $stage.preboss_climax -or -not $stage.score_route) { throw \"Stage $($stage.stage_index) is incomplete\" }; foreach ($beat in $stage.beats) { if ($beat.kind -ne 'transition' -and [int]$beat.max_gap_after_frames -gt 180) { throw \"Stage $($stage.stage_index) has an overlong combat gap\" } } }",
+    "$cards = Get-Content -Raw 'content/design/m1_phase_cards.json' | ConvertFrom-Json; if ($cards.phases.Count -ne 40) { throw 'Expected 40 phases' }; $ids = @($cards.phases | ForEach-Object { $_.id }); if (($ids | Sort-Object -Unique).Count -ne 40) { throw 'Phase IDs must be unique' }; if (@($cards.phases | Where-Object kind -eq 'spell').Count -ne 26) { throw 'Expected 26 spells' }; if (@($cards.phases | Where-Object kind -eq 'nonspell').Count -ne 14) { throw 'Expected 14 nonspells' }; $fingerprints = @($cards.phases | ForEach-Object { $_.structure_fingerprint }); if (($fingerprints | Sort-Object -Unique).Count -ne 40) { throw 'Complete phase fingerprints must be unique' }; foreach ($phase in $cards.phases) { if ([int]$phase.telegraph_frames.normal -lt 12 -or [int]$phase.telegraph_frames.hard -lt 8) { throw \"Insufficient warning on $($phase.id)\" }; if (-not $phase.emitters -or -not $phase.timeline -or -not $phase.boss_movement -or -not $phase.normal_structure -or -not $phase.hard_topology_change -or -not $phase.failure_condition) { throw \"Incomplete phase card $($phase.id)\" }; if ($phase.hard_topology_change.type -eq 'numeric_only') { throw \"Numeric-only Hard phase $($phase.id)\" } }",
+    "if (-not (Test-Path 'docs/content/m1-design-freeze.md')) { throw 'Missing M1 design freeze markdown' }; $text = Get-Content -Raw 'docs/content/m1-design-freeze.md'; foreach ($needle in @('26', '14', 'Normal', 'Hard', '结构指纹', '预告')) { if (-not $text.Contains($needle)) { throw \"Design freeze markdown missing $needle\" } }",
+    "git diff --check"
+  ],
+  "output_requirements": [
+    "Report the six stage identities, each stage's three segments, midboss placement, preboss climax, Hard topology, and score route",
+    "Report the exact 40-phase count and 26-spell/14-nonspell split, with all unique IDs and design fingerprints",
+    "Call out every shared low-level emitter and explain why the complete spell structures remain distinct",
+    "Report telegraph minima, deterministic stream IDs, Stage 6 transformations, and any unresolved implementation risk",
+    "Report all acceptance commands with exit codes and confirm that no runtime, test, production-ledger, audio, asset, or plan file changed"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "The approved v3 plan is frozen. Do not propose a replacement roadmap, extra difficulty, Extra Stage, new controls, new protagonists, or new story locations.",
+    "Existing data already totals 40 phases: 12 midboss phases plus 28 boss phases, with 26 spells and 14 nonspells. Preserve those content identities while replacing alias-level sameness with authored structures.",
+    "The later content_runtime ticket will translate these machine-readable cards into runtime data, so use concrete frame timings, emitter/movement events, warnings, topology, completion conditions, and score-route decisions rather than vague prose.",
+    "Fun is not established by bullet count, speed, file count, or renamed aliases. Each phase must pose a recognizable spatial/decision problem.",
+    "The release lead will review and commit; do not commit, merge, spawn subagents, or edit the readiness ledger."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
