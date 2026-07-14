@@ -1,0 +1,31 @@
+{
+  "id": "M0-architecture-review",
+  "objective": "Perform a maximum-depth, strictly read-only architecture-freeze review of candidate commit 1653ea84043b9140e8ef3c06bde2c57f63c635cf against the approved M0 milestone and its implementation ticket. Compare it to base d67c26a. Determine whether the fixed 60 Hz integration preserves simulation semantics under 30/60/120 Hz frames, pause/state transitions, and just-pressed input; whether all gameplay-affecting RNG and state needed for deterministic replay are controlled and captured; whether restore paths can reproduce the captured hash; whether the committed baseline replay actually proves current-game basic-operation compatibility rather than only a toy harness; whether BulletWorld and BossStateMachine are meaningful ownership extractions rather than unused wrappers; and whether StageTimeline, PatternDefinition, BossPhaseDefinition, DifficultyProfile, ReplayHeader, and frame-input contracts contain enough stable fields for the frozen v3 design without forcing an M1 rewrite. Check snapshot aliasing, ordering, analog/controller input representation, version rejection, invalid transition handling, catch-up/drop behavior, and error-sensitive test evidence. Do not edit files, run Godot, broaden into M1 content design, or rewrite the plan. Return a clear ACCEPT or REPAIR gate. For every blocking finding, give exact path/line evidence, consequence, minimum safe correction boundary, and focused verification; distinguish blockers from future enhancements.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": ["**"],
+  "dependency_commit": "1653ea84043b9140e8ef3c06bde2c57f63c635cf",
+  "acceptance_commands": [
+    "git rev-parse HEAD",
+    "git diff --stat d67c26a..HEAD",
+    "git diff --check d67c26a..HEAD",
+    "git diff d67c26a..HEAD -- scripts/main.gd scripts/runtime scripts/replay scripts/content tests/assert_m0_determinism.gd tests/assert_m0_content_interfaces.gd tests/fixtures/m0/baseline_replay.json"
+  ],
+  "output_requirements": [
+    "Start the summary with GATE: ACCEPT or GATE: REPAIR",
+    "List only evidence-backed M0 blockers, then separately list non-blocking M1 follow-ups",
+    "For each blocker provide exact file and line, runtime consequence, minimum correction boundary, and focused test required",
+    "Explicitly rule on fixed-tick input semantics, replay proof validity, snapshot completeness, and whether the extraction is substantive",
+    "Report actual reviewed commit and zero changed files"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "The implementation bridge verified core_simulation as gpt-5.6-sol/xhigh on CLI 0.144.4 with zero path violations.",
+    "Focused final runs reported identical hashes c2ca94ad8fa633ba8f2d7ad20cdb66823517d81509540f281b8fcf65f4ac3dcb three times and no parser errors after rerun with an explicit --log-file.",
+    "Godot 4.7 crashed before script execution when default user:// logging was unavailable and misleadingly returned exit 0; reviewer must not infer success from exit code alone.",
+    "Existing pause/danmaku tests emit root-certificate and exit cleanup diagnostics; only SCRIPT ERROR, Parse Error, assertion failures, or new M0 diagnostics are candidate blockers.",
+    "M0 may establish extensible interfaces without implementing M1 content, but must not leave contracts so skeletal that M1 requires replacement rather than extension."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}
