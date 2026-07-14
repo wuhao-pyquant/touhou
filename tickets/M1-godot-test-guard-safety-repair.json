@@ -1,0 +1,47 @@
+{
+  "id": "M1-godot-test-guard-safety-repair",
+  "objective": "Repair only the safety blockers found by the independent static review of 899fd938fc76deb92b3546f0e2105e8adc17b2c4, while preserving tools/testing/invoke_godot_test.ps1 as the public entrypoint and launching real Godot zero times. Establish one absolute deadline before lock/inventory work and enforce it across process inventory, launch, parent execution, redirected-stream drain, descendant cleanup, verification, summary emission, and mutex release; no unconditional ReadToEnd/GetResult or other unbounded wait may remain. Parse Windows command lines with Windows semantics and require an exact --path value equal to the canonical resolved project; the target path merely appearing in another argument must never match. Require the exact resolved executable image path and fail closed when command-line or image identity cannot be established. Correct the x64/x86 PROCESSENTRY32 layout, treat native snapshot/enumeration failure as failure rather than empty inventory, and add a forced-native-fallback test. Do not terminate by an unverified bare PID: retain and revalidate creation identity/process handles immediately before termination, and use a kill-on-close Windows job object for invocation-owned descendants if safely available. Track launch state; Process.Start failure must emit LaunchFailure/8 and a valid JSON summary without touching HasExited on an unstarted process. Preexisting stop/verification errors and surviving tracked/orphan descendants must emit CleanupFailure/7. After parent exit, verify all previously tracked identities even when the current parent graph is broken. Global project exclusion must fail closed if a Global mutex cannot be secured; do not silently weaken to Local scope. Put runner-owned global Godot options before caller arguments. Expand deterministic fake/native-helper tests to cover inherited-stream post-parent orphan cleanup, whole-lifecycle timeout, exact --path association, exact executable identity, forced native fallback and architecture layout, PID/creation identity mismatch, launch failure, cleanup failure, fail-closed mutex behavior, and normal existing cases. Tests and diagnostics must remove all temporary artifacts. Do not launch Godot, edit gameplay/content, stage files, rewrite the plan, or weaken a blocker into a documented residual risk.",
+  "mode": "write",
+  "allowed_paths": [
+    "tools/testing/invoke_godot_test.ps1",
+    "tools/testing/invoke_godot_test.py",
+    "tools/testing/tests/test_invoke_godot_test.py",
+    "tools/testing/tests/fake_engine.py"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "content/**",
+    "docs/**",
+    "tests/**",
+    ".godot/**"
+  ],
+  "dependency_commit": "899fd938fc76deb92b3546f0e2105e8adc17b2c4",
+  "acceptance_commands": [
+    "python -m unittest tools.testing.tests.test_invoke_godot_test -v",
+    "$ErrorActionPreference='Stop'; $tokens=$null; $errors=$null; $null=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/testing/invoke_godot_test.ps1'),[ref]$tokens,[ref]$errors); if($errors.Count -ne 0){throw ($errors|Out-String)}; Write-Host 'POWERSHELL_PARSE=pass'",
+    "$changed=@(git status --porcelain -uall|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $outside=@($changed|Where-Object{$_-notin @('tools/testing/invoke_godot_test.ps1','tools/testing/invoke_godot_test.py','tools/testing/tests/test_invoke_godot_test.py','tools/testing/tests/fake_engine.py')}); if($outside.Count -ne 0){throw \"Outside changes: $($outside -join ',')\"}; $temps=@(Get-ChildItem tools/testing/tests -Force -Directory -ErrorAction SilentlyContinue|Where-Object Name -Match '^(?:_test_work|\\.invoke_godot_test_)'); if($temps.Count -ne 0){throw \"Temporary test artifacts remain: $($temps.Name -join ',')\"}; Write-Host 'PATH_SCOPE=pass'",
+    "git diff --check"
+  ],
+  "output_requirements": [
+    "Map every static-review blocker to exact repaired code and its focused test",
+    "Report public parameters, option ordering, all exit categories/codes, absolute-deadline behavior, job/identity ownership rules, mutex failure behavior, native snapshot architecture handling, and cleanup verification",
+    "Report every test name and result, all four acceptance exit codes, exact changed files, no temporary artifacts, and real Godot launch count zero",
+    "Report only irreducible Windows limitations after proving they cannot cause broad termination or an unbounded runner"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "Independent core_simulation review at Sol/xhigh returned GATE: REPAIR with two critical and six high/medium blocker groups; no Godot command was run.",
+    "The previous guard lineage completed after a temporary Sol/high escalation, so this new ticket must start at the test_performance profile default. If this ticket fails, resume its same session/worktree at escalation level 1.",
+    "The release lead will perform exactly one guarded real-Godot smoke only after this repair passes a separate static re-review."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
