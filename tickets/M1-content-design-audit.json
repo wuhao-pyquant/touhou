@@ -1,0 +1,52 @@
+{
+  "id": "M1-content-design-audit",
+  "objective": "Perform a strictly read-only mechanical audit of candidate commit 08812e71f86501ff7a1db31f8bdf94ac588705ba against the frozen M1 content-design ticket and the existing project data. Cross-check the six stage IDs, locations, six midboss IDs, six boss IDs, card display names, encounter ordering, boss card counts, and 26-spell/14-nonspell split against scripts/data/game_database.gd and scripts/data/stage_content_database.gd. Verify that content/design/m1_stage_beats.json has six ordered stages, exactly three combat segments per stage, 18-24 authored beats, an actually fought midboss, a boss-front climax, no undeclared combat gap above 180 frames, the approved stage identity, a concrete score route, and a non-numeric Hard topology. Verify that content/design/m1_phase_cards.json has exactly 40 unique stable IDs, 26 spells, 14 nonspells, one nonspell and one spell for every midboss, the existing boss card counts, 40 nonempty unique deterministic stream IDs, 40 distinct complete structure fingerprints, concrete emitter/timeline/boss-movement/failure fields, Normal warning at least 12 frames, Hard warning at least 8 frames, and no numeric-only Hard variant. Check Stage 3 explicitly forbids invisible collision, Stage 4 never pushes the player, Stage 5 uses fixed simulation beats with a genuine 3:2 topology, and every Stage 6 phase names an earlier grammar plus a structural transformation rather than acceleration/density scaling. Check the markdown index agrees with both JSON artifacts and does not rewrite the project plan or add scope. Do not judge final fun, tune values, edit files, generate assets, or run Godot/import-producing commands. Return a single gate of APPROVE or REPAIR; REPAIR must list each exact blocking path/object/field and why it violates the frozen contract.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "content/design/m1_stage_beats.json",
+    "content/design/m1_phase_cards.json",
+    "docs/content/m1-design-freeze.md",
+    "scripts/data/game_database.gd",
+    "scripts/data/stage_content_database.gd"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "tests/**",
+    "tools/**",
+    "docs/production/**",
+    "scripts/main.gd",
+    "scripts/runtime/**",
+    "scripts/player/**",
+    "scripts/ui/**"
+  ],
+  "dependency_commit": "08812e71f86501ff7a1db31f8bdf94ac588705ba",
+  "acceptance_commands": [
+    "$b=Get-Content -Raw content/design/m1_stage_beats.json|ConvertFrom-Json; $c=Get-Content -Raw content/design/m1_phase_cards.json|ConvertFrom-Json; if($b.stages.Count-ne 6-or$c.phases.Count-ne 40-or@($c.phases|Where-Object kind -eq spell).Count-ne 26-or@($c.phases|Where-Object kind -eq nonspell).Count-ne 14){exit 1}; Write-Host 'M1_CONTENT_COUNTS=pass'",
+    "$c=Get-Content -Raw content/design/m1_phase_cards.json|ConvertFrom-Json; if(@($c.phases.id|Sort-Object -Unique).Count-ne 40-or@($c.phases.structure_fingerprint|Sort-Object -Unique).Count-ne 40-or@($c.phases.deterministic_random_stream_id|Sort-Object -Unique).Count-ne 40){exit 1}; Write-Host 'M1_CONTENT_IDENTITIES=pass'",
+    "git diff b1b5e66a4482321435ceebc4d25870c1b3a542fb..HEAD --check",
+    "if (git status --porcelain) { exit 1 }"
+  ],
+  "output_requirements": [
+    "Begin the summary with GATE: APPROVE or GATE: REPAIR",
+    "Report exact stage, opponent, beat, phase, spell/nonspell, stream, fingerprint, warning, and Hard-topology counts",
+    "Report every mismatch with the exact JSON path or source-data record; distinguish blocking mismatch from residual runtime/playtest risk",
+    "Confirm Stage 3 visibility, Stage 4 no-push, Stage 5 fixed-tick 3:2, and all Stage 6 transformations",
+    "Report all acceptance command exit codes and confirm zero changed files"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "This candidate is a machine-readable authored design freeze, not executable content and not evidence that the game is already fun.",
+    "The old stage database did not assign explicit card IDs; stable IDs may be introduced if order, owner, kind, and display name map one-to-one to all existing cards.",
+    "Shared low-level emitters are allowed. Complete spell timelines/fingerprints may not duplicate.",
+    "Do not run Godot because this is a read-only content audit and import side effects are out of scope."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}

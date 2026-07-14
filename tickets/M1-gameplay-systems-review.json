@@ -1,0 +1,66 @@
+{
+  "id": "M1-gameplay-systems-review",
+  "objective": "Perform a strictly read-only semantic code review of candidate commit cb66d261a25df71d56cb5abdcdd5d8d06da69414 against the bounded M1 gameplay-systems ticket and approved M0 deterministic runtime. Review the diff from b1b5e66a4482321435ceebc4d25870c1b3a542fb. Verify the six shot types have real distinct update/collision behavior with no new controls; persistent laser and returning-blade hit ledgers are deterministic, bounded, pool-safe, and cannot double-hit or retire incorrectly; close-range/falloff and focused/unfocused semantics match the frozen product rules; the fixed-boss TTK test actually advances production BulletWorld/collision behavior and proves all six within plus/minus 15 percent. Verify live enemy defeats use explicit ordered drop IDs and seed-independent trajectories without consuming gameplay RNG, while the temporary legacy fallback is deterministic and narrowly isolated. Verify seals add exactly 0.1 up to 2.0, actual death resets the active multiplier, Bomb/deathbomb invalidates capture without resetting the multiplier, graze is score-only, spell timeout cannot capture, capture bonus deterministically uses base/remaining time/multiplier, and Continue classification remains runtime-only. Audit actual-miss/deathbomb timing, spell lifecycle, snapshot validation/restore, replay baseline compatibility, operator precedence, target identity stability, performance bounds, and compatibility paths. Inspect whether any test was weakened without equivalent stronger behavioral coverage. Run only the listed focused tests and smoke command. Do not edit, format, commit, or generate files in the workspace. Return a single gate of APPROVE or REPAIR; REPAIR must list exact blocking lines/behaviors and a focused remediation, not a redesign.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "autoload/game_manager.gd",
+    "scripts/main.gd",
+    "scripts/data/game_database.gd",
+    "scripts/player/player_shot_executor.gd",
+    "scripts/runtime/item_reward_system.gd",
+    "scripts/runtime/gameplay_score_system.gd",
+    "tests/assert_m1_gameplay_systems.gd",
+    "tests/assert_m1_shot_mechanics.gd",
+    "tests/assert_phase8_regressions.gd",
+    "tests/assert_m0_replay_runtime.gd",
+    "scenes/main.tscn"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "content/**",
+    "docs/**",
+    "scripts/content/**",
+    "scripts/data/stage_content_database.gd",
+    "scripts/runtime/fixed_tick_clock.gd",
+    "scripts/runtime/deterministic_rng.gd",
+    "scripts/runtime/simulation_state_hasher.gd",
+    "scripts/runtime/bullet_world.gd",
+    "scripts/runtime/boss_state_machine.gd",
+    "scripts/runtime/stage_director.gd",
+    "scripts/replay/**",
+    "scripts/ui/**",
+    "tests/fixtures/**",
+    "tests/assert_m0_determinism.gd"
+  ],
+  "dependency_commit": "cb66d261a25df71d56cb5abdcdd5d8d06da69414",
+  "acceptance_commands": [
+    "$out=& 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64_console.exe' --headless --log-file \"$env:TEMP\\godot-m1-review-gameplay.log\" --path . --script res://tests/assert_m1_gameplay_systems.gd 2>&1; $out|Out-Host; if($LASTEXITCODE-ne 0-or($out-match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|M1_FAIL')){exit 1}",
+    "$out=& 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64_console.exe' --headless --log-file \"$env:TEMP\\godot-m1-review-shots.log\" --path . --script res://tests/assert_m1_shot_mechanics.gd 2>&1; $out|Out-Host; if($LASTEXITCODE-ne 0-or($out-match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|M1_FAIL')){exit 1}",
+    "$out=& 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64_console.exe' --headless --log-file \"$env:TEMP\\godot-m1-review-replay.log\" --path . --script res://tests/assert_m0_replay_runtime.gd 2>&1; $out|Out-Host; if($LASTEXITCODE-ne 0-or($out-match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|M1_FAIL')){exit 1}",
+    "$out=& 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64_console.exe' --headless --log-file \"$env:TEMP\\godot-m1-review-smoke.log\" --path . scenes/main.tscn --quit-after 5 2>&1; $out|Out-Host; if($LASTEXITCODE-ne 0-or($out-match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|M1_FAIL')){exit 1}",
+    "git diff b1b5e66a4482321435ceebc4d25870c1b3a542fb..HEAD --check",
+    "if (git status --porcelain) { exit 1 }"
+  ],
+  "output_requirements": [
+    "Begin the summary with GATE: APPROVE or GATE: REPAIR",
+    "Report findings in severity order with exact file and line evidence; explicitly state when there are no blocking findings",
+    "Report six TTK values, mean and maximum deviation, and whether the benchmark exercises production update/collision behavior",
+    "Report determinism, drop RNG consumption, hit-ledger bounds, deathbomb/miss timing, capture transitions, snapshot/restore, and M0 replay compatibility",
+    "Report every acceptance command exit code, all warnings, zero changed files, and residual risks deferred to content runtime or M2 playtest"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "The implementation Agent passed its ticket and the release lead independently reran the two M1 tests, M0 replay regression, and smoke; this review must still inspect semantics rather than rubber-stamp green tests.",
+    "M0 baseline replays with content_hash m0-baseline-content-v1 may use an explicit compatibility path, but normal M1 gameplay must use the new behavior.",
+    "The later content-runtime ticket will replace the deterministic fixed legacy [power, point] fallback with explicit per-wave drops.",
+    "Continue UI/persistence and result pages are M6; only a deterministic runtime classification seam is acceptable here.",
+    "Godot exit-time ObjectDB/resource cleanup warnings are known, but parser/runtime errors or changed replay hashes are blockers."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}
