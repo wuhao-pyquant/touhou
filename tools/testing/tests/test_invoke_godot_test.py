@@ -57,6 +57,7 @@ class InvokeGodotTestTests(unittest.TestCase):
             "-GodotArgumentJson", json.dumps(engine_args), "-TimeoutSeconds", str(timeout),
             "-PollMilliseconds", "50", "-LogFile", str(self.project / "runner.log"),
             "-ProcessInventoryFixture", str(self.registry),
+            "-TestPythonEngineCompatibility",
         ]
         if cleanup_existing:
             command.append("-CleanupExisting")
@@ -72,6 +73,13 @@ class InvokeGodotTestTests(unittest.TestCase):
         self.processes.append(process)
         time.sleep(0.2)
         return process
+
+    def run_raw(self, extra: list[str]) -> tuple[subprocess.CompletedProcess[str], dict]:
+        completed = subprocess.run(self.runner_command([str(FAKE), "--mode", "success"]) + extra,
+                                   text=True, capture_output=True, timeout=20)
+        summaries = [line for line in completed.stdout.splitlines() if line.startswith("{")]
+        self.assertTrue(summaries, completed.stderr)
+        return completed, json.loads(summaries[-1])
 
     def test_success_writes_machine_summary(self) -> None:
         completed, summary = self.run_runner("success")
@@ -102,9 +110,25 @@ class InvokeGodotTestTests(unittest.TestCase):
         summary = json.loads([line for line in completed.stdout.splitlines() if line.startswith("{")][-1])
         self.assertEqual(completed.returncode, 2, completed.stderr)
         self.assertEqual(summary["category"], "Timeout")
-        self.assertGreaterEqual(len(summary["cleanedPids"]), 2)
-        for pid in summary["cleanedPids"]:
+        # A kill-on-close job may terminate an inherited-pipe child before the
+        # explicit identity pass observes it; the root is still recorded and
+        # the registry proves every invocation process is gone.
+        time.sleep(0.2)
+        registry_pids = [json.loads(line)["ProcessId"] for line in self.registry.read_text(encoding="utf-8").splitlines()]
+        for pid in registry_pids:
             self.assertFalse(_pid_exists(pid), f"surviving invocation PID {pid}")
+
+    def test_parent_exit_with_inherited_stream_orphan_obeys_lifecycle_deadline(self) -> None:
+        completed = subprocess.run(
+            self.runner_command([str(FAKE), "--mode", "orphan", "--spawn-child", "--inherit-stream", "--duration", "30"], timeout=1),
+            text=True, capture_output=True, timeout=20,
+        )
+        summary = json.loads([line for line in completed.stdout.splitlines() if line.startswith("{")][-1])
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(summary["category"], "Timeout")
+        time.sleep(0.2)
+        for line in self.registry.read_text(encoding="utf-8").splitlines():
+            self.assertFalse(_pid_exists(json.loads(line)["ProcessId"]))
 
     def test_lock_contention_rejects_second_runner(self) -> None:
         command = self.runner_command([str(FAKE), "--mode", "sleep", "--duration", "3"], timeout=10)
@@ -139,6 +163,26 @@ class InvokeGodotTestTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 5)
         self.assertEqual(summary["category"], "PreexistingHeadlessProcess")
         self.assertIsNone(existing.poll(), "default inventory must not kill existing processes")
+
+    def test_global_mutex_failure_fails_closed(self) -> None:
+        completed, summary = self.run_raw(["-SimulateGlobalMutexFailure"])
+        self.assertEqual(completed.returncode, 4)
+        self.assertEqual(summary["category"], "LockContention")
+
+    def test_forced_native_snapshot_path_still_guards_existing_processes(self) -> None:
+        existing = self.start_existing(self.project, headless=True)
+        completed, summary = self.run_raw(["-ForceNativeSnapshot"])
+        self.assertEqual(completed.returncode, 5)
+        self.assertEqual(summary["category"], "PreexistingHeadlessProcess")
+        self.assertIsNone(existing.poll())
+
+    def test_launch_failure_has_json_summary(self) -> None:
+        command = self.runner_command([str(FAKE), "--mode", "success"])
+        command[command.index("-GodotPath") + 1] = str(self.temp)  # existing directory; Process.Start must fail.
+        completed = subprocess.run(command, text=True, capture_output=True, timeout=20)
+        summary = json.loads([line for line in completed.stdout.splitlines() if line.startswith("{")][-1])
+        self.assertEqual(completed.returncode, 8)
+        self.assertEqual(summary["category"], "LaunchFailure")
 
 
 def _pid_exists(pid: int) -> bool:

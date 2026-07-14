@@ -16,6 +16,7 @@ def main() -> int:
     parser.add_argument("--mode", default="success")
     parser.add_argument("--duration", type=float, default=30.0)
     parser.add_argument("--spawn-child", action="store_true")
+    parser.add_argument("--inherit-stream", action="store_true")
     parser.add_argument("--child", action="store_true")
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--path")
@@ -36,9 +37,12 @@ def main() -> int:
     if args.spawn_child:
         child = subprocess.Popen(
             [sys.executable, __file__, "--child", "--duration", str(args.duration)],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdout=None if args.inherit_stream else subprocess.DEVNULL,
+            stderr=None if args.inherit_stream else subprocess.DEVNULL,
         )
         print(f"CHILD_PID={child.pid}", flush=True)
+    if args.mode == "orphan":
+        return 0
     if args.mode == "nonzero":
         print("ordinary test failure", file=sys.stderr, flush=True)
         return 17
