@@ -28,6 +28,9 @@
 - 同一缺陷由原实施 Agent 在原 session/worktree 中修复一次；该续跑仍失败才交给 `deep_reviewer`。若审查后允许第二轮修复，仍由原 Agent 继续，不切换 Agent 身份。
 - 性能全量基准只在 M2、M5、M8 执行。
 - 所有测试失败、解析错误、超时和引擎错误都必须返回非零退出码。
+- Windows 上的 `mode = read_only` Agent 不得启动 Godot；Godot 会写入项目缓存，并已在 Codex 只读沙箱中复现启动期 `signal 11` 原生崩溃。只读审核只检查代码、数据和既有证据，实际 Godot 验收由隔离的可写 worktree 或 `release_lead` 执行。
+- 同一项目的 Godot 验收默认串行执行。每次启动前后必须检查本项目 `--headless` 进程；测试超时、原生崩溃或桥接器中断时必须终止整棵进程树，不得留下后台 Godot。
+- Godot C++ backtrace、`CrashHandlerException`、Windows 应用程序错误弹窗或非零退出码一律记为本次失败；历史绿灯只能作为旁证，不能冒充本次通过。
 
 ## 项目基线
 

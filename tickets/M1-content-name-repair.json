@@ -1,0 +1,47 @@
+{
+  "id": "M1-content-name-repair",
+  "objective": "Apply the single bounded repair required by mechanical_auditor run 20260714T170307Z-M1-content-design-audit-mechanical_auditor-98c54794 to candidate 08812e71f86501ff7a1db31f8bdf94ac588705ba. In content/design/m1_phase_cards.json, map all 40 phase records one-to-one and in existing order to the 40 card records in scripts/data/stage_content_database.gd, then replace only each mismatching display_name with the exact existing source string, preserving Japanese text, Traditional/Simplified glyph choice, punctuation, owner, kind, ID, timing, emitters, topology, warning, stream ID, and fingerprint. The audit found exactly 24 mismatches caused by glyph normalization; do not rename or redesign any phase. Update the corresponding 24 phase-index display names in docs/content/m1-design-freeze.md so the markdown contains the same exact source names. Do not alter stage beats, narrative prose outside those phase-index names, or any design/runtime field. This is an audit repair, not a new content pass or plan revision. Do not launch Godot.",
+  "mode": "write",
+  "allowed_paths": [
+    "content/design/m1_phase_cards.json",
+    "docs/content/m1-design-freeze.md"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "tests/**",
+    "tools/**",
+    "docs/production/**",
+    "content/design/m1_stage_beats.json"
+  ],
+  "dependency_commit": "08812e71f86501ff7a1db31f8bdf94ac588705ba",
+  "acceptance_commands": [
+    "$cards=Get-Content -Raw content/design/m1_phase_cards.json|ConvertFrom-Json; $source=Get-Content -Raw scripts/data/stage_content_database.gd; $pattern='\\{\\s*\"name\":\\s*\"[^\"]+\"\\s*,\\s*\"hp\":\\s*\\d+\\s*,\\s*\"time\":\\s*\\d+\\s*,\\s*\"pattern\":\\s*\"[^\"]+\"\\s*,\\s*\"kind\":\\s*\"[^\"]+\"\\s*\\}'; $records=[regex]::Matches($source,$pattern); if($records.Count-ne 40-or$cards.phases.Count-ne 40){throw 'Expected 40 source and design cards'}; for($i=0;$i-lt 40;$i++){ $record=$records[$i].Value|ConvertFrom-Json; $phase=$cards.phases[$i]; if($phase.display_name-cne$record.name-or$phase.kind-cne$record.kind){throw \"Card mapping mismatch at $i $($phase.id)\"} }; Write-Host 'M1_CARD_NAMES=pass'",
+    "$cards=Get-Content -Raw content/design/m1_phase_cards.json|ConvertFrom-Json; $doc=Get-Content -Raw docs/content/m1-design-freeze.md; foreach($phase in $cards.phases){if(-not$doc.Contains([string]$phase.display_name)){throw \"Markdown missing $($phase.id) exact name\"}}; Write-Host 'M1_MARKDOWN_NAMES=pass'",
+    "$changed=@(git status --porcelain|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $outside=@($changed|Where-Object{$_-notin @('content/design/m1_phase_cards.json','docs/content/m1-design-freeze.md')}); if($outside.Count-ne 0){throw \"Outside changes: $($outside -join ',')\"}",
+    "git diff --check"
+  ],
+  "output_requirements": [
+    "Report the exact 24 repaired phase IDs with old and exact source display_name",
+    "Confirm all 40 phase names and kinds now match stage_content_database.gd one-to-one and in order",
+    "Confirm JSON fields other than display_name are unchanged and markdown changes are limited to corresponding index names",
+    "Report every acceptance command and exit code, exact changed files, and zero Godot launches",
+    "Confirm no plan, stage beat, runtime, test, audio, asset, ticket, or production-ledger file changed"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "The mechanical audit approved every count, owner, order, kind, stream, fingerprint, stage identity, Hard topology, warning, and markdown-scope check except exact display-name glyph preservation.",
+    "The repair must copy exact decoded source strings rather than manually translating or normalizing glyphs.",
+    "This is the original danmaku_director's one bounded post-review repair. The release lead will commit and re-audit; do not commit or spawn subagents.",
+    "Do not launch Godot; this task is pure JSON/markdown correction."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}

@@ -1,0 +1,56 @@
+{
+  "id": "M1-gameplay-systems-static-review",
+  "objective": "Complete a strictly read-only static semantic review of candidate cb66d261a25df71d56cb5abdcdd5d8d06da69414 after the prior executable review was aborted because Godot 4.7 crashed at process startup in the Codex read-only sandbox. Do not launch Godot or any import-producing executable. Review the full diff from b1b5e66a4482321435ceebc4d25870c1b3a542fb and inspect production code plus tests. Verify deterministic and bounded player-bullet behavior, persistent-laser repeat cooldown/max-hit retirement, returning-blade outbound/return hit ledger, stable enemy target keys, distance damage, homing acquisition, operator precedence, BulletWorld state compatibility, deathbomb versus actual-miss timing, spell begin/invalidate/finish lifecycle, seal multiplier/reset semantics, Continue classification scope, authored-drop RNG independence and legacy isolation, gameplay-ledger validation/snapshot/restore, and the explicit M0 baseline compatibility branch. Verify the new TTK test advances the production executor, BulletWorld update, and collision path rather than calculating metadata; verify the Phase 8 heuristic removal is covered by that stronger behavior test. Treat the implementation Agent and release-lead evidence as historical evidence only: implementation/root runs both reported TTK [937, 940, 968, 918, 961, 949], mean 945.5, max deviation 2.909 percent; M0 replay 30/60/120 hashes matched; smoke passed. Do not claim this review itself executed them. The two startup signal-11 crashes from the aborted review are an environment/test-harness blocker to be repaired separately, not permission to ignore semantic defects. Return GATE: APPROVE or GATE: REPAIR for the code candidate; list exact file/line blockers and the smallest remediation. Do not edit files.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "autoload/game_manager.gd",
+    "scripts/main.gd",
+    "scripts/data/game_database.gd",
+    "scripts/player/player_shot_executor.gd",
+    "scripts/runtime/item_reward_system.gd",
+    "scripts/runtime/gameplay_score_system.gd",
+    "scripts/runtime/bullet_world.gd",
+    "tests/assert_m1_gameplay_systems.gd",
+    "tests/assert_m1_shot_mechanics.gd",
+    "tests/assert_phase8_regressions.gd",
+    "tests/assert_m0_replay_runtime.gd"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "content/**",
+    "docs/**",
+    "scenes/**",
+    "scripts/content/**",
+    "scripts/data/stage_content_database.gd",
+    "scripts/replay/**",
+    "scripts/ui/**",
+    "tests/fixtures/**"
+  ],
+  "dependency_commit": "cb66d261a25df71d56cb5abdcdd5d8d06da69414",
+  "acceptance_commands": [
+    "git diff b1b5e66a4482321435ceebc4d25870c1b3a542fb..HEAD --check",
+    "$changed=@(git status --porcelain); if($changed.Count-ne 0){throw \"Read-only review changed files: $($changed -join ',')\"}",
+    "$paths=@(git diff --name-only b1b5e66a4482321435ceebc4d25870c1b3a542fb..HEAD); $allowed=@('autoload/game_manager.gd','scripts/data/game_database.gd','scripts/main.gd','scripts/player/player_shot_executor.gd','scripts/runtime/gameplay_score_system.gd','scripts/runtime/item_reward_system.gd','tests/assert_m1_gameplay_systems.gd','tests/assert_m1_shot_mechanics.gd','tests/assert_phase8_regressions.gd'); $outside=@($paths|Where-Object{$_-notin$allowed}); if($outside.Count-ne 0){throw \"Candidate changed outside ticket: $($outside -join ',')\"}"
+  ],
+  "output_requirements": [
+    "Begin summary with GATE: APPROVE or GATE: REPAIR and state explicitly that no Godot command was run",
+    "Report blocking findings in severity order with exact file and line evidence, or explicitly state no blocking semantic findings",
+    "Audit all six shot behaviors, hit-ledger bounds and retirement paths, TTK test fidelity, deterministic drops, deathbomb/miss, capture, multiplier, Continue, snapshot/restore, and M0 compatibility",
+    "Separate static conclusions, historical passing evidence, and the aborted review's environment-level signal-11 crashes",
+    "Report all three acceptance command exit codes and confirm zero changed files"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "The earlier core_simulation review was manually terminated after two distinct Godot scripts crashed before script output with the same C++ signal-11 backtrace in a read-only sandbox. Its incomplete session is not a valid gate.",
+    "Twenty-four stale headless Godot processes from July 9 were also removed; no headless process remains. Do not launch another one in this ticket.",
+    "A separate test_performance ticket will add timeout and process-tree cleanup before any further executable M1 validation.",
+    "This review must not weaken or redesign M1; it decides only whether the code candidate has a semantic blocker."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}
