@@ -3,10 +3,10 @@ class_name GameDatabase
 
 const SHOT_PROFILE_FIELDS := {
 	"ofuda_trace": {"hud_name": "Ofuda Trace", "type_label": "Type A", "pattern_id": "miko_tracking_ofuda", "bullet_type": "homing", "fire_interval_frames": 3, "base_damage": 1.2, "bullet_speed": 5.4, "coverage": "wide tracking", "focused_damage": "low", "difficulty_hint": "safe learning shot", "color": Color(0.31, 1.0, 0.55)},
-	"yin_yang_focus": {"hud_name": "Yin-Yang Focus", "type_label": "Type B", "pattern_id": "miko_yinyang_focus", "bullet_type": "linear", "fire_interval_frames": 4, "base_damage": 4.3, "bullet_speed": 9.2, "coverage": "narrow forward", "focused_damage": "medium", "difficulty_hint": "focused boss route", "color": Color(1.0, 0.31, 0.31)},
-	"stardust_spread": {"hud_name": "Stardust Spread", "type_label": "Type A", "pattern_id": "magician_stardust_spread", "bullet_type": "spread", "fire_interval_frames": 3, "base_damage": 1.93, "bullet_speed": 7.4, "coverage": "wide close range", "focused_damage": "medium", "difficulty_hint": "screen coverage route", "color": Color(0.71, 0.31, 1.0)},
-	"magic_laser": {"hud_name": "Magic Laser", "type_label": "Type B", "pattern_id": "magician_magic_laser", "bullet_type": "linear", "fire_interval_frames": 5, "base_damage": 3.2, "bullet_speed": 11.0, "coverage": "straight piercing", "focused_damage": "high", "difficulty_hint": "boss damage route", "color": Color(1.0, 0.31, 0.31)},
-	"sword_wave_fan": {"hud_name": "Sword Wave Fan", "type_label": "Type A", "pattern_id": "swordswoman_wave_fan", "bullet_type": "spread", "fire_interval_frames": 3, "base_damage": 1.81, "bullet_speed": 8.0, "coverage": "midrange fan", "focused_damage": "medium", "difficulty_hint": "aggressive screen control", "color": Color(0.71, 0.31, 1.0)},
+	"yin_yang_focus": {"hud_name": "Yin-Yang Focus", "type_label": "Type B", "pattern_id": "miko_yinyang_focus", "bullet_type": "linear", "fire_interval_frames": 4, "base_damage": 3.51, "bullet_speed": 9.2, "coverage": "narrow forward", "focused_damage": "medium", "difficulty_hint": "focused boss route", "color": Color(1.0, 0.31, 0.31)},
+	"stardust_spread": {"hud_name": "Stardust Spread", "type_label": "Type A", "pattern_id": "magician_stardust_spread", "bullet_type": "spread", "fire_interval_frames": 3, "base_damage": 3.59, "bullet_speed": 7.4, "coverage": "wide close range", "focused_damage": "medium", "difficulty_hint": "screen coverage route", "color": Color(0.71, 0.31, 1.0)},
+	"magic_laser": {"hud_name": "Magic Laser", "type_label": "Type B", "pattern_id": "magician_magic_laser", "bullet_type": "linear", "fire_interval_frames": 5, "base_damage": 1.66, "bullet_speed": 11.0, "coverage": "straight piercing", "focused_damage": "high", "difficulty_hint": "boss damage route", "color": Color(1.0, 0.31, 0.31)},
+	"sword_wave_fan": {"hud_name": "Sword Wave Fan", "type_label": "Type A", "pattern_id": "swordswoman_wave_fan", "bullet_type": "spread", "fire_interval_frames": 3, "base_damage": 2.78, "bullet_speed": 8.0, "coverage": "midrange fan", "focused_damage": "medium", "difficulty_hint": "aggressive screen control", "color": Color(0.71, 0.31, 1.0)},
 	"returning_spirit_blades": {"hud_name": "Returning Spirit Blades", "type_label": "Type B", "pattern_id": "swordswoman_returning_blades", "bullet_type": "homing", "fire_interval_frames": 4, "base_damage": 2.68, "bullet_speed": 6.4, "coverage": "returning homing blades", "focused_damage": "medium", "difficulty_hint": "mobile routing shot", "color": Color(0.31, 1.0, 0.55)},
 }
 
@@ -176,7 +176,8 @@ const SCORING_RULES := {
 	"point_base": 10,
 	"top_collection_multiplier": 2.0,
 	"night_festival_seal_base": 1000,
-	"night_festival_seal_step": 0.05,
+	"night_festival_seal_step": 0.1,
+	"spell_capture_base": 100000,
 	"spell_card_no_miss_bonus": 100000,
 	"spell_card_no_bomb_bonus": 50000,
 }

@@ -38,23 +38,15 @@ func _run() -> void:
 
 	var db = load("res://scripts/data/game_database.gd").new()
 	var shot_executor = load("res://scripts/player/player_shot_executor.gd").new()
-	var hit_factors := {
-		"ofuda_trace": 0.88, "yin_yang_focus": 0.98, "stardust_spread": 0.75,
-		"magic_laser": 0.98, "sword_wave_fan": 0.80, "returning_spirit_blades": 0.90,
-	}
-	var minimum_dps := INF
-	var maximum_dps := 0.0
-	for shot_id in hit_factors:
+	var behavior_kinds := {}
+	for shot_id in ["ofuda_trace", "yin_yang_focus", "stardust_spread", "magic_laser", "sword_wave_fan", "returning_spirit_blades"]:
 		var profile: Dictionary = db.shot_profile_by_id(shot_id)
 		var specs: Array = shot_executor.fire_pattern(profile, 5, true, Vector2(360, 800))
-		var salvo_damage := 0.0
+		_assert(not specs.is_empty(), "%s must emit a focused behavior pattern." % shot_id)
 		for spec in specs:
-			salvo_damage += float(spec.damage)
-		var effective_dps: float = salvo_damage * 60.0 / float(profile.fire_interval_frames) * float(hit_factors[shot_id])
-		minimum_dps = minf(minimum_dps, effective_dps)
-		maximum_dps = maxf(maximum_dps, effective_dps)
-	_assert(minimum_dps >= 140.0 and maximum_dps <= 150.0, "Six-shot effective DPS must remain in the 140-150 balance envelope.")
-	_assert(maximum_dps / minimum_dps <= 1.08, "No shot type may exceed another by more than 8% effective DPS.")
+			var kind := String(spec.get("behavior", {}).get("kind", "direct"))
+			behavior_kinds[kind] = true
+	_assert(behavior_kinds.has("tracking_ofuda") and behavior_kinds.has("distance_damage") and behavior_kinds.has("sustained_laser") and behavior_kinds.has("returning_blade"), "Six-shot profiles must retain distinct runtime behavior families; balance is verified by the M1 collision TTK benchmark.")
 	for stage in range(1, 7):
 		var spell_hp: float = gm.balanced_boss_card_hp(stage, 30.0, "spell")
 		var required_dps: float = spell_hp / 30.0

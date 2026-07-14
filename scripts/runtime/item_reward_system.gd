@@ -70,9 +70,9 @@ func apply_collection(item_type: String, game_manager_ref: Object, collection_y:
 			resource_delta["lives"] = int(game_manager_ref.lives) - before_lives
 			resource_delta["life_fragments"] = int(game_manager_ref.life_fragments) - before_fragments
 		"night_festival_seal":
-			game_manager_ref.night_festival_seals += 1
+			var multiplier: float = float(game_manager_ref.add_night_festival_seal()) if game_manager_ref.has_method("add_night_festival_seal") else 1.0
 			var seal_base: int = base_score if has_base_score else int(rules.get("night_festival_seal_base", 1000))
-			score_delta = int(seal_base * (1.0 + int(game_manager_ref.night_festival_seals) * float(rules.get("night_festival_seal_step", 0.05))))
+			score_delta = int(seal_base * multiplier)
 			resource_delta["night_festival_seals"] = 1
 		"full_power":
 			var before_power: int = int(game_manager_ref.shared_power)

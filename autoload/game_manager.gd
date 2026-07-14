@@ -102,6 +102,18 @@ var bombs: int = PLAYER_INITIAL_BOMBS
 var life_fragments: int = 0
 var bomb_fragments: int = 0
 var night_festival_seals: int = 0
+var night_festival_multiplier: float = 1.0
+var highest_night_festival_multiplier: float = 1.0
+var spell_capture_active: bool = false
+var spell_capture_invalidated: bool = false
+var spell_capture_invalid_reason: String = ""
+var spell_capture_card_id: String = ""
+var spell_capture_base_value: int = 0
+var spell_capture_total_frames: float = 1.0
+var last_capture_result: Dictionary = {}
+var run_spell_attempts: int = 0
+var run_spell_captures: int = 0
+var continues_used: int = 0
 var current_stage: int = 1
 var state: String = STATE_TITLE
 var selected_protagonist_id: String = DEFAULT_PROTAGONIST_ID
@@ -113,6 +125,7 @@ var pause_return_state: String = STATE_STAGE
 var settings_return_state: String = STATE_TITLE
 var settings: Dictionary = DEFAULT_SETTINGS.duplicate(true)
 var _database = load("res://scripts/data/game_database.gd").new()
+var _score_system = load("res://scripts/runtime/gameplay_score_system.gd").new()
 
 func power_level() -> int:
 	for i in range(POWER_THRESHOLDS.size()):
@@ -185,6 +198,30 @@ func reset_run_config() -> void:
 func unlock_stage(stage: int) -> void:
 	highest_reached_stage = maxi(highest_reached_stage, clampi(stage, 1, stage_count()))
 
+func add_night_festival_seal() -> float:
+	return _score_system.apply_night_festival_seal(self)
+
+func begin_spell_capture(card_id: String, base_value: int, total_frames: float) -> void:
+	_score_system.begin_spell(self, card_id, base_value, total_frames)
+
+func invalidate_spell_capture(reason: String) -> void:
+	_score_system.invalidate_spell(self, reason)
+
+func record_bomb_used() -> void:
+	_score_system.record_bomb(self)
+
+func record_actual_miss() -> void:
+	_score_system.record_actual_miss(self)
+
+func finish_spell_capture(remaining_frames: float, timed_out: bool = false) -> Dictionary:
+	return _score_system.finish_spell(self, remaining_frames, timed_out)
+
+func record_continue() -> void:
+	continues_used += 1
+
+func clear_classification() -> String:
+	return "practice" if practice_mode else ("1cc" if continues_used == 0 else "continued")
+
 func enter_pause(from_state: String) -> void:
 	pause_return_state = from_state
 	state = STATE_PAUSED
@@ -204,4 +241,11 @@ func reset():
 	lives = PLAYER_INITIAL_LIVES; bombs = PLAYER_INITIAL_BOMBS
 	life_fragments = 0; bomb_fragments = 0
 	night_festival_seals = 0
+	night_festival_multiplier = 1.0
+	highest_night_festival_multiplier = 1.0
+	spell_capture_active = false; spell_capture_invalidated = false
+	spell_capture_invalid_reason = ""; spell_capture_card_id = ""
+	spell_capture_base_value = 0; spell_capture_total_frames = 1.0
+	last_capture_result = {}; run_spell_attempts = 0; run_spell_captures = 0
+	continues_used = 0
 	current_stage = 1; state = STATE_TITLE
