@@ -1,0 +1,47 @@
+{
+  "id": "M1-godot-test-guard-static-review",
+  "objective": "Perform a bounded read-only static safety review of candidate 899fd938fc76deb92b3546f0e2105e8adc17b2c4. Do not launch Godot and do not repeat the seven fake-process tests. Decide whether tools/testing/invoke_godot_test.ps1 is safe enough to authorize exactly one release-lead real smoke. Inspect the complete invocation lifecycle: Windows argument quoting and Godot option ordering; per-project mutex behavior; exact association of --path with the resolved project; executable scoping; CIM denial and native x64 process-snapshot correctness; descendant discovery; PID de-duplication and reuse exposure; launch failure classification; hard timeout coverage before launch, while the parent runs, after parent exit, while redirected streams drain, and during cleanup; prevention of broad or collateral termination; cleanup verification; fatal-output matching; machine-readable summary and exit-code propagation. Inspect whether the tests actually exercise the safety claims or leave material blind spots. Return GATE: APPROVE only if no correctness or safety blocker remains; otherwise return GATE: REPAIR with severity, exact file/line, a concrete failure scenario, and the smallest bounded correction. Do not review gameplay, content, or the project plan.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "tools/testing/invoke_godot_test.ps1",
+    "tools/testing/tests/fake_engine.py",
+    "tools/testing/tests/test_invoke_godot_test.py"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "content/**",
+    "docs/**",
+    "tests/**",
+    ".godot/**"
+  ],
+  "dependency_commit": "899fd938fc76deb92b3546f0e2105e8adc17b2c4",
+  "acceptance_commands": [
+    "$tokens=$null; $errors=$null; $null=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/testing/invoke_godot_test.ps1'),[ref]$tokens,[ref]$errors); if($errors.Count -ne 0){throw ($errors|Out-String)}; Write-Host 'POWERSHELL_PARSE=pass'",
+    "$changed=@(git diff --name-only cb66d261a25df71d56cb5abdcdd5d8d06da69414..HEAD); $expected=@('tools/testing/invoke_godot_test.ps1','tools/testing/tests/fake_engine.py','tools/testing/tests/test_invoke_godot_test.py'); if(Compare-Object $expected $changed){throw \"Unexpected candidate paths: $($changed -join ',')\"}; Write-Host 'REVIEW_SCOPE=pass'",
+    "git diff cb66d261a25df71d56cb5abdcdd5d8d06da69414..HEAD --check",
+    "if(git status --porcelain){exit 1}"
+  ],
+  "output_requirements": [
+    "Begin with GATE: APPROVE or GATE: REPAIR and state that no Godot command or fake-process suite was run",
+    "List each blocking finding by severity with exact file and line, concrete failure path, and smallest correction",
+    "Explicitly rule on hard-timeout completeness, x64 native snapshot layout, --path scoping, launch/cleanup categories, and stream-drain behavior",
+    "Separate non-blocking residual Windows limitations from merge blockers",
+    "Report all four acceptance command exit codes and zero changed files"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "The implementation Agent reached 7/7 fake-process tests after one same-session Sol/high escalation; the release lead has not launched real Godot.",
+    "A prior read-only Godot launch crashed natively before GDScript output, so this review must remain static.",
+    "The candidate branch is based on the gameplay candidate cb66d261; only commit 899fd93 is under review."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}
