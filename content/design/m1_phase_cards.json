@@ -566,7 +566,7 @@
     },
     {
       "id": "stage_1_boss_nonspell_1",
-      "display_name": "导火「狐の参道案内」",
+      "display_name": "導火「狐の参道案内」",
       "source_identity": {
         "legacy_pattern_id": "s1_lantern_nonspell",
         "encounter_slot": "boss_card_1",
@@ -928,7 +928,7 @@
     },
     {
       "id": "stage_1_boss_spell_2",
-      "display_name": "蝶符「夜祭の纸蝶」",
+      "display_name": "蝶符「夜祭の紙蝶」",
       "source_identity": {
         "legacy_pattern_id": "s1_fox_butterfly",
         "encounter_slot": "boss_card_3",
@@ -1109,7 +1109,7 @@
     },
     {
       "id": "stage_1_boss_spell_3",
-      "display_name": "结界「初夜の神罚」",
+      "display_name": "結界「初夜の神罰」",
       "source_identity": {
         "legacy_pattern_id": "s1_boundary_finale",
         "encounter_slot": "boss_card_4",
@@ -1833,7 +1833,7 @@
     },
     {
       "id": "stage_2_boss_spell_1",
-      "display_name": "泡符「铜货の泡涌き」",
+      "display_name": "泡符「銅貨の泡涌き」",
       "source_identity": {
         "legacy_pattern_id": "s2_coin_bubble",
         "encounter_slot": "boss_card_2",
@@ -2195,7 +2195,7 @@
     },
     {
       "id": "stage_2_boss_spell_3",
-      "display_name": "镜符「计り直しの水镜」",
+      "display_name": "鏡符「計り直しの水鏡」",
       "source_identity": {
         "legacy_pattern_id": "s2_abacus_mirror",
         "encounter_slot": "boss_card_4",
@@ -2376,7 +2376,7 @@
     },
     {
       "id": "stage_3_midboss_nonspell_1",
-      "display_name": "迷符「雾の足迹」",
+      "display_name": "迷符「霧の足跡」",
       "source_identity": {
         "legacy_pattern_id": "s3_mist_nonspell",
         "encounter_slot": "midboss_card_1",
@@ -2557,7 +2557,7 @@
     },
     {
       "id": "stage_3_midboss_spell_1",
-      "display_name": "记忆「戻り道の竹光」",
+      "display_name": "記憶「戻り道の竹光」",
       "source_identity": {
         "legacy_pattern_id": "s3_bamboo_blade",
         "encounter_slot": "midboss_card_2",
@@ -2738,7 +2738,7 @@
     },
     {
       "id": "stage_3_boss_nonspell_1",
-      "display_name": "雾门「见失う竹の路」",
+      "display_name": "霧門「見失う竹の路」",
       "source_identity": {
         "legacy_pattern_id": "s3_mist_nonspell",
         "encounter_slot": "boss_card_1",
@@ -3100,7 +3100,7 @@
     },
     {
       "id": "stage_3_boss_spell_2",
-      "display_name": "记忆「反転する霞」",
+      "display_name": "記憶「反転する霞」",
       "source_identity": {
         "legacy_pattern_id": "s3_memory_vortex",
         "encounter_slot": "boss_card_3",
@@ -3462,7 +3462,7 @@
     },
     {
       "id": "stage_4_midboss_nonspell_1",
-      "display_name": "风符「试しの新闻飞ばし」",
+      "display_name": "風符「試しの新聞飛ばし」",
       "source_identity": {
         "legacy_pattern_id": "s4_wind_nonspell",
         "encounter_slot": "midboss_card_1",
@@ -3643,7 +3643,7 @@
     },
     {
       "id": "stage_4_midboss_spell_1",
-      "display_name": "纸面「山路の速報」",
+      "display_name": "紙面「山路の速報」",
       "source_identity": {
         "legacy_pattern_id": "s4_newspaper_lattice",
         "encounter_slot": "midboss_card_2",
@@ -3824,7 +3824,7 @@
     },
     {
       "id": "stage_4_boss_nonspell_1",
-      "display_name": "风声「山道を塞ぐ速報」",
+      "display_name": "風声「山道を塞ぐ速報」",
       "source_identity": {
         "legacy_pattern_id": "s4_wind_nonspell",
         "encounter_slot": "boss_card_1",
@@ -4005,7 +4005,7 @@
     },
     {
       "id": "stage_4_boss_spell_1",
-      "display_name": "突风「上升気流の调べ」",
+      "display_name": "突風「上昇気流の調べ」",
       "source_identity": {
         "legacy_pattern_id": "s4_tengu_gale",
         "encounter_slot": "boss_card_2",
@@ -4186,7 +4186,7 @@
     },
     {
       "id": "stage_4_boss_spell_2",
-      "display_name": "纸符「乱舞する版纸」",
+      "display_name": "紙符「乱舞する版紙」",
       "source_identity": {
         "legacy_pattern_id": "s4_newspaper_lattice",
         "encounter_slot": "boss_card_3",
@@ -4367,7 +4367,7 @@
     },
     {
       "id": "stage_4_boss_spell_3",
-      "display_name": "报符「山顶の风号外」",
+      "display_name": "報符「山頂の風号外」",
       "source_identity": {
         "legacy_pattern_id": "s4_sky_report",
         "encounter_slot": "boss_card_4",
@@ -4548,7 +4548,7 @@
     },
     {
       "id": "stage_5_midboss_nonspell_1",
-      "display_name": "鼓声「三拍子の门」",
+      "display_name": "鼓声「三拍子の門」",
       "source_identity": {
         "legacy_pattern_id": "s5_rhythm_nonspell",
         "encounter_slot": "midboss_card_1",
@@ -4910,7 +4910,7 @@
     },
     {
       "id": "stage_5_boss_nonspell_1",
-      "display_name": "酒声「宴厅を揺らす拍子」",
+      "display_name": "酒声「宴廳を揺らす拍子」",
       "source_identity": {
         "legacy_pattern_id": "s5_rhythm_nonspell",
         "encounter_slot": "boss_card_1",
@@ -5091,7 +5091,7 @@
     },
     {
       "id": "stage_5_boss_spell_1",
-      "display_name": "鬼火「盃を照らす红雨」",
+      "display_name": "鬼火「盃を照らす紅雨」",
       "source_identity": {
         "legacy_pattern_id": "s5_oni_fire",
         "encounter_slot": "boss_card_2",
@@ -5634,7 +5634,7 @@
     },
     {
       "id": "stage_5_boss_spell_4",
-      "display_name": "醉符「尽きない宴の夜」",
+      "display_name": "酔符「尽きない宴の夜」",
       "source_identity": {
         "legacy_pattern_id": "s5_banquet_darkness",
         "encounter_slot": "boss_card_5",
@@ -5815,7 +5815,7 @@
     },
     {
       "id": "stage_5_boss_nonspell_2",
-      "display_name": "鬼声「宴后の二度打ち」",
+      "display_name": "鬼声「宴後の二度打ち」",
       "source_identity": {
         "legacy_pattern_id": "s5_rhythm_nonspell",
         "encounter_slot": "boss_card_6",
@@ -6182,7 +6182,7 @@
     },
     {
       "id": "stage_6_midboss_spell_1",
-      "display_name": "狐火「百灯の导き」",
+      "display_name": "狐火「百灯の導き」",
       "source_identity": {
         "legacy_pattern_id": "s6_final_lantern_spell",
         "encounter_slot": "midboss_card_2",
@@ -6813,7 +6813,7 @@
     },
     {
       "id": "stage_6_boss_spell_2",
-      "display_name": "夜祭「百灯最终结界」",
+      "display_name": "夜祭「百灯最終結界」",
       "source_identity": {
         "legacy_pattern_id": "s6_final_lantern_spell",
         "encounter_slot": "boss_card_3",
@@ -7022,7 +7022,7 @@
     },
     {
       "id": "stage_6_boss_spell_3",
-      "display_name": "神玉「信仰の大门」",
+      "display_name": "神玉「信仰の大門」",
       "source_identity": {
         "legacy_pattern_id": "s6_hyakki_gate",
         "encounter_slot": "boss_card_4",
@@ -7232,7 +7232,7 @@
     },
     {
       "id": "stage_6_boss_spell_4",
-      "display_name": "常夜「终わらない祭囃子」",
+      "display_name": "常夜「終わらない祭囃子」",
       "source_identity": {
         "legacy_pattern_id": "s6_festival_darkness",
         "encounter_slot": "boss_card_5",

@@ -38,13 +38,13 @@
   - 结构指纹：`lantern_queue|queue_project>single_open>aim_old_side>fork_reset|center>opposite_open_door>center|N:single_gap_queue|H:forked_gate_graph:middle_gap_splits_then_crosses|W:lamp_floor_projection`
 - `stage_1_midboss_spell_1` — 灯符「小さな祭り火」 — **spell** — stream `danmaku.m1.s1.midboss.spell.1.v1`
   - 结构指纹：`lantern_procession|number_lamps>ring_with_wedge>extinguish_nearest>diagonal_sequence|center>nearest_extinguished_lamp>diagonal_opposite|N:ordered_wedge_procession|H:braided_wedge_order:two_orders_interleave|W:numbered_lamp_wedges`
-- `stage_1_boss_nonspell_1` — 导火「狐の参道案内」 — **nonspell** — stream `danmaku.m1.s1.boss.nonspell.1.v1`
+- `stage_1_boss_nonspell_1` — 導火「狐の参道案内」 — **nonspell** — stream `danmaku.m1.s1.boss.nonspell.1.v1`
   - 结构指纹：`aimed_guidance|draw_safe_side>triple_lock>deny_old_route>central_release|center>same_side_as_old_route>opposite_player|N:guide_then_deny_old_route|H:cross_guidance_nodes:guide_line_has_cross_node|W:fox_line_then_gray_lock`
 - `stage_1_boss_spell_1` — 星符「神社星雨」 — **spell** — stream `danmaku.m1.s1.boss.spell.1.v1`
   - 结构指纹：`star_rain_queue|show_three_columns>break_to_delay>two_columns_fall>edge_refill|center>delayed_column>outer_column|N:player_delays_one_column|H:column_dependency_cycle:delay_rotates_neighbor|W:column_dependency_arrows`
-- `stage_1_boss_spell_2` — 蝶符「夜祭の纸蝶」 — **spell** — stream `danmaku.m1.s1.boss.spell.2.v1`
+- `stage_1_boss_spell_2` — 蝶符「夜祭の紙蝶」 — **spell** — stream `danmaku.m1.s1.boss.spell.2.v1`
   - 结构指纹：`paper_butterfly_axles|draw_axles>half_orbit>swap_axles>tangent_exit|center>upper_axle>lower_axle|N:counter_rotating_figure_eight|H:axis_exchange_topology:axles_swap_vertical_order|W:visible_axle_and_tangent`
-- `stage_1_boss_spell_3` — 结界「初夜の神罚」 — **spell** — stream `danmaku.m1.s1.boss.spell.3.v1`
+- `stage_1_boss_spell_3` — 結界「初夜の神罰」 — **spell** — stream `danmaku.m1.s1.boss.spell.3.v1`
   - 结构指纹：`cross_return_boundary|announce_edges>outbound_pair>cross_open>single_return_destroy|center>open_quadrant>diagonal_quadrant|N:single_return_quadrant_cycle|H:return_order_permutation:opposite_edges_become_adjacent_pair|W:edge_countdown_and_cross_shadow`
 
 ### Stage 2
@@ -55,77 +55,77 @@
   - 结构指纹：`abacus_rebound_ladder|light_rungs>outer_bounce>inner_bounce>breakable_lower_gap|center>upper_rung_end>lower_gap|N:alternating_rebound_ladder|H:rung_to_booth_reflection:middle_rung_redirects_to_side_wall|W:rung_future_path`
 - `stage_2_boss_nonspell_1` — 市符「妖市の値切り」 — **nonspell** — stream `danmaku.m1.s2.boss.nonspell.1.v1`
   - 结构指纹：`price_kill_order|show_prices>highest_closes_neighbor>kill_flips_flags>survivor_sets_exit|center>highest_price_booth>surviving_exit|N:public_three_target_order|H:neighbor_flag_flip:kill_flips_adjacent_target|W:price_and_causal_lane_flash`
-- `stage_2_boss_spell_1` — 泡符「铜货の泡涌き」 — **spell** — stream `danmaku.m1.s2.boss.spell.1.v1`
+- `stage_2_boss_spell_1` — 泡符「銅貨の泡涌き」 — **spell** — stream `danmaku.m1.s2.boss.spell.1.v1`
   - 结构指纹：`coin_bubble_exchange|number_two_layers>outer_rebounds_in>bell_releases_inner>swap_roles|center>outer_gap>inner_gap|N:two_layer_exchange|H:three_booth_exchange_cycle:layers_become_three_cycle|W:numbered_exchange_arrows`
 - `stage_2_boss_spell_2` — 道具「迷子の道具屋」 — **spell** — stream `danmaku.m1.s2.boss.spell.2.v1`
   - 结构指纹：`booth_inventory_maze|declare_inventory>fill_ghost_grid>break_removes_and_rotates>two_booths_form_exit|center>chosen_booth_diagonal>remaining_exit|N:choose_one_of_three_walls|H:inventory_dependency_maze:chosen_booth_rotates_neighbor|W:ghost_inventory_no_collision`
-- `stage_2_boss_spell_3` — 镜符「计り直しの水镜」 — **spell** — stream `danmaku.m1.s2.boss.spell.3.v1`
+- `stage_2_boss_spell_3` — 鏡符「計り直しの水鏡」 — **spell** — stream `danmaku.m1.s2.boss.spell.3.v1`
   - 结构指纹：`water_mirror_remeasure|run_source>record_ghost>flip_into_neighbor>swap_source_copy|center>mirror_axis_end>copied_lane|N:record_then_adjacent_mirror|H:mirror_axis_choice:player_kill_selects_axis|W:mirror_full_path_preview`
 
 ### Stage 3
 
-- `stage_3_midboss_nonspell_1` — 迷符「雾の足迹」 — **nonspell** — stream `danmaku.m1.s3.midboss.nonspell.1.v1`
+- `stage_3_midboss_nonspell_1` — 迷符「霧の足跡」 — **nonspell** — stream `danmaku.m1.s3.midboss.nonspell.1.v1`
   - 结构指纹：`numbered_footprint_activation|show_all_footprints>activate_one_lock>afterimage_gate>activate_three_clear|center>footprint_1>footprint_3|N:activation_in_spawn_order|H:symbol_group_order:shape_order_not_time_order|W:number_shape_countdowns`
-- `stage_3_midboss_spell_1` — 记忆「戻り道の竹光」 — **spell** — stream `danmaku.m1.s3.midboss.spell.1.v1`
+- `stage_3_midboss_spell_1` — 記憶「戻り道の竹光」 — **spell** — stream `danmaku.m1.s3.midboss.spell.1.v1`
   - 结构指纹：`reverse_bamboo_memory|preview_forward>flip_arrow>activate_reverse>afterimage_next_corridor|center>blade_destination>next_source|N:preview_forward_activate_reverse|H:paired_reverse_corridors:two_paths_reverse_in_opposite_order|W:full_reverse_path_preview`
-- `stage_3_boss_nonspell_1` — 雾门「见失う竹の路」 — **nonspell** — stream `danmaku.m1.s3.boss.nonspell.1.v1`
+- `stage_3_boss_nonspell_1` — 霧門「見失う竹の路」 — **nonspell** — stream `danmaku.m1.s3.boss.nonspell.1.v1`
   - 结构指纹：`fog_gate_selection|project_three_routes>publish_symbol>wrong_gates_countdown>correct_gate_window|center>wrong_gate_decoy>correct_gate_opposite|N:public_correct_gate|H:route_symbol_rotation:correct_symbol_rotates_positions|W:all_gate_paths_visible`
 - `stage_3_boss_spell_1` — 刃符「真夜中の竹刀」 — **spell** — stream `danmaku.m1.s3.boss.spell.1.v1`
   - 结构指纹：`bamboo_slash_afterimage|draw_axis>slash_pass>rotate_afterimage>spawn_from_opposite_end|center>axis_end_A>axis_end_B|N:slash_then_rotate_afterimage|H:alternating_rotation_sign:rotation_sign_follows_symbol|W:axis_and_rotation_symbol`
-- `stage_3_boss_spell_2` — 记忆「反転する霞」 — **spell** — stream `danmaku.m1.s3.boss.spell.2.v1`
+- `stage_3_boss_spell_2` — 記憶「反転する霞」 — **spell** — stream `danmaku.m1.s3.boss.spell.2.v1`
   - 结构指纹：`memory_vortex_permutation|show_graph>record_visit>commit_memory>reverse_visited_edges|center>unvisited_node>reversed_edge_midpoint|N:visited_edges_reverse|H:two_visit_permutation:two_nodes_swap_neighbors|W:graph_preview_before_activation`
 - `stage_3_boss_spell_3` — 夜符「出口なき暗竹」 — **spell** — stream `danmaku.m1.s3.boss.spell.3.v1`
   - 结构指纹：`dark_bamboo_false_exit|show_close_ticks>close_three>afterimage_marks_last>center_reopens|center>latest_exit>center_reopen|N:four_visible_close_times|H:close_order_from_previous_route:next_order_is_previous_cross_order|W:door_numeric_countdowns`
 
 ### Stage 4
 
-- `stage_4_midboss_nonspell_1` — 风符「试しの新闻飞ばし」 — **nonspell** — stream `danmaku.m1.s4.midboss.nonspell.1.v1`
+- `stage_4_midboss_nonspell_1` — 風符「試しの新聞飛ばし」 — **nonspell** — stream `danmaku.m1.s4.midboss.nonspell.1.v1`
   - 结构指纹：`wind_arc_lane_test|preview_blue_arc>open_concavity>counter_arc_handoff>grid_closes_old_lane|center>blue_concavity>gold_concavity|N:alternating_arc_concavity|H:dual_curvature_overlap:opposite_arcs_share_transfer_window|W:curvature_center_and_lane_arrow`
-- `stage_4_midboss_spell_1` — 纸面「山路の速報」 — **spell** — stream `danmaku.m1.s4.midboss.spell.1.v1`
+- `stage_4_midboss_spell_1` — 紙面「山路の速報」 — **spell** — stream `danmaku.m1.s4.midboss.spell.1.v1`
   - 结构指纹：`headline_row_column_handoff|preview_columns>columns_fire_and_clear>rows_take_over>arc_points_to_corner|center>column_gap>row_gap_corner|N:column_to_row_window|H:grid_quarter_rotation:panels_rotate_and_reconnect|W:old_and_new_grid_overlap_preview`
-- `stage_4_boss_nonspell_1` — 风声「山道を塞ぐ速報」 — **nonspell** — stream `danmaku.m1.s4.boss.nonspell.1.v1`
+- `stage_4_boss_nonspell_1` — 風声「山道を塞ぐ速報」 — **nonspell** — stream `danmaku.m1.s4.boss.nonspell.1.v1`
   - 结构指纹：`headline_chicane|open_first_chicane>rear_arc_closes>open_second_chicane>clear_overlap|center>left_chicane>right_chicane|N:two_panel_chicane|H:branching_chicane_merge:first_panel_forks_second_merges|W:full_chicane_preview`
-- `stage_4_boss_spell_1` — 突风「上升気流の调べ」 — **spell** — stream `danmaku.m1.s4.boss.spell.1.v1`
+- `stage_4_boss_spell_1` — 突風「上昇気流の調べ」 — **spell** — stream `danmaku.m1.s4.boss.spell.1.v1`
   - 结构指纹：`updraft_arc_staves|draw_staff_notes>fire_occupied_lines>change_clef>empty_line_jumps|center>low_empty_staff>high_empty_staff|N:one_empty_staff_lane|H:staff_clef_permutation:clef_reorders_nonadjacent_lanes|W:clef_lane_mapping`
-- `stage_4_boss_spell_2` — 纸符「乱舞する版纸」 — **spell** — stream `danmaku.m1.s4.boss.spell.2.v1`
+- `stage_4_boss_spell_2` — 紙符「乱舞する版紙」 — **spell** — stream `danmaku.m1.s4.boss.spell.2.v1`
   - 结构指纹：`rotating_print_plates|show_plates_axes>rotate_plate_one>rotate_two_three>axis_lock_reconnects|center>plate_1_corner>plate_3_corner|N:sequential_plate_rotation|H:independent_rotation_axes:plate_two_rotates_about_shared_corner|W:post_rotation_outline`
-- `stage_4_boss_spell_3` — 报符「山顶の风号外」 — **spell** — stream `danmaku.m1.s4.boss.spell.3.v1`
+- `stage_4_boss_spell_3` — 報符「山頂の風号外」 — **spell** — stream `danmaku.m1.s4.boss.spell.3.v1`
   - 结构指纹：`summit_front_page|publish_lane_order>left_page_turn>middle_copies_if_alive>right_core_reveal|center>left_core>middle_core>right_core|N:left_middle_right_frontpage|H:page_order_branch:middle_page_choice_sets_final_side|W:frontpage_sequence_and_copy_shadow`
 
 ### Stage 5
 
-- `stage_5_midboss_nonspell_1` — 鼓声「三拍子の门」 — **nonspell** — stream `danmaku.m1.s5.midboss.nonspell.1.v1`
+- `stage_5_midboss_nonspell_1` — 鼓声「三拍子の門」 — **nonspell** — stream `danmaku.m1.s5.midboss.nonspell.1.v1`
   - 结构指纹：`three_beat_orb_gate|show_meter>open_left>open_center>open_right_reset|center>left_gate>center_gate>right_gate|N:three_gate_waltz|H:three_two_overlay:two_beat_cut_over_three_gates|W:fixed_tick_beat_lamps`
 - `stage_5_midboss_spell_1` — 鼓符「宴の裏打ち」 — **spell** — stream `danmaku.m1.s5.midboss.spell.1.v1`
   - 结构指纹：`offbeat_drum_cuts|preview_ring>activate_with_gap>offbeat_flip>rotate_axis_120|center>offbeat_gap>rotated_gap|N:strong_ring_offbeat_gap|H:three_two_gap_product:gap_rotates_three_while_cut_flips_two|W:dual_phase_meter`
-- `stage_5_boss_nonspell_1` — 酒声「宴厅を揺らす拍子」 — **nonspell** — stream `danmaku.m1.s5.boss.nonspell.1.v1`
+- `stage_5_boss_nonspell_1` — 酒声「宴廳を揺らす拍子」 — **nonspell** — stream `danmaku.m1.s5.boss.nonspell.1.v1`
   - 结构指纹：`banquet_table_meter|publish_four_tables>close_current_edge>cup_selects_next>flip_all_reset|center>chosen_table_side>opposite_table|N:player_selects_next_table_gap|H:adjacent_table_rotation:choice_rotates_neighbor_gap|W:table_edge_and_dependency_arrow`
-- `stage_5_boss_spell_1` — 鬼火「盃を照らす红雨」 — **spell** — stream `danmaku.m1.s5.boss.spell.1.v1`
+- `stage_5_boss_spell_1` — 鬼火「盃を照らす紅雨」 — **spell** — stream `danmaku.m1.s5.boss.spell.1.v1`
   - 结构指纹：`goblet_fire_rain|show_goblets>rain_into_cup>tangent_fire>break_connects_neighbors|center>empty_goblet>connected_tangent|N:three_goblet_tangents|H:goblet_edge_contraction:broken_node_connects_neighbors|W:goblet_tangent_preview`
 - `stage_5_boss_spell_2` — 玉符「宴の大玉ころがし」 — **spell** — stream `danmaku.m1.s5.boss.spell.2.v1`
   - 结构指纹：`rolling_orb_gate|show_gate_graph>open_adjacent>rotate_connection>diagonal_window_reset|center>adjacent_gate>diagonal_gate|N:rotating_four_gate_cycle|H:gate_matching_alternation:adjacent_and_cross_matchings_alternate|W:matching_preview_no_push`
 - `stage_5_boss_spell_3` — 太鼓「回る鬼の小路」 — **spell** — stream `danmaku.m1.s5.boss.spell.3.v1`
   - 结构指纹：`rotating_drum_alley|show_two_rings>inner_flips>outer_rotates>sixth_beat_aligns|center>inner_gap>outer_gap|N:two_ring_same_four_meter|H:true_three_two_alley:inner_flip2_outer_rotate3|W:six_cell_phase_table`
-- `stage_5_boss_spell_4` — 醉符「尽きない宴の夜」 — **spell** — stream `danmaku.m1.s5.boss.spell.4.v1`
+- `stage_5_boss_spell_4` — 酔符「尽きない宴の夜」 — **spell** — stream `danmaku.m1.s5.boss.spell.4.v1`
   - 结构指纹：`endless_toast_memory|show_table_graph>record_crossed_edge>commit_toast>fog_closes_neighbors|center>unvisited_table>remembered_edge|N:last_edge_protects_itself|H:two_edge_memory_graph:last_two_edges_define_only_exit|W:numbered_edge_memory`
-- `stage_5_boss_nonspell_2` — 鬼声「宴后の二度打ち」 — **nonspell** — stream `danmaku.m1.s5.boss.nonspell.2.v1`
+- `stage_5_boss_nonspell_2` — 鬼声「宴後の二度打ち」 — **nonspell** — stream `danmaku.m1.s5.boss.nonspell.2.v1`
   - 结构指纹：`double_strike_coda|show_two_hit_meter>primary_records_side>secondary_opposite>swap_inner_outer|center>primary_inner_gate>secondary_outer_gate|N:two_hits_opposite_gates|H:second_hit_route_transform:secondary_uses_clockwise_not_opposite|W:gold_cyan_double_meter`
 
 ### Stage 6
 
 - `stage_6_midboss_nonspell_1` — 信灯「神域の前夜祭」 — **nonspell** — stream `danmaku.m1.s6.midboss.nonspell.1.v1`
   - 结构指纹：`transformed_lantern_grid_nodes|show_triangle_graph>rotate_nodes>scripture_fires_edges>contract_broken_node|center>rotated_node>contracted_edge|N:lantern_queue_becomes_triangle_graph|H:shared_node_contraction:break_node_reconnects_remaining_edges|W:node_and_edge_poststate_preview`
-- `stage_6_midboss_spell_1` — 狐火「百灯の导き」 — **spell** — stream `danmaku.m1.s6.midboss.spell.1.v1`
+- `stage_6_midboss_spell_1` — 狐火「百灯の導き」 — **spell** — stream `danmaku.m1.s6.midboss.spell.1.v1`
   - 结构指纹：`hundred_lantern_portal_meter|show_portal_meter>rotate_entries>flip_exit_colors>sixth_beat_choice_swap|center>chosen_entry>future_exit|N:portal_exit_follows_public_meter|H:choice_conditioned_portal_swap:previous_entry_swaps_next_exits|W:stateful_portal_preview`
 - `stage_6_boss_nonspell_1` — 神声「百鬼を呼ぶ夜祭」 — **nonspell** — stream `danmaku.m1.s6.boss.nonspell.1.v1`
   - 结构指纹：`five_grammar_call_sequence|show_five_order>rotate_and_choose>preview_and_reconnect>beat_commits_graph|center>current_grammar_node>next_grammar_node|N:serial_property_transform|H:three_grammar_transaction:three_changes_commit_together|W:old_new_gate_graph`
 - `stage_6_boss_spell_1` — 灯符「神域を満たす赤提灯」 — **spell** — stream `danmaku.m1.s6.boss.spell.1.v1`
   - 结构指纹：`red_lantern_graph_rain|show_rain_nodes>rain_builds_edges>kill_deletes_reverses>cross_unique_exit|center>rain_node>white_exit|N:rain_creates_directed_edges|H:edge_reversal_on_kill:delete_one_reverse_successor|W:directed_graph_postkill_preview`
-- `stage_6_boss_spell_2` — 夜祭「百灯最终结界」 — **spell** — stream `danmaku.m1.s6.boss.spell.2.v1`
+- `stage_6_boss_spell_2` — 夜祭「百灯最終結界」 — **spell** — stream `danmaku.m1.s6.boss.spell.2.v1`
   - 结构指纹：`hundred_lantern_causal_boundary|announce_returns>return_enters_portal>afterimage_records_exit>rotate_next_quadrant|center>return_entry_quadrant>causal_exit_quadrant|N:return_sets_next_quadrant|H:two_return_causal_braid:two_entries_swap_future_quadrants|W:causal_quadrant_preview`
-- `stage_6_boss_spell_3` — 神玉「信仰の大门」 — **spell** — stream `danmaku.m1.s6.boss.spell.3.v1`
+- `stage_6_boss_spell_3` — 神玉「信仰の大門」 — **spell** — stream `danmaku.m1.s6.boss.spell.3.v1`
   - 结构指纹：`faith_orb_shared_gate|show_matching>bead_traverses_edge>kill_contracts_node>sixth_beat_commits|center>chosen_orb_node>matched_exit>faith_center|N:five_node_matching|H:matching_plus_three_two_commit:node_contraction_commits_on_sixth|W:queued_matching_poststate`
-- `stage_6_boss_spell_4` — 常夜「终わらない祭囃子」 — **spell** — stream `danmaku.m1.s6.boss.spell.4.v1`
+- `stage_6_boss_spell_4` — 常夜「終わらない祭囃子」 — **spell** — stream `danmaku.m1.s6.boss.spell.4.v1`
   - 结构指纹：`eternal_festival_graph_memory|show_history_graph>fire_reachable_arcs>proof_deletes_edge>rotate_safe_tree|center>unused_grammar_node>safe_tree_root|N:delete_one_grammar_edge_per_round|H:history_edge_symmetric_difference:current_choice_xor_previous_choice|W:old_choice_xor_preview`
 - `stage_6_boss_nonspell_2` — 神声「夜明け前の再祝言」 — **nonspell** — stream `danmaku.m1.s6.boss.nonspell.2.v1`
   - 结构指纹：`dawn_reprise_transform|show_reverse_proofs>open_last_proof_node>kill_transforms_next>dawn_arc_exit|center>last_proof_node>first_proof_node>dawn_exit|N:reverse_proof_reprise|H:run_history_reprise:actual_proof_order_reversed|W:full_reverse_run_history`
