@@ -12,3 +12,8 @@ Do not modify build infrastructure, release packaging, unrelated UI, or approved
 Return authored decisions, evidence criteria, changed files, failures, and residual risk.
 Do not spawn subagents, commit, merge, or rewrite the project plan.
 """
+
+[[repair_escalations]]
+round = 1
+model = "gpt-5.6-sol"
+model_reasoning_effort = "max"

@@ -10,3 +10,13 @@ Do not change simulation clocks, collision semantics, persistence schemas, build
 Ensure every named spell has an intentional authored identity and every content ID is reachable or explicitly removed.
 Return changed files, validation evidence, failures, and residual risk. Do not spawn subagents or rewrite the project plan.
 """
+
+[[repair_escalations]]
+round = 1
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+
+[[repair_escalations]]
+round = 2
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"

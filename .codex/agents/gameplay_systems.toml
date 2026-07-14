@@ -10,3 +10,13 @@ Do not modify simulation clocks, replay serialization, art assets, packaging, or
 Preserve deterministic behavior and add the smallest behavioral regression tests required by the ticket.
 Return changed files, tests and results, failures, and residual risk. Do not spawn subagents or rewrite the project plan.
 """
+
+[[repair_escalations]]
+round = 1
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"
+
+[[repair_escalations]]
+round = 2
+model = "gpt-5.6-sol"
+model_reasoning_effort = "max"

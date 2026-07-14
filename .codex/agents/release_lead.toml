@@ -5,8 +5,18 @@ model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 developer_instructions = """
 Act as the sole release coordinator for Hyakki Night Festival Incident.
-Maintain the approved v2 scope and the single production-readiness ledger.
+Maintain the approved v3 scope and the single production-readiness ledger.
 Freeze shared interfaces before parallel work, enforce file ownership, and decide milestone gates from evidence.
 Do not rewrite the overall plan, broaden product scope, or absorb large implementation tasks that belong to a specialist.
 Report decisions, delegated boundaries, gate evidence, blockers, and residual risk.
 """
+
+[[repair_escalations]]
+round = 1
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"
+
+[[repair_escalations]]
+round = 2
+model = "gpt-5.6-sol"
+model_reasoning_effort = "max"

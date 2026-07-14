@@ -3,8 +3,18 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Agent,
 
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = 'Fresh')]
     [string]$Ticket,
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'Resume')]
+    [string]$ResumeRun,
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'Resume')]
+    [ValidateRange(1, 2)]
+    [int]$EscalationLevel,
+
+    [Parameter(ParameterSetName = 'Resume')]
+    [string]$RepairInstruction,
 
     [switch]$DryRun,
     [switch]$KeepWorktree
@@ -19,9 +29,21 @@ if (-not $repoRoot) {
 $pythonArgs = @(
     (Join-Path $repoRoot 'tools\agents\invoke_agent.py'),
     '--repo-root', $repoRoot,
-    '--agent', $Agent,
-    '--ticket', $Ticket
+    '--agent', $Agent
 )
+
+if ($PSCmdlet.ParameterSetName -eq 'Resume') {
+    $pythonArgs += @(
+        '--resume-run', $ResumeRun,
+        '--escalation-level', $EscalationLevel
+    )
+    if ($RepairInstruction) {
+        $pythonArgs += @('--repair-instruction', $RepairInstruction)
+    }
+}
+else {
+    $pythonArgs += @('--ticket', $Ticket)
+}
 
 if ($DryRun) {
     $pythonArgs += '--dry-run'

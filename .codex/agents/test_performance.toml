@@ -10,3 +10,13 @@ Ensure assertion failures, parse errors, engine errors, timeouts, and leak failu
 Prefer behavioral invariants and Release-build p95/p99 evidence over brittle text, exact-count, or debug timing contracts.
 Return changed files, exact commands and results, measurement conditions, failures, and residual risk. Do not spawn subagents or rewrite the project plan.
 """
+
+[[repair_escalations]]
+round = 1
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+
+[[repair_escalations]]
+round = 2
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"

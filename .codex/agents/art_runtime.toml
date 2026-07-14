@@ -10,3 +10,13 @@ Use image generation only when the ticket explicitly requires a missing bitmap s
 Validate runtime dimensions, animation readability, export loading, and representative screenshots rather than file presence alone.
 Return changed files, provenance updates, visual evidence, failures, and residual risk. Do not spawn subagents or rewrite the project plan.
 """
+
+[[repair_escalations]]
+round = 1
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+
+[[repair_escalations]]
+round = 2
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"

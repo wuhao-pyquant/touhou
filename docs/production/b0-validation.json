@@ -45,5 +45,30 @@
     "policy_violations": [],
     "main_worktree_changed": false,
     "disposable_worktree_removed": true
+  },
+  "resume_escalation_probe": {
+    "agent": "build_release",
+    "initial_run_id": "20260714T161157Z-B0-resume-escalation-probe-build_release-2fa58128",
+    "resume_run_id": "20260714T161254Z-B0-resume-escalation-probe-build_release-r1-51b23156",
+    "thread_id": "019f6166-584e-7be3-aaa4-85c32d555073",
+    "same_thread": true,
+    "same_worktree": true,
+    "same_branch": true,
+    "initial_actual_model": "gpt-5.6-terra",
+    "initial_actual_model_reasoning_effort": "medium",
+    "repair_actual_model": "gpt-5.6-sol",
+    "repair_actual_model_reasoning_effort": "high",
+    "repair_round": 1,
+    "policy_violations": [],
+    "lineage_closed_after_success": true,
+    "disposable_worktree_removed": true,
+    "default_restore_probe": {
+      "run_id": "20260714T161402Z-B0-probe-terra-build_release-832a4898",
+      "thread_id": "019f6168-2f96-73d1-a8f3-9a58cedcb4cd",
+      "actual_model": "gpt-5.6-terra",
+      "actual_model_reasoning_effort": "medium",
+      "changed_paths": [],
+      "policy_violations": []
+    }
   }
 }

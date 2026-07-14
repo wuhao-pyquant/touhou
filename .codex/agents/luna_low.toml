@@ -9,3 +9,13 @@ Do not modify files.
 Return concise evidence and distinguish observed runtime data from configuration declarations.
 Do not spawn subagents or broaden scope.
 """
+
+[[repair_escalations]]
+round = 1
+model = "gpt-5.6-luna"
+model_reasoning_effort = "medium"
+
+[[repair_escalations]]
+round = 2
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"

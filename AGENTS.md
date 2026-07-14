@@ -9,6 +9,9 @@
 - 被调度 Agent 是叶子工作者：不得生成子 Agent、创建额外计划或自动合并分支。
 - 写任务必须在桥接器创建的 `.worktrees/` 隔离工作树中执行；主工作树只由 `release_lead` 合并。
 - 每个 ticket 必须声明允许路径、禁止路径、基准提交、验收命令和最大修复轮数。
+- 首次失败后的修复必须用 `-ResumeRun <run-id> -EscalationLevel <n>` 续跑原 Agent 的同一 session、worktree、branch 和 ticket；不得创建替代 Agent 或新工作树。
+- 修复轮次只能使用该 Agent profile 的 `[[repair_escalations]]` 连续梯度，不能临时从命令行任意指定模型。
+- 修复模型仅覆盖当前续跑 turn，不改写 profile 顶层默认值；ticket 成功后续跑链关闭，下一张新 ticket 自动恢复顶层默认模型与推理强度。
 
 ## 所有权与用户改动
 
@@ -22,7 +25,7 @@
 - Ticket 层只运行直接相关测试和一个烟雾检查。
 - Milestone 合并后运行一次里程碑回归；Release 候选只运行一次完整矩阵。
 - 不以文件存在、源码文本匹配或精确弹数替代行为验证。
-- 同一缺陷由原实施 Agent 修复一次；第二次失败才交给 `deep_reviewer`。
+- 同一缺陷由原实施 Agent 在原 session/worktree 中修复一次；该续跑仍失败才交给 `deep_reviewer`。若审查后允许第二轮修复，仍由原 Agent 继续，不切换 Agent 身份。
 - 性能全量基准只在 M2、M5、M8 执行。
 - 所有测试失败、解析错误、超时和引擎错误都必须返回非零退出码。
 
