@@ -1,63 +1,64 @@
-"""A deterministic stand-in for Godot used only by invoke_godot_test tests."""
-
+"""Build the dedicated native fake engine used by the guarded-runner tests."""
 from __future__ import annotations
 
-import argparse
-import json
-import os
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--mode", default="success")
-    parser.add_argument("--duration", type=float, default=30.0)
-    parser.add_argument("--spawn-child", action="store_true")
-    parser.add_argument("--inherit-stream", action="store_true")
-    parser.add_argument("--child", action="store_true")
-    parser.add_argument("--headless", action="store_true")
-    parser.add_argument("--path")
-    parser.add_argument("--log-file")
-    args, _ = parser.parse_known_args()
+SOURCE = r'''
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Threading;
+public static class FakeGodot {
+  static string Value(string[] a,string name,string fallback) { for(int i=0;i+1<a.Length;i++)if(a[i]==name)return a[i+1];return fallback; }
+  static bool Has(string[] a,string name) { foreach(string x in a)if(x==name)return true;return false; }
+  public static int Main(string[] args) {
+    Console.WriteLine("ROOT_PID="+Process.GetCurrentProcess().Id);
+    string mode=Value(args,"--mode","success"); double seconds=Double.Parse(Value(args,"--duration","30"),System.Globalization.CultureInfo.InvariantCulture);
+    if(Has(args,"--child")){if(Has(args,"--grandchild")){var g=Process.Start(new ProcessStartInfo(Environment.GetEnvironmentVariable("COMSPEC"),"/d /c ping 127.0.0.1 -n 30 >nul"){UseShellExecute=false});Console.WriteLine("GRANDCHILD_PID="+g.Id);}Thread.Sleep(TimeSpan.FromSeconds(seconds));return 0;}
+    if(Has(args,"--spawn-child")){
+      string exe=Process.GetCurrentProcess().MainModule.FileName;
+      var p=Process.Start(new ProcessStartInfo(exe,"--child --duration "+seconds.ToString(System.Globalization.CultureInfo.InvariantCulture)){UseShellExecute=false});
+      Console.WriteLine("CHILD_PID="+p.Id);
+    }
+    if(Has(args,"--spawn-grandchild")){
+      string exe=Process.GetCurrentProcess().MainModule.FileName;
+      Process.Start(new ProcessStartInfo(exe,"--child --grandchild --duration "+seconds.ToString(System.Globalization.CultureInfo.InvariantCulture)){UseShellExecute=false});
+    }
+    if(mode=="sleep")Thread.Sleep(TimeSpan.FromSeconds(seconds));
+    if(mode=="fatal"||mode=="fatal-nonzero")Console.WriteLine("Program crashed: fake marker");
+    if(mode=="parser")Console.Error.WriteLine("Parser Error: fake marker");
+    string log=Value(args,"--log-file",null);if(log!=null)File.WriteAllText(log,"fake log\n");
+    return mode=="nonzero"||mode=="fatal-nonzero"?17:0;
+  }
+}
+'''
 
-    registry = os.environ.get("FAKE_PROCESS_REGISTRY")
-    if registry:
-        with open(registry, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps({
-                "ProcessId": os.getpid(), "ParentProcessId": os.getppid(),
-                "ExecutablePath": sys.executable, "CommandLine": " ".join(sys.argv),
-            }) + "\n")
 
-    if args.child:
-        time.sleep(args.duration)
-        return 0
-    if args.spawn_child:
-        child = subprocess.Popen(
-            [sys.executable, __file__, "--child", "--duration", str(args.duration)],
-            stdout=None if args.inherit_stream else subprocess.DEVNULL,
-            stderr=None if args.inherit_stream else subprocess.DEVNULL,
+def build(target: Path) -> None:
+    candidates = [
+        Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"),
+        Path(r"C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe"),
+    ]
+    compiler = next((path for path in candidates if path.is_file()), None)
+    if compiler is None:
+        raise RuntimeError("required C# compiler is unavailable")
+    source = target.with_suffix(".cs")
+    source.write_text(SOURCE, encoding="utf-8")
+    try:
+        subprocess.run(
+            [str(compiler), "/nologo", "/target:exe", f"/out:{target}", str(source)],
+            check=True,
+            capture_output=True,
+            text=True,
         )
-        print(f"CHILD_PID={child.pid}", flush=True)
-    if args.mode == "orphan":
-        return 0
-    if args.mode == "nonzero":
-        print("ordinary test failure", file=sys.stderr, flush=True)
-        return 17
-    if args.mode == "fatal":
-        print("Program crashed: fake native crash marker", flush=True)
-        return 0
-    if args.mode == "parser":
-        print("Parser Error: fake parse failure", file=sys.stderr, flush=True)
-        return 0
-    if args.mode == "sleep":
-        time.sleep(args.duration)
-    if args.log_file:
-        Path(args.log_file).write_text("fake engine log\n", encoding="utf-8")
-    return 0
+    finally:
+        source.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    if len(sys.argv) != 3 or sys.argv[1] != "--build":
+        raise SystemExit("usage: fake_engine.py --build TARGET.exe")
+    build(Path(sys.argv[2]).resolve())

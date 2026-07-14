@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -13,184 +14,229 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 RUNNER = ROOT / "tools" / "testing" / "invoke_godot_test.ps1"
-FAKE = Path(__file__).with_name("fake_engine.py")
+FAKE_BUILDER = Path(__file__).with_name("fake_engine.py")
 POWERSHELL = os.environ.get("POWERSHELL_EXE", "powershell.exe")
+RUN_EXPRESSION = (
+    "& $env:GTR_RUNNER -GodotPath $env:GTR_ENGINE -ProjectPath $env:GTR_PROJECT "
+    "-GodotArgumentJson $env:GTR_ARGS -TimeoutSeconds ([int]$env:GTR_TIMEOUT) "
+    "-PollMilliseconds 25 -LogFile $env:GTR_LOG -WorkerFault $env:GTR_FAULT "
+    "-CleanupExisting:([bool]::Parse($env:GTR_CLEANUP)) "
+    "-AbiCheckOnly:([bool]::Parse($env:GTR_ABI)); exit $LASTEXITCODE"
+)
 
 
 class InvokeGodotTestTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.class_temp = Path(__file__).parent / f".invoke_godot_test_{uuid.uuid4().hex}"
+        cls.class_temp.mkdir()
+        cls.engine = cls.class_temp / "fake-godot.exe"
+        subprocess.run([sys.executable, str(FAKE_BUILDER), "--build", str(cls.engine)], check=True)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.class_temp, ignore_errors=True)
+
     def setUp(self) -> None:
-        self.temp = Path(__file__).parent / f".invoke_godot_test_{uuid.uuid4().hex}"
+        self.temp = self.class_temp / uuid.uuid4().hex
         self.temp.mkdir()
-        self.registry = self.temp / "processes.jsonl"
-        self.registry.touch()
-        self.old_registry = os.environ.get("FAKE_PROCESS_REGISTRY")
-        os.environ["FAKE_PROCESS_REGISTRY"] = str(self.registry)
         self.project = self.temp / "project with spaces"
         self.project.mkdir()
-        (self.project / "project.godot").write_text("[application]\nconfig/name=\"fake\"\n", encoding="utf-8")
+        (self.project / "project.godot").write_text("[application]\n", encoding="utf-8")
         self.processes: list[subprocess.Popen[str]] = []
+        self.logs: list[Path] = []
 
     def tearDown(self) -> None:
         for process in self.processes:
             if process.poll() is None:
                 process.kill()
                 process.wait(timeout=5)
-        if self.old_registry is None:
-            os.environ.pop("FAKE_PROCESS_REGISTRY", None)
-        else:
-            os.environ["FAKE_PROCESS_REGISTRY"] = self.old_registry
-        shutil.rmtree(self.temp)
+        for log in self.logs:
+            for candidate in (log, Path(str(log) + ".stdout"), Path(str(log) + ".stderr")):
+                candidate.unlink(missing_ok=True)
+        shutil.rmtree(self.temp, ignore_errors=True)
 
-    def run_runner(self, mode: str, *, timeout: int = 5, cleanup_existing: bool = False) -> tuple[subprocess.CompletedProcess[str], dict]:
-        completed = subprocess.run(
-            self.runner_command([str(FAKE), "--mode", mode], timeout=timeout, cleanup_existing=cleanup_existing),
-            text=True, capture_output=True, timeout=20,
+    def invocation(
+        self,
+        *engine_args: str,
+        timeout: int = 5,
+        fault: str = "",
+        cleanup: bool = False,
+        abi: bool = False,
+        powershell: str = POWERSHELL,
+        engine: Path | None = None,
+    ) -> tuple[list[str], dict[str, str]]:
+        env = os.environ.copy()
+        log = Path(env.get("TEMP", str(self.temp))) / f"gtr-{uuid.uuid4().hex}.log"
+        self.logs.append(log)
+        env.update(
+            GTR_RUNNER=str(RUNNER),
+            GTR_ENGINE=str(engine or self.engine),
+            GTR_PROJECT=str(self.project),
+            GTR_ARGS=json.dumps(list(engine_args) or ["--mode", "success"]),
+            GTR_TIMEOUT=str(timeout),
+            GTR_LOG=str(log),
+            GTR_FAULT=fault,
+            GTR_CLEANUP=str(cleanup),
+            GTR_ABI=str(abi),
         )
-        summaries = [line for line in completed.stdout.splitlines() if line.startswith("{")]
-        self.assertTrue(summaries, msg=f"missing JSON summary\nstdout={completed.stdout}\nstderr={completed.stderr}")
-        return completed, json.loads(summaries[-1])
+        return [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", RUN_EXPRESSION], env
 
-    def runner_command(self, engine_args: list[str], *, timeout: int = 5, cleanup_existing: bool = False) -> list[str]:
-        command = [
-            POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(RUNNER),
-            "-GodotPath", sys.executable, "-ProjectPath", str(self.project),
-            "-GodotArgumentJson", json.dumps(engine_args), "-TimeoutSeconds", str(timeout),
-            "-PollMilliseconds", "50", "-LogFile", str(self.project / "runner.log"),
-            "-ProcessInventoryFixture", str(self.registry),
-            "-TestPythonEngineCompatibility",
-        ]
-        if cleanup_existing:
-            command.append("-CleanupExisting")
-        return command
+    def execute(self, *engine_args: str, **options: object) -> tuple[subprocess.CompletedProcess[str], dict]:
+        command, env = self.invocation(*engine_args, **options)
+        completed = subprocess.run(command, env=env, text=True, capture_output=True, timeout=20)
+        lines = [line for line in completed.stdout.splitlines() if line.startswith("{")]
+        self.assertEqual(len(lines), 1, f"stdout={completed.stdout}\nstderr={completed.stderr}")
+        return completed, json.loads(lines[0])
 
-    def start_existing(self, project: Path | None, *, headless: bool = True) -> subprocess.Popen[str]:
-        command = [sys.executable, str(FAKE), "--mode", "sleep", "--duration", "30"]
-        if headless:
-            command.append("--headless")
-        if project is not None:
-            command.extend(["--path", str(project)])
-        process = subprocess.Popen(command, text=True)
-        self.processes.append(process)
-        time.sleep(0.2)
-        return process
+    def assert_category(self, expected_code: int, expected: str, *args: str, **options: object) -> dict:
+        completed, summary = self.execute(*args, **options)
+        self.assertEqual((completed.returncode, summary["category"]), (expected_code, expected), completed.stderr)
+        return summary
 
-    def run_raw(self, extra: list[str]) -> tuple[subprocess.CompletedProcess[str], dict]:
-        completed = subprocess.run(self.runner_command([str(FAKE), "--mode", "success"]) + extra,
-                                   text=True, capture_output=True, timeout=20)
-        summaries = [line for line in completed.stdout.splitlines() if line.startswith("{")]
-        self.assertTrue(summaries, completed.stderr)
-        return completed, json.loads(summaries[-1])
+    def assert_recorded_processes_gone(self, summary: dict) -> None:
+        capture = Path(str(summary["logPath"]) + ".stdout")
+        pids = [int(value) for value in re.findall(r"(?:ROOT|CHILD|GRANDCHILD)_PID=(\d+)", capture.read_text(errors="replace"))]
+        self.assertTrue(pids, "fake engine never reached executable code")
+        time.sleep(0.1)
+        for pid in pids:
+            result = subprocess.run(
+                [POWERSHELL, "-NoProfile", "-Command", f"[bool](Get-Process -Id {pid} -ErrorAction SilentlyContinue)"],
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            self.assertEqual(result.stdout.strip().lower(), "false", f"surviving contained PID {pid}")
 
-    def test_success_writes_machine_summary(self) -> None:
-        completed, summary = self.run_runner("success")
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertEqual(summary["category"], "Success")
-        self.assertEqual(summary["status"], "passed")
-        self.assertEqual(Path(summary["project"]), self.project.resolve())
-        self.assertTrue(summary["logPath"])
+    # Frozen blocker matrix 01: supervisor deadline includes a post-READY worker hang,
+    # kills the worker, and releases the held Global mutex for the next invocation.
+    def test_01_supervisor_bounds_hang_and_releases_mutex(self) -> None:
+        self.assert_category(2, "Timeout", fault="hang-after-go", timeout=1)
+        self.assert_category(0, "Success", abi=True)
 
-    def test_nonzero_exit_is_failure(self) -> None:
-        completed, summary = self.run_runner("nonzero")
-        self.assertEqual(completed.returncode, 1)
-        self.assertEqual(summary["category"], "ProcessFailure")
-        self.assertEqual(summary["processExitCode"], 17)
+    # 02: malformed/partial protocol can produce only the public JSON result.
+    def test_02_partial_protocol_yields_one_json(self) -> None:
+        completed, _ = self.execute(fault="partial", timeout=1)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertEqual(len([line for line in completed.stdout.splitlines() if line.startswith("{")]), 1)
 
-    def test_fatal_pattern_with_zero_exit_is_failure(self) -> None:
-        completed, summary = self.run_runner("fatal")
-        self.assertEqual(completed.returncode, 3)
-        self.assertEqual(summary["category"], "FatalOutput")
-        self.assertEqual(summary["processExitCode"], 0)
-
-    def test_timeout_kills_descendant(self) -> None:
-        # The fake engine creates a child then keeps both processes alive.
-        command = self.runner_command(
-            [str(FAKE), "--mode", "sleep", "--spawn-child", "--duration", "30"], timeout=1
-        )
-        completed = subprocess.run(command, text=True, capture_output=True, timeout=20)
-        summary = json.loads([line for line in completed.stdout.splitlines() if line.startswith("{")][-1])
-        self.assertEqual(completed.returncode, 2, completed.stderr)
-        self.assertEqual(summary["category"], "Timeout")
-        # A kill-on-close job may terminate an inherited-pipe child before the
-        # explicit identity pass observes it; the root is still recorded and
-        # the registry proves every invocation process is gone.
-        time.sleep(0.2)
-        registry_pids = [json.loads(line)["ProcessId"] for line in self.registry.read_text(encoding="utf-8").splitlines()]
-        for pid in registry_pids:
-            self.assertFalse(_pid_exists(pid), f"surviving invocation PID {pid}")
-
-    def test_parent_exit_with_inherited_stream_orphan_obeys_lifecycle_deadline(self) -> None:
-        completed = subprocess.run(
-            self.runner_command([str(FAKE), "--mode", "orphan", "--spawn-child", "--inherit-stream", "--duration", "30"], timeout=1),
-            text=True, capture_output=True, timeout=20,
-        )
-        summary = json.loads([line for line in completed.stdout.splitlines() if line.startswith("{")][-1])
-        self.assertEqual(completed.returncode, 2)
-        self.assertEqual(summary["category"], "Timeout")
-        time.sleep(0.2)
-        for line in self.registry.read_text(encoding="utf-8").splitlines():
-            self.assertFalse(_pid_exists(json.loads(line)["ProcessId"]))
-
-    def test_lock_contention_rejects_second_runner(self) -> None:
-        command = self.runner_command([str(FAKE), "--mode", "sleep", "--duration", "3"], timeout=10)
-        first = subprocess.Popen(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # 03: denial, contention, and abandonment are fail-closed LockContention paths.
+    def test_03_global_mutex_denial_contention_abandonment(self) -> None:
+        for fault in ("global-denied", "global-abandoned"):
+            with self.subTest(fault=fault):
+                self.assert_category(4, "LockContention", fault=fault)
+        command, env = self.invocation("--mode", "sleep", "--duration", "2", timeout=8)
+        first = subprocess.Popen(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         try:
             time.sleep(0.5)
-            completed, summary = self.run_runner("success")
-            self.assertEqual(completed.returncode, 4)
-            self.assertEqual(summary["category"], "LockContention")
+            self.assert_category(4, "LockContention")
         finally:
-            stdout, stderr = first.communicate(timeout=15)
-            self.assertEqual(first.returncode, 0, f"stdout={stdout}\nstderr={stderr}")
+            first.communicate(timeout=12)
 
-    def test_path_scoping_and_no_collateral_termination(self) -> None:
-        same_project = self.start_existing(self.project, headless=True)
-        other_project = self.temp / "other"
-        other_project.mkdir()
-        (other_project / "project.godot").write_text("[application]\n", encoding="utf-8")
-        other_headless = self.start_existing(other_project, headless=True)
-        same_project_not_headless = self.start_existing(self.project, headless=False)
+    # 04: a JOB_LIST setup failure is LaunchFailure and never starts the fake engine.
+    def test_04_job_attribute_failure_never_resumes(self) -> None:
+        summary = self.assert_category(8, "LaunchFailure", fault="job-attribute")
+        self.assertIsNone(summary["processExitCode"])
 
-        completed, summary = self.run_runner("success", cleanup_existing=True)
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertEqual(summary["category"], "Success")
-        self.assertIsNotNone(same_project.poll(), "scoped stale headless process was not removed")
-        self.assertIsNone(other_headless.poll(), "other project process was killed")
-        self.assertIsNone(same_project_not_headless.poll(), "non-headless process was killed")
+    # 05: failure immediately after atomic create is classified and contained.
+    def test_05_atomic_create_pre_resume_failure_is_contained(self) -> None:
+        summary = self.assert_category(8, "LaunchFailure", fault="post-create-kill")
+        self.assertIsNone(summary["processExitCode"])
+        self.assertFalse(Path(str(summary["logPath"]) + ".stdout").read_text(errors="replace").strip())
 
-    def test_preexisting_same_project_headless_fails_without_cleanup(self) -> None:
-        existing = self.start_existing(self.project, headless=True)
-        completed, summary = self.run_runner("success")
-        self.assertEqual(completed.returncode, 5)
-        self.assertEqual(summary["category"], "PreexistingHeadlessProcess")
-        self.assertIsNone(existing.poll(), "default inventory must not kill existing processes")
+    # 06: post-create identity failure follows the suspended-job cleanup path.
+    def test_06_post_create_identity_failure_is_contained(self) -> None:
+        summary = self.assert_category(8, "LaunchFailure", fault="post-create-identity")
+        self.assertIsNone(summary["processExitCode"])
+        self.assertFalse(Path(str(summary["logPath"]) + ".stdout").read_text(errors="replace").strip())
 
-    def test_global_mutex_failure_fails_closed(self) -> None:
-        completed, summary = self.run_raw(["-SimulateGlobalMutexFailure"])
-        self.assertEqual(completed.returncode, 4)
-        self.assertEqual(summary["category"], "LockContention")
+    # 07: an inherited-stream orphan cannot extend the one watchdog budget.
+    def test_07_inherited_stream_orphan_is_bounded(self) -> None:
+        summary = self.assert_category(2, "Timeout", "--mode", "success", "--spawn-child", "--duration", "30", timeout=3)
+        self.assert_recorded_processes_gone(summary)
 
-    def test_forced_native_snapshot_path_still_guards_existing_processes(self) -> None:
-        existing = self.start_existing(self.project, headless=True)
-        completed, summary = self.run_raw(["-ForceNativeSnapshot"])
-        self.assertEqual(completed.returncode, 5)
-        self.assertEqual(summary["category"], "PreexistingHeadlessProcess")
+    # 08: a child/grandchild tree is killed by closing/terminating the sole job.
+    def test_08_child_grandchild_job_tree_cleanup(self) -> None:
+        summary = self.assert_category(2, "Timeout", "--mode", "sleep", "--spawn-grandchild", "--duration", "30", timeout=3)
+        self.assert_recorded_processes_gone(summary)
+
+    # 09: inaccessible or otherwise unverifiable same-basename inventory blocks launch.
+    def test_09_unverifiable_same_basename_is_cleanup_failure(self) -> None:
+        self.assert_category(7, "CleanupFailure", fault="inventory-denied")
+
+    # 10: both Toolhelp enumeration failure points fail closed.
+    def test_10_toolhelp_first_and_next_errors_fail_closed(self) -> None:
+        for fault in ("toolhelp-first", "toolhelp-next"):
+            with self.subTest(fault=fault):
+                self.assert_category(7, "CleanupFailure", fault=fault)
+
+    # 11: Windows quoting preserves spaces; a duplicate caller-owned path is rejected.
+    def test_11_windows_quoting_and_duplicate_path(self) -> None:
+        self.assert_category(0, "Success", "--mode", "success")
+        self.assert_category(6, "InvalidInput", "--path", str(self.project))
+
+    # 12: an exact-image process for another canonical project is collateral and survives.
+    def test_12_canonical_project_and_exact_image_preserve_collateral(self) -> None:
+        other = self.temp / "other"
+        other.mkdir()
+        (other / "project.godot").write_text("[application]\n", encoding="utf-8")
+        collateral = subprocess.Popen(
+            [str(self.engine), "--mode", "sleep", "--duration", "30", "--headless", "--path", str(other)],
+            text=True,
+        )
+        self.processes.append(collateral)
+        time.sleep(0.2)
+        self.assert_category(0, "Success", cleanup=True)
+        self.assertIsNone(collateral.poll())
+
+    # 13: a retained identity mismatch is CleanupFailure, never PID-authorized killing.
+    def test_13_retained_handle_identity_blocks_pid_reuse(self) -> None:
+        existing = subprocess.Popen(
+            [str(self.engine), "--mode", "sleep", "--duration", "30", "--headless", "--path", str(self.project)],
+            text=True,
+        )
+        self.processes.append(existing)
+        time.sleep(0.2)
+        self.assert_category(7, "CleanupFailure", fault="retained-identity", cleanup=True)
         self.assertIsNone(existing.poll())
 
-    def test_launch_failure_has_json_summary(self) -> None:
-        command = self.runner_command([str(FAKE), "--mode", "success"])
-        command[command.index("-GodotPath") + 1] = str(self.temp)  # existing directory; Process.Start must fail.
-        completed = subprocess.run(command, text=True, capture_output=True, timeout=20)
-        summary = json.loads([line for line in completed.stdout.splitlines() if line.startswith("{")][-1])
-        self.assertEqual(completed.returncode, 8)
-        self.assertEqual(summary["category"], "LaunchFailure")
+    # 14: private failure seams cannot authorize cleanup of a collateral process.
+    def test_14_fault_seams_cannot_authorize_kill(self) -> None:
+        collateral = subprocess.Popen([str(self.engine), "--mode", "sleep", "--duration", "30"], text=True)
+        self.processes.append(collateral)
+        time.sleep(0.2)
+        self.assert_category(7, "CleanupFailure", fault="inventory-denied", cleanup=True)
+        self.assertIsNone(collateral.poll())
 
+    # 15: public invalid input and native create/resume failures have exact categories.
+    def test_15_invalid_create_and_resume_categories(self) -> None:
+        self.assert_category(6, "InvalidInput", engine=self.temp / "missing.exe")
+        for fault in ("create-failure", "resume-failure"):
+            with self.subTest(fault=fault):
+                self.assert_category(8, "LaunchFailure", fault=fault)
 
-def _pid_exists(pid: int) -> bool:
-    completed = subprocess.run(
-        [POWERSHELL, "-NoProfile", "-Command", f"[bool](Get-Process -Id {pid} -ErrorAction SilentlyContinue)"],
-        text=True, capture_output=True, check=True,
-    )
-    return completed.stdout.strip().lower() == "true"
+    # 16: compile and execute the native ABI assertions under both Windows bitnesses.
+    def test_16_x86_x64_native_abi_layouts(self) -> None:
+        helpers = [
+            Path(os.environ["WINDIR"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe",
+            Path(os.environ["WINDIR"]) / "SysWOW64" / "WindowsPowerShell" / "v1.0" / "powershell.exe",
+        ]
+        for helper in helpers:
+            self.assertTrue(helper.is_file(), f"required configured ABI helper unavailable: {helper}")
+            with self.subTest(helper=str(helper)):
+                self.assert_category(0, "Success", abi=True, powershell=str(helper))
+
+    # 17: cleanup proof failure has precedence over timeout/fatal/nonzero outcomes.
+    def test_17_cleanup_failure_precedence(self) -> None:
+        for mode in ("sleep", "fatal", "nonzero"):
+            with self.subTest(mode=mode):
+                self.assert_category(7, "CleanupFailure", "--mode", mode, fault="cleanup-overrides", timeout=3 if mode == "sleep" else 5)
+
+    # 18: success needs root zero/job empty/complete output; fatal beats nonzero.
+    def test_18_success_and_fatal_over_nonzero(self) -> None:
+        summary = self.assert_category(0, "Success", "--mode", "success")
+        self.assertEqual(summary["status"], "passed")
+        self.assert_category(3, "FatalOutput", "--mode", "fatal-nonzero")
 
 
 if __name__ == "__main__":
