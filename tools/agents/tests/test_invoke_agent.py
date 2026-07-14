@@ -175,6 +175,21 @@ model_reasoning_effort = "high"
         self.assertIn('model_reasoning_effort="xhigh"', command)
         self.assertEqual(command[-2:], ["019f0000-0000-7000-8000-000000000000", "-"])
 
+    def test_transport_retry_prompt_keeps_route_and_is_not_a_repair(self) -> None:
+        prompt = BRIDGE._build_transport_retry_prompt(
+            {"name": "deep_reviewer"},
+            {
+                "id": "M1-review",
+                "objective": "Freeze one architecture.",
+                "allowed_paths": [],
+                "forbidden_paths": ["audio/**"],
+            },
+            parent_run_id="prior-run",
+        )
+        self.assertIn("transport retry, not a repair round", prompt)
+        self.assertIn("same agent", prompt)
+        self.assertNotIn("temporarily overridden", prompt)
+
     def test_resume_identity_is_read_from_only_the_appended_turn(self) -> None:
         thread_id = "019f0000-0000-7000-8000-000000000001"
         with tempfile.TemporaryDirectory() as temporary:

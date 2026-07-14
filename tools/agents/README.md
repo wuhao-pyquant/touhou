@@ -20,11 +20,21 @@ tools/agents/invoke_agent.ps1 `
   -RepairInstruction "只修复上一轮报告中的失败项"
 ```
 
+CLI 中断、超时或未生成 `final.json`，且该轮没有工作区改动时，使用同级传输重试：
+
+```powershell
+tools/agents/invoke_agent.ps1 `
+  -Agent deep_reviewer `
+  -ResumeRun <failed-run-id> `
+  -TransportRetry
+```
+
 续跑规则：
 
 - 只接受状态为 `failed` 或具备可恢复 session 的 `bridge_error` 运行。
 - Agent、ticket 快照、Codex thread、worktree、branch 和基准提交必须与父运行一致。
 - `EscalationLevel` 必须等于父运行轮次加一，且同时受 ticket 的 `max_repair_rounds` 与同一 profile 的 `[[repair_escalations]]` 限制。
+- `TransportRetry` 只接受无报告、无改动、无策略或身份违规的传输失败；它保持原模型、推理强度和 `repair_round`，不能与升档或修复指令组合。
 - `codex exec resume` 的模型覆盖只作用于当前 repair turn；profile 顶层默认值不会被修改。
 - 成功运行关闭该续跑链，不能再次 resume；下一张新 ticket 从 profile 顶层默认模型与推理强度开始。
 - 每个 turn 生成独立的 `.agent-runs/<run-id>/` 证据目录，并记录 `parent_run_id`、`root_run_id`、`repair_round`、实际模型和实际推理强度。

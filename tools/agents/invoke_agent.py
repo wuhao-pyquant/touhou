@@ -542,6 +542,38 @@ JSON object matching report.schema.json.
 """
 
 
+def _build_transport_retry_prompt(
+    profile: dict[str, Any],
+    ticket: dict[str, Any],
+    *,
+    parent_run_id: str,
+) -> str:
+    continuation = {
+        "agent": profile["name"],
+        "ticket_id": ticket["id"],
+        "parent_run_id": parent_run_id,
+        "objective": ticket["objective"],
+        "allowed_paths": ticket["allowed_paths"],
+        "forbidden_paths": ticket["forbidden_paths"],
+    }
+    continuation_json = json.dumps(
+        continuation, ensure_ascii=False, indent=2, sort_keys=True
+    )
+    return f"""<transport_retry_continuation>
+Continue the same ticket in the same Codex session and existing worktree. The
+previous CLI turn ended without a valid final report and made no workspace
+changes. This is a transport retry, not a repair round: keep the same agent,
+model tier, reasoning effort, ticket scope, and task state.
+
+Do not restart or re-plan the task, create a new worktree or branch, or broaden
+the ticket. Finish the pending work from the existing conversation context.
+Your final response must be one JSON object matching report.schema.json.
+
+{continuation_json}
+</transport_retry_continuation>
+"""
+
+
 def _canonical_json_sha256(value: dict[str, Any]) -> str:
     rendered = json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -777,7 +809,8 @@ def _load_resume_context(
     *,
     agent: str,
     resume_run: str,
-    escalation_level: int,
+    escalation_level: int | None,
+    transport_retry: bool,
     profile: dict[str, Any],
 ) -> dict[str, Any]:
     parent_dir = _resolve_run_dir(repo, resume_run)
@@ -807,12 +840,40 @@ def _load_resume_context(
     ticket, ticket_source, ticket_sha256 = _load_ticket_snapshot(
         repo, parent_dir, invocation
     )
-    requested_identity = _repair_identity(
-        profile,
-        ticket,
-        prior_round=prior_round,
-        escalation_level=escalation_level,
-    )
+    if transport_retry:
+        if _load_optional_report(parent_dir) is not None:
+            raise BridgeError(
+                "Transport retry is only allowed when the prior run wrote no report"
+            )
+        if summary.get("changed_paths"):
+            raise BridgeError(
+                "Transport retry is forbidden after workspace changes; use a repair round"
+            )
+        if summary.get("policy_violations") or summary.get("identity_problems"):
+            raise BridgeError(
+                "Transport retry is forbidden after policy or identity failure"
+            )
+        requested_identity = _profile_identity(profile, prior_round)
+        prior_requested = {
+            "model": invocation.get("requested_model"),
+            "model_reasoning_effort": invocation.get(
+                "requested_model_reasoning_effort"
+            ),
+        }
+        if prior_requested != requested_identity:
+            raise BridgeError(
+                "Prior invocation identity no longer matches the frozen profile route"
+            )
+        repair_round = prior_round
+    else:
+        assert escalation_level is not None
+        requested_identity = _repair_identity(
+            profile,
+            ticket,
+            prior_round=prior_round,
+            escalation_level=escalation_level,
+        )
+        repair_round = escalation_level
 
     runtime = summary.get("runtime", {})
     if not isinstance(runtime, dict):
@@ -867,7 +928,8 @@ def _load_resume_context(
         "parent_dir": parent_dir,
         "parent_invocation": invocation,
         "parent_summary": summary,
-        "repair_round": escalation_level,
+        "repair_round": repair_round,
+        "continuation_kind": "transport_retry" if transport_retry else "repair",
         "ticket": ticket,
         "ticket_source": ticket_source,
         "ticket_sha256": ticket_sha256,
@@ -888,6 +950,7 @@ def main() -> int:
     parser.add_argument("--ticket", type=Path)
     parser.add_argument("--resume-run")
     parser.add_argument("--escalation-level", type=int)
+    parser.add_argument("--transport-retry", action="store_true")
     parser.add_argument("--repair-instruction")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--keep-worktree", action="store_true")
@@ -897,13 +960,25 @@ def main() -> int:
     if is_resume == bool(args.ticket):
         raise BridgeError("Specify exactly one of --ticket or --resume-run")
     if is_resume:
-        if args.escalation_level is None:
-            raise BridgeError("--resume-run requires --escalation-level")
-        if args.escalation_level < 1:
-            raise BridgeError("--escalation-level must be at least 1")
-    elif args.escalation_level is not None or args.repair_instruction:
+        if args.transport_retry:
+            if args.escalation_level is not None or args.repair_instruction:
+                raise BridgeError(
+                    "--transport-retry cannot be combined with escalation or repair input"
+                )
+        else:
+            if args.escalation_level is None:
+                raise BridgeError(
+                    "--resume-run requires --escalation-level or --transport-retry"
+                )
+            if args.escalation_level < 1:
+                raise BridgeError("--escalation-level must be at least 1")
+    elif (
+        args.escalation_level is not None
+        or args.transport_retry
+        or args.repair_instruction
+    ):
         raise BridgeError(
-            "--escalation-level and --repair-instruction are resume-only options"
+            "continuation options require --resume-run"
         )
 
     repo = (
@@ -921,12 +996,12 @@ def main() -> int:
     resume_context: dict[str, Any] | None = None
     if is_resume:
         assert args.resume_run is not None
-        assert args.escalation_level is not None
         resume_context = _load_resume_context(
             repo,
             agent=args.agent,
             resume_run=args.resume_run,
             escalation_level=args.escalation_level,
+            transport_retry=args.transport_retry,
             profile=profile,
         )
         ticket = resume_context["ticket"]
@@ -981,17 +1056,24 @@ def main() -> int:
         if resume_context is not None:
             worktree = resume_context["worktree"]
             branch = resume_context["branch"]
-            prompt = _build_repair_prompt(
-                profile,
-                ticket,
-                parent_run_id=parent_run_id,
-                repair_round=repair_round,
-                failure_context=_failure_context(
-                    resume_context["parent_dir"],
-                    resume_context["parent_summary"],
-                ),
-                repair_instruction=args.repair_instruction,
-            )
+            if resume_context["continuation_kind"] == "transport_retry":
+                prompt = _build_transport_retry_prompt(
+                    profile,
+                    ticket,
+                    parent_run_id=parent_run_id,
+                )
+            else:
+                prompt = _build_repair_prompt(
+                    profile,
+                    ticket,
+                    parent_run_id=parent_run_id,
+                    repair_round=repair_round,
+                    failure_context=_failure_context(
+                        resume_context["parent_dir"],
+                        resume_context["parent_summary"],
+                    ),
+                    repair_instruction=args.repair_instruction,
+                )
         else:
             prompt = _build_prompt(profile, ticket)
             if args.dry_run:
@@ -1053,6 +1135,11 @@ def main() -> int:
             "parent_run_id": parent_run_id,
             "root_run_id": root_run_id,
             "repair_round": repair_round,
+            "continuation_kind": (
+                resume_context["continuation_kind"]
+                if resume_context is not None
+                else "fresh"
+            ),
             "thread_id": thread_id,
             "profile_default": default_identity,
             "requested_model": requested_identity["model"],

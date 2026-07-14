@@ -9,9 +9,12 @@ param(
     [Parameter(Mandatory = $true, ParameterSetName = 'Resume')]
     [string]$ResumeRun,
 
-    [Parameter(Mandatory = $true, ParameterSetName = 'Resume')]
+    [Parameter(ParameterSetName = 'Resume')]
     [ValidateRange(1, 2)]
     [int]$EscalationLevel,
+
+    [Parameter(ParameterSetName = 'Resume')]
+    [switch]$TransportRetry,
 
     [Parameter(ParameterSetName = 'Resume')]
     [string]$RepairInstruction,
@@ -33,10 +36,13 @@ $pythonArgs = @(
 )
 
 if ($PSCmdlet.ParameterSetName -eq 'Resume') {
-    $pythonArgs += @(
-        '--resume-run', $ResumeRun,
-        '--escalation-level', $EscalationLevel
-    )
+    $pythonArgs += @('--resume-run', $ResumeRun)
+    if ($TransportRetry) {
+        $pythonArgs += '--transport-retry'
+    }
+    elseif ($PSBoundParameters.ContainsKey('EscalationLevel')) {
+        $pythonArgs += @('--escalation-level', $EscalationLevel)
+    }
     if ($RepairInstruction) {
         $pythonArgs += @('--repair-instruction', $RepairInstruction)
     }
