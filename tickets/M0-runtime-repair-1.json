@@ -1,0 +1,61 @@
+{
+  "id": "M0-runtime-repair-1",
+  "objective": "Apply the single authorized M0 repair round to candidate 1653ea84043b9140e8ef3c06bde2c57f63c635cf. Fix all five architecture-review blockers without entering M1 or changing authored gameplay balance. (1) Add one authoritative deterministic per-tick gameplay input path: sample live input once per render frame, preserve held state, buffer just-pressed edges until exactly one simulation tick consumes them, quantize analog axes deterministically without collapsing them to -1/0/1, and let replay playback inject the same frame format. Stage/boss updates, pause, movement, shooting, focus, bomb and deathbomb must consume the tick snapshot instead of direct Input calls. Make long-frame catch-up/drop behavior explicit and fully accounted; do not silently clamp away elapsed time. (2) Integrate ReplayData recording/playback with the real main.gd tick path and seed/setup. Replace the toy replay proof with a committed recorder-produced replay exercised through actual main.gd simulation under 30/60/120 Hz schedules, including movement, focus, shooting, bomb and at least one real enemy or Boss interaction. (3) Implement versioned, validated, all-or-nothing aggregate simulation capture/restore. Include fixed clock accumulator/pending/drop state, simulation tick, RNG, complete gameplay-relevant GameManager resources, complete player/bomb/deathbomb state including player_bomb_wave_timer and player_bomb_config, stage/controller, Boss, authoritative bullet world, enemies, items and effects. Preserve alias isolation, active bullet processing order, exact capacity and future allocation behavior; malformed or incompatible snapshots must leave live state unchanged. Immediate hash after restore and continued hashes must match. (4) Extend replay identity with mode (story, stage_practice, spell_practice), starting stage, and spell/phase identity as applicable. ReplayData must own a deep copied header, and playback must explicitly reject expected build/content mismatches and unsupported modes/versions before mutating playback state. (5) Make BulletWorld the authoritative owner of pool capacity, active ordering, cursor, spawn/reset/update/retirement and laser lifecycle. main.gd may keep narrow compatibility wrappers and handle scoring/entity effects, but must not independently own a second divergent pool/index state. Expose deterministic collision queries/events through the boundary and use them in main integration where practical. Preserve existing public methods relied upon by focused regressions. Do not edit content interface files unless required to compile; the reviewer accepted them as extensible M0 shells.",
+  "mode": "write",
+  "allowed_paths": [
+    "scripts/main.gd",
+    "scripts/runtime/fixed_tick_clock.gd",
+    "scripts/runtime/deterministic_rng.gd",
+    "scripts/runtime/simulation_state_hasher.gd",
+    "scripts/runtime/bullet_world.gd",
+    "scripts/runtime/boss_state_machine.gd",
+    "scripts/runtime/gameplay_input_buffer.gd",
+    "scripts/runtime/*.gd.uid",
+    "scripts/replay/**",
+    "tests/assert_m0_*.gd",
+    "tests/assert_m0_*.gd.uid",
+    "tests/fixtures/m0/**"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/content/**",
+    "scripts/data/**",
+    "scripts/ui/**",
+    "docs/**"
+  ],
+  "dependency_commit": "1653ea84043b9140e8ef3c06bde2c57f63c635cf",
+  "acceptance_commands": [
+    "$out = & 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64.exe' --headless --log-file \"$env:TEMP\\godot-m0-repair-determinism.log\" --path . --script res://tests/assert_m0_determinism.gd 2>&1; $out | Out-Host; if ($LASTEXITCODE -ne 0 -or ($out -match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|M0_FAIL')) { exit 1 }",
+    "$out = & 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64.exe' --headless --log-file \"$env:TEMP\\godot-m0-repair-replay.log\" --path . --script res://tests/assert_m0_replay_runtime.gd 2>&1; $out | Out-Host; if ($LASTEXITCODE -ne 0 -or ($out -match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|M0_FAIL')) { exit 1 }",
+    "$out = & 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64.exe' --headless --log-file \"$env:TEMP\\godot-m0-repair-content.log\" --path . --script res://tests/assert_m0_content_interfaces.gd 2>&1; $out | Out-Host; if ($LASTEXITCODE -ne 0 -or ($out -match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|M0_FAIL')) { exit 1 }",
+    "$out = & 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64.exe' --headless --log-file \"$env:TEMP\\godot-m0-repair-pause.log\" --path . --script res://tests/assert_pause_contract.gd 2>&1; $out | Out-Host; if ($LASTEXITCODE -ne 0 -or ($out -match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access')) { exit 1 }",
+    "$out = & 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64.exe' --headless --log-file \"$env:TEMP\\godot-m0-repair-danmaku.log\" --path . --script res://tests/assert_danmaku_balance.gd 2>&1; $out | Out-Host; if ($LASTEXITCODE -ne 0 -or ($out -match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access')) { exit 1 }",
+    "git diff --check"
+  ],
+  "output_requirements": [
+    "Map each of the five reviewer blockers to exact changed files and focused evidence",
+    "Report 30/60/120 Hz plus long-frame real-runtime hashes, consumed edge counts and accounted dropped ticks",
+    "Report capture-mutate-restore immediate hash equality and continued hash equality for a state containing partial accumulator, active bomb, resources, reused bullet slots, enemies and Boss",
+    "Report story, stage-practice and spell-practice replay identity round trips, caller-mutation isolation, and version/build/content rejection",
+    "Report how BulletWorld now owns pool/order/cursor and which main.gd compatibility wrappers remain",
+    "Report every test output scan and distinguish known root-certificate/exit-cleanup diagnostics from script or assertion failures",
+    "Report residual M0 risks only; do not claim M1 content completion"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "Independent deep_reviewer gpt-5.6-sol/max returned GATE: REPAIR on commit 1653ea8 with zero changed files.",
+    "The accepted content shells are StageTimeline, PatternDefinition, BossPhaseDefinition and DifficultyProfile; leave them unchanged.",
+    "Use an explicit --log-file for every Godot launch because default user:// logging crashes Godot 4.7 before script execution in this Agent sandbox while returning exit code 0.",
+    "Do not use test-only toy physics as replay proof. A test harness may configure actual main.gd dependencies and deterministic stage fixtures, but the tick, input, shot, bullet, collision, bomb and hash paths must be the production runtime paths.",
+    "This is the implementation Agent's one repair round. Do not spawn subagents, commit, merge, rewrite the plan, or broaden scope."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
