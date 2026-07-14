@@ -1,0 +1,65 @@
+{
+  "milestone": "M0",
+  "status": "completed",
+  "merge_commit": "6f43bbcd181abbaf1480d0f4779808e357ed4323",
+  "base_commit": "d67c26a",
+  "implementation_commits": {
+    "initial_candidate": "1653ea84043b9140e8ef3c06bde2c57f63c635cf",
+    "reviewed_repair_candidate": "4cf3b5291136c7a37b08a264b696fbf3920b1259",
+    "fixture_migration": "b950a9e7e4bf2c39e058fa5874a7e2770a284233"
+  },
+  "agent_runs": [
+    {
+      "run_id": "20260714T144056Z-M0-runtime-foundation-core_simulation-dcde1518",
+      "agent": "core_simulation",
+      "actual_model": "gpt-5.6-sol",
+      "actual_model_reasoning_effort": "xhigh"
+    },
+    {
+      "run_id": "20260714T151622Z-M0-runtime-repair-1-core_simulation-aed18ca4",
+      "agent": "core_simulation",
+      "actual_model": "gpt-5.6-sol",
+      "actual_model_reasoning_effort": "xhigh"
+    },
+    {
+      "run_id": "20260714T154802Z-M0-architecture-rereview-deep_reviewer-4ed932ff",
+      "agent": "deep_reviewer",
+      "actual_model": "gpt-5.6-sol",
+      "actual_model_reasoning_effort": "max",
+      "gate": "TEST_MIGRATION",
+      "changed_paths": []
+    },
+    {
+      "run_id": "20260714T162026Z-M0-test-fixture-migration-test_performance-3cd22e25",
+      "agent": "test_performance",
+      "actual_model": "gpt-5.6-terra",
+      "actual_model_reasoning_effort": "high",
+      "changed_paths": [
+        "tests/assert_phase3_protagonist_profiles.gd",
+        "tests/assert_phase4_main_data_integration.gd",
+        "tests/assert_phase8_followup_regressions.gd"
+      ],
+      "policy_violations": []
+    }
+  ],
+  "determinism_evidence": {
+    "replay_hash_30_60_120_hz": "0bfbc0e89b64ba03eb711413bc433c8dcbbf02ce26ba2d420cef3bff6e6fb9dd",
+    "restore_hash": "abd2d1c3c14007c6795cc1abb3dea73123899a1edcc4767c079c80101e124cd9",
+    "long_frame_dropped_ticks_accounted": 9,
+    "pause_edge_consumed_once": true
+  },
+  "final_focused_verification": [
+    {"name": "assert_phase3_protagonist_profiles.gd", "status": "passed", "exit_code": 0, "error_tokens": 0},
+    {"name": "assert_phase4_main_data_integration.gd", "status": "passed", "exit_code": 0, "error_tokens": 0},
+    {"name": "assert_phase8_followup_regressions.gd", "status": "passed", "exit_code": 0, "error_tokens": 0},
+    {"name": "assert_m0_determinism.gd", "status": "passed", "exit_code": 0, "error_tokens": 0},
+    {"name": "assert_m0_replay_runtime.gd", "status": "passed", "exit_code": 0, "error_tokens": 0},
+    {"name": "scenes/main.tscn headless smoke", "status": "passed", "exit_code": 0, "error_tokens": 0}
+  ],
+  "scope": {
+    "production_runtime_repair_after_rereview": false,
+    "fixture_assertions_weakened": false,
+    "audio_or_art_changes_absorbed": false,
+    "full_test_matrix_run": false
+  }
+}
