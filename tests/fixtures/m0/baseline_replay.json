@@ -1,13 +1,16 @@
 {
-  "format_version": 1,
+  "format_version": 2,
   "header": {
-    "format_version": 1,
+    "format_version": 2,
     "build_version": "1.0.0-m0",
     "content_hash": "m0-baseline-content-v1",
     "seed": 20260714,
     "difficulty": "normal",
     "protagonist": "miko",
-    "shot_type": "ofuda_trace"
+    "shot_type": "ofuda_trace",
+    "mode": "story",
+    "starting_stage": 1,
+    "phase_id": ""
   },
   "initial_state": {
     "player_x": 360.0,
@@ -15,22 +18,22 @@
     "score": 0
   },
   "frames": [
-    {"tick": 0, "move_x": 0, "move_y": -1, "shoot": true, "focus": false, "bomb": false, "pause": false},
-    {"tick": 1, "move_x": 1, "move_y": -1, "shoot": true, "focus": false, "bomb": false, "pause": false},
-    {"tick": 2, "move_x": 1, "move_y": 0, "shoot": true, "focus": true, "bomb": false, "pause": false},
-    {"tick": 3, "move_x": 1, "move_y": 0, "shoot": false, "focus": true, "bomb": false, "pause": false},
-    {"tick": 4, "move_x": 0, "move_y": 1, "shoot": true, "focus": true, "bomb": false, "pause": false},
-    {"tick": 5, "move_x": -1, "move_y": 1, "shoot": true, "focus": false, "bomb": false, "pause": false},
-    {"tick": 6, "move_x": -1, "move_y": 0, "shoot": true, "focus": false, "bomb": false, "pause": false},
-    {"tick": 7, "move_x": -1, "move_y": -1, "shoot": false, "focus": false, "bomb": false, "pause": false},
-    {"tick": 8, "move_x": 0, "move_y": -1, "shoot": true, "focus": true, "bomb": false, "pause": false},
-    {"tick": 9, "move_x": 1, "move_y": -1, "shoot": true, "focus": true, "bomb": false, "pause": false},
+    {"tick": 0, "move_x": 0, "move_y": -16384, "shoot": true, "focus": false, "bomb": false, "pause": false},
+    {"tick": 1, "move_x": 8192, "move_y": -16384, "shoot": true, "focus": false, "bomb": false, "pause": false},
+    {"tick": 2, "move_x": 16384, "move_y": 0, "shoot": true, "focus": true, "bomb": false, "pause": false},
+    {"tick": 3, "move_x": 24576, "move_y": 0, "shoot": false, "focus": true, "bomb": false, "pause": false},
+    {"tick": 4, "move_x": 0, "move_y": 12288, "shoot": true, "focus": true, "bomb": false, "pause": false},
+    {"tick": 5, "move_x": -8192, "move_y": 16384, "shoot": true, "focus": false, "bomb": false, "pause": false},
+    {"tick": 6, "move_x": -16384, "move_y": 0, "shoot": true, "focus": false, "bomb": false, "pause": false},
+    {"tick": 7, "move_x": -24576, "move_y": -8192, "shoot": false, "focus": false, "bomb": false, "pause": false},
+    {"tick": 8, "move_x": 0, "move_y": -12288, "shoot": true, "focus": true, "bomb": false, "pause": false},
+    {"tick": 9, "move_x": 16384, "move_y": -16384, "shoot": true, "focus": true, "bomb": false, "pause": false},
     {"tick": 10, "move_x": 0, "move_y": 0, "shoot": false, "focus": true, "bomb": true, "pause": false},
-    {"tick": 11, "move_x": 1, "move_y": 0, "shoot": true, "focus": false, "bomb": false, "pause": false},
-    {"tick": 12, "move_x": 0, "move_y": 1, "shoot": true, "focus": false, "bomb": false, "pause": false},
-    {"tick": 13, "move_x": -1, "move_y": 1, "shoot": true, "focus": true, "bomb": false, "pause": false},
-    {"tick": 14, "move_x": -1, "move_y": 0, "shoot": false, "focus": true, "bomb": false, "pause": false},
-    {"tick": 15, "move_x": 0, "move_y": -1, "shoot": true, "focus": false, "bomb": false, "pause": false}
+    {"tick": 11, "move_x": 24576, "move_y": 0, "shoot": true, "focus": false, "bomb": false, "pause": false},
+    {"tick": 12, "move_x": 0, "move_y": 16384, "shoot": true, "focus": false, "bomb": false, "pause": false},
+    {"tick": 13, "move_x": -8192, "move_y": 24576, "shoot": true, "focus": true, "bomb": false, "pause": false},
+    {"tick": 14, "move_x": -16384, "move_y": 0, "shoot": false, "focus": true, "bomb": false, "pause": false},
+    {"tick": 15, "move_x": 0, "move_y": -8192, "shoot": true, "focus": false, "bomb": false, "pause": false}
   ],
-  "expected_state_hash": "c2ca94ad8fa633ba8f2d7ad20cdb66823517d81509540f281b8fcf65f4ac3dcb"
+  "expected_runtime_hash": "0bfbc0e89b64ba03eb711413bc433c8dcbbf02ce26ba2d420cef3bff6e6fb9dd"
 }

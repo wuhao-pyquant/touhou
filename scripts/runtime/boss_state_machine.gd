@@ -54,9 +54,23 @@ func capture_state(state: Dictionary) -> Dictionary:
 	return {"version": VERSION, "state": state.duplicate(true)}
 
 func restore_state(snapshot: Dictionary) -> Dictionary:
-	if int(snapshot.get("version", -1)) != VERSION:
+	if not validate_snapshot(snapshot):
 		return {}
-	var restored: Dictionary = snapshot.get("state", {}).duplicate(true)
-	if String(restored.get("phase", "")) not in PHASES:
-		return {}
-	return restored
+	return snapshot.state.duplicate(true)
+
+func validate_snapshot(snapshot: Dictionary) -> bool:
+	if int(snapshot.get("version", -1)) != VERSION or not (snapshot.get("state") is Dictionary):
+		return false
+	var state: Dictionary = snapshot.state
+	if String(state.get("phase", "")) not in PHASES:
+		return false
+	for field in ["x", "y", "hp", "max_hp", "radius", "timer", "sway"]:
+		if typeof(state.get(field)) not in [TYPE_FLOAT, TYPE_INT]:
+			return false
+		var value := float(state[field])
+		if is_nan(value) or is_inf(value):
+			return false
+	for field in ["entered", "declaring", "alive"]:
+		if typeof(state.get(field)) != TYPE_BOOL:
+			return false
+	return state.get("cards", []) is Array

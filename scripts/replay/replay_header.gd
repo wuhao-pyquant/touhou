@@ -1,7 +1,11 @@
 extends RefCounted
 
-const FORMAT_VERSION := 1
+const FORMAT_VERSION := 2
 const SUPPORTED_DIFFICULTIES := ["normal", "hard"]
+const MODE_STORY := "story"
+const MODE_STAGE_PRACTICE := "stage_practice"
+const MODE_SPELL_PRACTICE := "spell_practice"
+const SUPPORTED_MODES := [MODE_STORY, MODE_STAGE_PRACTICE, MODE_SPELL_PRACTICE]
 
 var build_version: String = ""
 var content_hash: String = ""
@@ -9,6 +13,9 @@ var seed: int = 1
 var difficulty: String = "normal"
 var protagonist: String = ""
 var shot_type: String = ""
+var mode: String = MODE_STORY
+var starting_stage: int = 1
+var phase_id: String = ""
 
 func _init(values: Dictionary = {}) -> void:
 	configure(values)
@@ -20,6 +27,9 @@ func configure(values: Dictionary) -> void:
 	difficulty = String(values.get("difficulty", difficulty)).to_lower()
 	protagonist = String(values.get("protagonist", protagonist))
 	shot_type = String(values.get("shot_type", shot_type))
+	mode = String(values.get("mode", mode)).to_lower()
+	starting_stage = int(values.get("starting_stage", starting_stage))
+	phase_id = String(values.get("phase_id", values.get("spell_id", phase_id)))
 
 func validation_errors() -> Array[String]:
 	var errors: Array[String] = []
@@ -33,6 +43,16 @@ func validation_errors() -> Array[String]:
 		errors.append("protagonist is required")
 	if shot_type.is_empty():
 		errors.append("shot_type is required")
+	if mode not in SUPPORTED_MODES:
+		errors.append("mode must be story, stage_practice, or spell_practice")
+	if starting_stage < 1 or starting_stage > 6:
+		errors.append("starting_stage must be between 1 and 6")
+	if mode == MODE_STORY and starting_stage != 1:
+		errors.append("story replays must start at stage 1")
+	if mode == MODE_SPELL_PRACTICE and phase_id.is_empty():
+		errors.append("spell_practice requires phase_id")
+	if mode != MODE_SPELL_PRACTICE and not phase_id.is_empty():
+		errors.append("phase_id is only valid for spell_practice")
 	return errors
 
 func is_valid() -> bool:
@@ -47,6 +67,9 @@ func to_dict() -> Dictionary:
 		"difficulty": difficulty,
 		"protagonist": protagonist,
 		"shot_type": shot_type,
+		"mode": mode,
+		"starting_stage": starting_stage,
+		"phase_id": phase_id,
 	}
 
 static func from_dict(data: Dictionary) -> RefCounted:

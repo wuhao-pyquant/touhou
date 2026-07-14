@@ -39,10 +39,17 @@ func snapshot() -> Dictionary:
 	}
 
 func restore(state: Dictionary) -> bool:
+	if not validate_snapshot(state):
+		return false
+	initial_seed = int(state.initial_seed)
+	draw_count = int(state.draw_count)
+	_rng.seed = initial_seed
+	_rng.state = int(state.state)
+	return true
+
+func validate_snapshot(state: Dictionary) -> bool:
 	if int(state.get("version", -1)) != VERSION:
 		return false
-	initial_seed = int(state.get("initial_seed", 1))
-	draw_count = maxi(int(state.get("draw_count", 0)), 0)
-	_rng.seed = initial_seed
-	_rng.state = int(state.get("state", _rng.state))
-	return true
+	if typeof(state.get("initial_seed")) != TYPE_INT or typeof(state.get("state")) != TYPE_INT:
+		return false
+	return typeof(state.get("draw_count")) == TYPE_INT and int(state.draw_count) >= 0

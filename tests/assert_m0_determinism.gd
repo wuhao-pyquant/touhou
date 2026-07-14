@@ -5,7 +5,7 @@ const DeterministicRng := preload("res://scripts/runtime/deterministic_rng.gd")
 const SimulationStateHasher := preload("res://scripts/runtime/simulation_state_hasher.gd")
 const BulletWorld := preload("res://scripts/runtime/bullet_world.gd")
 const BossStateMachine := preload("res://scripts/runtime/boss_state_machine.gd")
-const ReplayData := preload("res://scripts/replay/replay_data.gd")
+const GameplayInputBuffer := preload("res://scripts/runtime/gameplay_input_buffer.gd")
 
 class EmptyStageDirector:
 	extends RefCounted
@@ -42,6 +42,22 @@ func _verify_clock() -> void:
 	clock.reset()
 	_check(clock.restore(snapshot), "Fixed clock snapshot restore failed.")
 	_check(clock.tick_index == 2, "Fixed clock restore lost the tick index.")
+	clock.reset()
+	_check(clock.push_frame_delta(0.2) == 3, "Long frame must accept the explicit per-render tick budget.")
+	_check(clock.dropped_ticks == 9, "Long frame elapsed time was not explicitly accounted as dropped ticks.")
+	_check(is_equal_approx(clock.total_frame_seconds, 0.2), "Long frame elapsed seconds were silently clamped.")
+
+func _verify_input_buffer() -> void:
+	var input := GameplayInputBuffer.new()
+	input.sample_frame({"move_x": 0.5, "move_y": -0.25, "shoot": true, "focus": true, "bomb": true, "pause": true})
+	_check(input.pending_edges == {"bomb": 1, "pause": 1}, "Just-pressed edges were not buffered before a simulation tick.")
+	var first: Dictionary = input.consume_tick(1)
+	_check(first.move_x == 16384 and first.move_y == -8192, "Analog axes were not deterministically quantized with sub-unit precision.")
+	_check(first.bomb and first.pause, "Buffered edges were not delivered to the next simulation tick.")
+	var second: Dictionary = input.consume_tick(2)
+	_check(second.shoot and second.focus, "Held input was not preserved across simulation ticks.")
+	_check(not second.bomb and not second.pause, "A buffered edge was consumed by more than one simulation tick.")
+	_check(input.consumed_edges == {"bomb": 1, "pause": 1}, "Consumed edge accounting is incorrect.")
 
 func _verify_rng_and_hashing() -> void:
 	var rng := DeterministicRng.new(314159)
@@ -69,7 +85,7 @@ func _verify_state_boundaries() -> void:
 	var restored_pool: Array = []
 	var restored: Dictionary = world.restore_state(snapshot, restored_pool)
 	_check(bool(restored.ok), "BulletWorld snapshot restore failed.")
-	_check(restored.active_indices == [0, 1], "BulletWorld must restore active slots in canonical order.")
+	_check(restored.active_indices == [1, 0], "BulletWorld must preserve authoritative active processing order.")
 	_check(world.laser_state(restored_pool[1]) == BulletWorld.LASER_WARNING, "BulletWorld lost laser warning state.")
 	_check(world.circles_overlap(Vector2.ZERO, 2.0, Vector2(3.0, 0.0), 2.0), "Strict circle collision should overlap within the summed radius.")
 	_check(not world.circles_overlap(Vector2.ZERO, 2.0, Vector2(4.0, 0.0), 2.0), "Strict circle collision should not overlap at exact tangency.")
@@ -80,51 +96,6 @@ func _verify_state_boundaries() -> void:
 	_check(machine.transition(boss, BossStateMachine.PHASE_SWITCHING, true), "Boss active-to-switching transition failed.")
 	_check(not machine.transition(boss, BossStateMachine.PHASE_ENTERING), "Boss state machine accepted an invalid reverse transition.")
 	_check(not machine.restore_state({"version": 999, "state": boss}), "Boss state machine accepted an unsupported snapshot version.")
-
-func _replay_once(document: Dictionary) -> String:
-	var replay := ReplayData.new()
-	if not _check(replay.load_dict(document), "Baseline replay data failed validation."):
-		return ""
-	var rng := DeterministicRng.new(int(replay.header.seed))
-	var initial: Dictionary = document.get("initial_state", {})
-	var player := Vector2(float(initial.get("player_x", 360.0)), float(initial.get("player_y", 840.0)))
-	var score := int(initial.get("score", 0))
-	var bullets: Array[Dictionary] = []
-	var final_tick := -1
-	while replay.has_next_frame():
-		var frame: Dictionary = replay.next_frame()
-		final_tick = int(frame.tick)
-		var move := Vector2(float(frame.move_x), float(frame.move_y))
-		if move.length_squared() > 1.0:
-			move = move.normalized()
-		player += move * (2.0 if bool(frame.focus) else 4.0)
-		if bool(frame.shoot):
-			bullets.append({
-				"id": bullets.size(),
-				"x": player.x,
-				"y": player.y - 12.0,
-				"vx": rng.range_float(-0.18, 0.18),
-				"vy": -8.0,
-				"age": 0,
-			})
-			score += 10
-		for bullet in bullets:
-			bullet.x = float(bullet.x) + float(bullet.vx)
-			bullet.y = float(bullet.y) + float(bullet.vy)
-			bullet.age = int(bullet.age) + 1
-		if bool(frame.bomb):
-			bullets.clear()
-			score += 100
-	var final_state := {
-		"format_version": int(document.get("format_version", -1)),
-		"header": replay.header.to_dict(),
-		"final_tick": final_tick,
-		"player": player,
-		"score": score,
-		"bullets": bullets,
-		"rng": rng.snapshot(),
-	}
-	return SimulationStateHasher.new().hash_state(final_state)
 
 func _verify_main_integration() -> void:
 	var main_script = load("res://scripts/main.gd")
@@ -154,25 +125,14 @@ func _verify_main_integration() -> void:
 
 func _run() -> void:
 	_verify_clock()
+	_verify_input_buffer()
 	_verify_rng_and_hashing()
 	_verify_state_boundaries()
 	_verify_main_integration()
-	var fixture := _load_fixture()
-	if fixture.is_empty():
-		quit(1)
-		return
-	var observed: Array[String] = []
-	for _run_index in range(3):
-		observed.append(_replay_once(fixture))
-	var expected := String(fixture.get("expected_state_hash", ""))
-	if expected == "PENDING":
-		print("M0_BASELINE_HASH=%s" % observed[0])
-		expected = observed[0]
-	_check(observed == [expected, expected, expected], "Baseline replay hashes diverged: %s (expected %s)" % [observed, expected])
 	if failed:
 		quit(1)
 	else:
-		print("PASS: M0 fixed tick, RNG snapshots, state boundaries, and replay determinism. hashes=%s" % [observed])
+		print("PASS: M0 fixed tick, quantized input buffering, RNG snapshots, and authoritative state boundaries.")
 		quit(0)
 
 func _initialize() -> void:
