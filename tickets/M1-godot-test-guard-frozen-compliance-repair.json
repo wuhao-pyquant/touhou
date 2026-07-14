@@ -1,0 +1,60 @@
+{
+  "id": "M1-godot-test-guard-frozen-compliance-repair",
+  "objective": "Repair only the static blockers returned by deep_reviewer run 20260714T194654Z-M1-godot-test-guard-final-static-review-deep_reviewer-66bae210 for candidate 7e7889c5215277f392e4fd5a1a529e9bdb7ee51a. Keep the same-script PowerShell supervisor/worker architecture and exact three-file boundary. Preserve the already-approved suspended CreateProcessW path with STARTUPINFOEX JOB_LIST and HANDLE_LIST before ResumeThread and preserve fail-closed QueryInformationJobObject behavior. Complete the remaining frozen invariants: retained canonical executable/project handles and file identities drive mutex/inventory/launch authority; supervisor identity is synchronously retained and watched before any inventory, mutation, or resume; redirected protocol and diagnostics use continuous bounded byte pumps; worker termination has one emergency grace and never releases the Global mutex without confirmed exit; preexisting cleanup announces CLEANUP_BEGIN, terminates verified retained synchronize-capable handles, waits, records only signaled PIDs, and requires a clean second inventory; exact-image command lines are tri-state and every ambiguous or unverifiable --headless/--path form fails CleanupFailure; public validation is manual/bounded and always yields one JSON; worker and supervisor share one monotonic deadline with reserve R; all required ABI offsets, NTSTATUS, last-error, wait, termination, containment-handle, and capture-close paths fail closed; capture reads are handle-based, bounded, deadline-aware, and ordered; remove every success-conferring test seam and make both bitness probes exercise the normal fake-engine path. Extend or correct the focused matrix to prove these real failure points. Launch real Godot zero times and do not touch gameplay, audio, plans, Agent configuration, or bridge code.",
+  "mode": "write",
+  "allowed_paths": [
+    "tools/testing/invoke_godot_test.ps1",
+    "tools/testing/tests/fake_engine.py",
+    "tools/testing/tests/test_invoke_godot_test.py"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "tools/agents/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "content/**",
+    "docs/**",
+    "tests/**",
+    ".godot/**"
+  ],
+  "dependency_commit": "7e7889c5215277f392e4fd5a1a529e9bdb7ee51a",
+  "acceptance_commands": [
+    "python -m unittest tools.testing.tests.test_invoke_godot_test -v",
+    "$ErrorActionPreference='Stop'; $tokens=$null; $errors=$null; $null=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/testing/invoke_godot_test.ps1'),[ref]$tokens,[ref]$errors); if($errors.Count -ne 0){throw ($errors|Out-String)}; Write-Host 'POWERSHELL_PARSE=pass'",
+    "$changed=@(git status --porcelain -uall|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $allowed=@('tools/testing/invoke_godot_test.ps1','tools/testing/tests/fake_engine.py','tools/testing/tests/test_invoke_godot_test.py'); $outside=@($changed|Where-Object{$_-notin $allowed}); if($outside.Count -ne 0){throw \"Outside changes: $($outside -join ',')\"}; $temps=@(Get-ChildItem tools/testing/tests -Force -Directory -ErrorAction SilentlyContinue|Where-Object Name -Match '^(?:_test_work|\\.invoke_godot_test_|debug_)'); if($temps.Count -ne 0){throw \"Temporary test artifacts remain: $($temps.Name -join ',')\"}; Write-Host 'PATH_SCOPE=pass'",
+    "git diff --check 7e7889c5215277f392e4fd5a1a529e9bdb7ee51a -- tools/testing/invoke_godot_test.ps1 tools/testing/tests/fake_engine.py tools/testing/tests/test_invoke_godot_test.py"
+  ],
+  "output_requirements": [
+    "Map every final-static-review blocker to exact repaired code and a test that reaches the real native/protocol branch rather than a PowerShell short circuit",
+    "Report supervisor S0-S6 and worker W0-W8 compliance, retained identities, mutex key, watcher lifetime, bounded pumps, monotonic timing, preexisting cleanup phase, command-line tri-state, native return and ABI offset checks, capture/cleanup order, and test-seam authority",
+    "Report every focused test name/result, x86 and x64 normal-path evidence, all four acceptance exits, exact changed files, zero temporary artifacts, and real Godot launch count zero",
+    "Do not report completion if any blocker is merely documented as a residual risk; a separate static deep review remains mandatory"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "Static review GATE: REPAIR is authoritative. It approved only atomic JOB_LIST/HANDLE_LIST suspended creation and fail-closed QueryInformationJobObject. No real Godot smoke is authorized.",
+    "Identity blocker at prior lines 116-124,148-158,167-168: replace Resolve-Path/Path.GetFullPath authority with retained executable/project handles, GetFinalPathNameByHandleW plus volume/file ID, project-identity mutex hashing, directory-identity comparison for existing --path, and retained expected executable identity through launch verification. String spelling is diagnostic only.",
+    "Watcher blocker at prior lines 128,131,159,163-168: immediately after native initialization synchronously open/validate and retain the supervisor handle, start a hard-deadline watcher for the whole worker lifetime, recheck before any preexisting termination and immediately before ResumeThread, and exit the worker on watcher failure so sole-job-handle closure contains descendants. Do not retain/use a raw closed job value.",
+    "Supervisor cleanup blocker at prior lines 187,197,205,214-217: initialize every task/state variable before Start, track workerExitConfirmed, perform exactly one fixed 1000 ms emergency wait after kill, never later block/drain, classify unconfirmed exit CleanupFailure, and deliberately do not ReleaseMutex so process exit exposes abandonment.",
+    "Protocol blocker at prior lines 20,28-38,197,199,205-208: replace ReadLineAsync/ReadToEndAsync with continuous bounded byte readers for both redirected streams. Enforce 16 KiB per frame and bounded total diagnostics while reading, reject unterminated/extra/duplicate frames, continuously drain READY-through-FINAL so pipe capacity cannot deadlock, and parse exactly one authenticated READY and FINAL after worker exit.",
+    "Preexisting cleanup blocker at prior lines 123-124,163-165,177-179,205,212: request SYNCHRONIZE with retained handles, determine liveness by handle wait rather than STILL_ACTIVE, emit authenticated CLEANUP_BEGIN before first mutation, terminate and wait each retained handle within budget, record cleanedPids only after signal, recheck retained supervisor before mutation, and require a second complete inventory. Any deadline/failure after CLEANUP_BEGIN is CleanupFailure, not Timeout/InvalidInput.",
+    "Classifier blocker at prior lines 118-123: return verified-target, verified-other, or ambiguous/failure. Exact-image CommandLineToArgvW failure, --headless=*, zero/duplicate/empty/relative/inaccessible/malformed --path, or identity-open failure is CleanupFailure. Open declared directories and compare file identity. Clear last error before Process32NextW; only ERROR_NO_MORE_FILES is clean completion.",
+    "Validation blocker at prior lines 3-10,147,152-155,190-196,207-217: remove binding-time Mandatory/ValidateRange behavior that can prompt or bypass JSON. Manually require valid nonempty values; exactly one GodotArgument form; JSON must be a nonempty array of strings; direct/decoded/request aggregates are capped and reject NULs. Validate the complete FINAL contract including status/category/exit/project/log/cleanedPids consistency before constructing one public JSON.",
+    "Timing blocker at prior lines 131,140,166,168,192,205,214-215: use a passed QPC/Stopwatch monotonic deadline, not DateTime.UtcNow. Every wait derives from it. Reserve R=min(2000ms,max(250ms,ceil(total_ms/10))) for normal teardown; only the supervisor gets one T+1000 ms emergency containment grace.",
+    "Native blocker at prior lines 114-131: assert every frozen size and Marshal.OffsetOf value on x86/x64; validate UNICODE_STRING pointer/length stay within the allocated buffer; check both NtQueryInformationProcess statuses; require ERROR_INSUFFICIENT_BUFFER from attribute-list sizing; distinguish WAIT_OBJECT_0, WAIT_TIMEOUT, WAIT_FAILED; check containment/target CloseHandle/LocalFree/TerminateJobObject/capture close results and fail closed without converting uncertainty to success/timeout.",
+    "Capture blocker at prior lines 127,131,172-181: retain capture handles and use bounded async/overlapped readers under the monotonic deadline; avoid path-level Get-Item/Get-Content TOCTOU; reject cap+1/growth/extra data; finish captures after root/job completion; close capture, process, thread, and job handles in frozen order with state-based exit precedence rather than message regex.",
+    "Test blocker at prior line 161 and prior tests 111-121,173-201,218-239: remove AbiCheckOnly or any success-producing seam. Both System32 and SysWOW64 probes must run the normal fake-engine path. Add deterministic evidence for supervisor death before cleanup/resume, canonical aliases/replacement identity, ambiguous existing command lines, bounded/unterminated/oversized protocol and capture streams, CLEANUP_BEGIN precedence, PID reuse/retained wait, and unconfirmed worker termination. Fault seams may only pause or force a native failure and cannot inject a successful result, identity, handle, PID, command line, path, or kill target.",
+    "Run targeted tests while repairing, then run the revised focused suite exactly once as the final ticket acceptance plus parser/scope/diff checks. Do not run a full repository suite or launch Godot. After success, a different deep_reviewer must perform a new read-only static gate before one guarded smoke.",
+    "This is a new bounded ticket after the prior successful escalation lineage closed, so start at the test_performance profile default gpt-5.6-terra/high. If this ticket fails, resume its same session/worktree at escalation level 1. Successful completion closes the lineage and later fresh tickets again use Terra/high."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
