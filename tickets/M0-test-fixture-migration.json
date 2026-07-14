@@ -1,0 +1,48 @@
+{
+  "id": "M0-test-fixture-migration",
+  "objective": "Apply the bounded TEST_MIGRATION gate from deep_reviewer to M0 candidate 4cf3b5291136c7a37b08a264b696fbf3920b1259. Change only three obsolete test fixtures so they construct bullets through the authoritative BulletWorld introduced by the approved M0 ownership extraction; do not change production runtime or weaken behavioral assertions. In assert_phase3_protagonist_profiles.gd, replace detached bullet_pool assignments with _clear_bullets() and _spawn_bullet_enemy using the same positions, radii and types while retaining selected-hitbox and selected-graze assertions. In assert_phase4_main_data_integration.gd, configure bullet_world with 32/32/32 and synchronize compatibility views instead of constructing a detached Main pool; activate complete states in bullet_world.pool and rebuild authoritative active indices, removing access to deleted _active_index_initialized while retaining family-count, hit, graze, boss-clear, timeout and bomb-clear assertions. In assert_phase8_followup_regressions.gd, configure BulletWorld with initial capacity 4, hard capacity 8 and growth 4, synchronize views, populate through the production spawn API, verify fifth spawn growth without overwrite, fill the remaining slots, and retain hard-cap rejection plus visible-lifetime/offscreen-reclamation assertions; remove deleted private-field access. No other test or source change is authorized.",
+  "mode": "write",
+  "allowed_paths": [
+    "tests/assert_phase3_protagonist_profiles.gd",
+    "tests/assert_phase4_main_data_integration.gd",
+    "tests/assert_phase8_followup_regressions.gd"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "docs/**"
+  ],
+  "dependency_commit": "4cf3b5291136c7a37b08a264b696fbf3920b1259",
+  "acceptance_commands": [
+    "$out = & 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64_console.exe' --headless --log-file \"$env:TEMP\\godot-m0-fixture-phase3.log\" --path . --script res://tests/assert_phase3_protagonist_profiles.gd 2>&1; $out | Out-Host; if ($LASTEXITCODE -ne 0 -or ($out -match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|M0_FAIL')) { exit 1 }",
+    "$out = & 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64_console.exe' --headless --log-file \"$env:TEMP\\godot-m0-fixture-phase4.log\" --path . --script res://tests/assert_phase4_main_data_integration.gd 2>&1; $out | Out-Host; if ($LASTEXITCODE -ne 0 -or ($out -match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|M0_FAIL')) { exit 1 }",
+    "$out = & 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64_console.exe' --headless --log-file \"$env:TEMP\\godot-m0-fixture-phase8.log\" --path . --script res://tests/assert_phase8_followup_regressions.gd 2>&1; $out | Out-Host; if ($LASTEXITCODE -ne 0 -or ($out -match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|M0_FAIL')) { exit 1 }",
+    "$out = & 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64_console.exe' --headless --log-file \"$env:TEMP\\godot-m0-fixture-determinism.log\" --path . --script res://tests/assert_m0_determinism.gd 2>&1; $out | Out-Host; if ($LASTEXITCODE -ne 0 -or ($out -match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|M0_FAIL')) { exit 1 }",
+    "$out = & 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64_console.exe' --headless --log-file \"$env:TEMP\\godot-m0-fixture-replay.log\" --path . --script res://tests/assert_m0_replay_runtime.gd 2>&1; $out | Out-Host; if ($LASTEXITCODE -ne 0 -or ($out -match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|M0_FAIL')) { exit 1 }",
+    "$out = & 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64_console.exe' --headless --log-file \"$env:TEMP\\godot-m0-fixture-smoke.log\" --path . scenes/main.tscn --quit-after 5 2>&1; $out | Out-Host; if ($LASTEXITCODE -ne 0 -or ($out -match 'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|M0_FAIL')) { exit 1 }",
+    "git diff --check"
+  ],
+  "output_requirements": [
+    "Report the exact setup API replacement in each of the three fixtures",
+    "Confirm every original selected-hitbox, graze, family, clear, capacity, lifetime and reclamation assertion remains present",
+    "Report all seven acceptance command exit results and output scans",
+    "Confirm no production runtime, content, project, audio or unrelated test file changed",
+    "Report residual risk only within this bounded fixture migration"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "deep_reviewer run 20260714T154802Z-M0-architecture-rereview-deep_reviewer-4ed932ff returned GATE: TEST_MIGRATION with zero changed files.",
+    "The reviewer closed all five original M0 architecture blockers and explicitly ruled that production repair is not indicated.",
+    "Use an explicit --log-file for every Godot launch because default user:// logging has crashed Godot 4.7 in the Agent sandbox.",
+    "This is a new bounded test-maintenance ticket on committed candidate 4cf3b52, not a continuation of the completed runtime-repair ticket and not permission to reopen M0 architecture."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
