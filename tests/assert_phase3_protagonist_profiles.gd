@@ -126,7 +126,8 @@ func _verify_main_radius_helpers_use_selected_profile() -> void:
 	main_shell.player_invincible = false
 	main_shell.player_just_hit = false
 	main_shell.player_deathbomb_primed = false
-	main_shell.bullet_pool = [{"active": true, "type": "circle", "x": main_shell.player_x + hit_distance, "y": main_shell.player_y, "radius": bullet_radius}]
+	main_shell._clear_bullets()
+	_assert(main_shell._spawn_bullet_enemy(main_shell.player_x + hit_distance, main_shell.player_y, 0.0, 0.0, bullet_radius, Color.RED, "circle"), "Hitbox regression setup must spawn an enemy bullet.")
 	main_shell._check_collisions(false)
 	_assert(main_shell.player_just_hit or not bool(main_shell.bullet_pool[0].active), "_check_collisions should use selected protagonist hitbox, not PLAYER_HITBOX.")
 
@@ -137,7 +138,8 @@ func _verify_main_radius_helpers_use_selected_profile() -> void:
 	var graze_distance: float = float(gm.PLAYER_GRAZE) + bullet_radius + 0.25
 	_assert(graze_distance > gm.PLAYER_GRAZE + bullet_radius, "Graze regression setup should sit outside the legacy graze radius.")
 	_assert(graze_distance < float(profile.graze_radius) + bullet_radius, "Graze regression setup should sit inside Magician graze radius.")
-	main_shell.bullet_pool = [{"active": true, "type": "circle", "x": main_shell.player_x + graze_distance, "y": main_shell.player_y, "radius": bullet_radius}]
+	main_shell._clear_bullets()
+	_assert(main_shell._spawn_bullet_enemy(main_shell.player_x + graze_distance, main_shell.player_y, 0.0, 0.0, bullet_radius, Color.RED, "circle"), "Graze regression setup must spawn an enemy bullet.")
 	main_shell._check_collisions(false)
 	_assert_equal(gm.graze, 1, "_check_collisions should use selected protagonist graze radius, not PLAYER_GRAZE.")
 	main_shell.free()

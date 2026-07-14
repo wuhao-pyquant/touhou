@@ -2,12 +2,32 @@ extends Node2D
 
 # Main game scene - all game logic in one script for simplicity
 
+const FixedTickClock := preload("res://scripts/runtime/fixed_tick_clock.gd")
+const DeterministicRng := preload("res://scripts/runtime/deterministic_rng.gd")
+const SimulationStateHasher := preload("res://scripts/runtime/simulation_state_hasher.gd")
+const BulletWorld := preload("res://scripts/runtime/bullet_world.gd")
+const BossStateMachine := preload("res://scripts/runtime/boss_state_machine.gd")
+const GameplayInputBuffer := preload("res://scripts/runtime/gameplay_input_buffer.gd")
+const ReplayData := preload("res://scripts/replay/replay_data.gd")
+const ReplayHeader := preload("res://scripts/replay/replay_header.gd")
+
+var fixed_tick_clock: RefCounted = FixedTickClock.new()
+var gameplay_rng: RefCounted = DeterministicRng.new(1)
+var simulation_state_hasher: RefCounted = SimulationStateHasher.new()
+var bullet_world: RefCounted = BulletWorld.new()
+var boss_state_machine: RefCounted = BossStateMachine.new()
+var gameplay_input_buffer: RefCounted = GameplayInputBuffer.new()
+var replay_data: RefCounted = ReplayData.new()
+var gameplay_seed: int = 1
+var gameplay_difficulty: String = "normal"
+var simulation_tick_index: int = 0
+var current_tick_input: Dictionary = GameplayInputBuffer.empty_tick_frame(0)
+var replay_runtime_mode: String = "none"
+var replay_identity: Dictionary = {}
+
+# Compatibility views only. BulletWorld owns and mutates these arrays.
 var bullet_pool: Array = []
 var active_bullet_indices: Array[int] = []
-var _next_active_bullet_indices: Array[int] = []
-var _active_bullet_membership := PackedByteArray()
-var _active_index_initialized := false
-var _bullet_spawn_cursor := 0
 var enemies: Array = []
 var items: Array = []
 var combat_effects: Array = []
@@ -40,6 +60,15 @@ const HUD_HEIGHT := 78.0
 const GAMEPLAY_TOP := 82.0
 const BULLET_POOL_GROWTH := 2048
 const MAX_COMBAT_EFFECTS := 96
+const SIMULATION_SNAPSHOT_VERSION := 2
+const REPLAY_RUNTIME_MODES := ["none", "recording", "playback"]
+const GAME_MANAGER_STATE_FIELDS := [
+	"score", "graze", "shared_power", "bullet_type", "lives", "bombs",
+	"life_fragments", "bomb_fragments", "night_festival_seals", "current_stage",
+	"state", "selected_protagonist_id", "selected_shot_id", "practice_mode",
+	"practice_stage", "highest_reached_stage", "pause_return_state",
+	"settings_return_state", "settings",
+]
 const GRAZE_BOMB_FRAGMENT_INTERVAL := 90
 const GRAZE_LIFE_FRAGMENT_INTERVAL := 300
 const SHOT_NAMES_ZH := ["\u6563\u5c04", "\u8d2f\u901a", "\u8ffd\u8e2a"]
@@ -633,7 +662,7 @@ func _should_show_focus_hitbox() -> bool:
 	return not player_bombing and (_settings_bool("always_show_focus_hitbox", false) or _focus_held())
 
 func _focus_held() -> bool:
-	return Input.is_action_pressed("focus") or Input.is_key_pressed(KEY_SHIFT)
+	return bool(current_tick_input.get("focus", gameplay_input_buffer.held_focus))
 
 func _item_magnetize_requested(focus_held: bool) -> bool:
 	var top_collection_line := SCREEN_H * float(game_manager_ref.ITEM_TOP_RATIO if game_manager_ref else 0.2)
@@ -664,7 +693,7 @@ func _spawn_combat_effect(kind: String, position: Vector2, radius: float, color:
 	combat_effects.append({
 		"kind": kind, "position": position, "radius": radius, "color": color,
 		"age": 0.0, "duration": 46.0 if kind == "enemy_defeat" else 92.0,
-		"seed": int(position.x * 17.0 + position.y * 31.0 + Time.get_ticks_msec()) & 1023,
+		"seed": int(position.x * 17.0 + position.y * 31.0 + simulation_tick_index * 13 + combat_effects.size()) & 1023,
 	})
 
 func _update_combat_effects(delta: float) -> void:
@@ -880,7 +909,298 @@ func _init() -> void:
 		MAX_BULLETS = 12000
 		SCREEN_W = 720
 		SCREEN_H = 960
+	bullet_world.configure(MAX_BULLETS, bullet_pool_hard_capacity, BULLET_POOL_GROWTH)
+	_sync_bullet_world_compatibility_views()
 	_apply_viewport_layout()
+
+func set_gameplay_seed(seed_value: int) -> void:
+	gameplay_seed = seed_value
+	gameplay_rng.reseed(gameplay_seed)
+
+func _apply_replay_header_setup(header: RefCounted) -> void:
+	game_manager_ref.selected_protagonist_id = String(header.protagonist)
+	game_manager_ref.selected_shot_id = String(header.shot_type)
+	game_manager_ref.practice_mode = String(header.mode) != ReplayHeader.MODE_STORY
+	game_manager_ref.practice_stage = int(header.starting_stage)
+	gameplay_difficulty = String(header.difficulty)
+	set_gameplay_seed(int(header.seed))
+	_start_game()
+	if String(header.mode) == ReplayHeader.MODE_SPELL_PRACTICE:
+		_enter_boss()
+		var phase_id := String(header.phase_id)
+		for card_index in range(boss.get("cards", []).size()):
+			var card: Dictionary = boss.cards[card_index]
+			if phase_id in [String(card.get("id", "")), String(card.get("pattern", "")), String(card.get("name", ""))]:
+				boss.card_idx = card_index
+				break
+	replay_identity = header.to_dict().duplicate(true)
+
+func start_replay_recording(header: RefCounted, initialize_run: bool = true) -> bool:
+	if not replay_data.start_recording(header):
+		return false
+	replay_runtime_mode = "recording"
+	if initialize_run:
+		_apply_replay_header_setup(replay_data.header)
+	else:
+		set_gameplay_seed(int(replay_data.header.seed))
+		gameplay_difficulty = String(replay_data.header.difficulty)
+		replay_identity = replay_data.header.to_dict().duplicate(true)
+	return true
+
+func stop_replay_recording() -> Dictionary:
+	if replay_runtime_mode != "recording":
+		return {}
+	var document: Dictionary = replay_data.to_dict().duplicate(true)
+	replay_runtime_mode = "none"
+	return document
+
+func start_replay_playback(document: Dictionary, expected_identity: Dictionary = {}, initialize_run: bool = true) -> bool:
+	# ReplayData validates the complete document and expected identity before it
+	# changes its own cursor/header. Live simulation setup happens only after that.
+	if not replay_data.start_playback(document, expected_identity):
+		return false
+	replay_runtime_mode = "playback"
+	if initialize_run:
+		_apply_replay_header_setup(replay_data.header)
+	else:
+		set_gameplay_seed(int(replay_data.header.seed))
+		gameplay_difficulty = String(replay_data.header.difficulty)
+		replay_identity = replay_data.header.to_dict().duplicate(true)
+	return true
+
+func stop_replay_playback() -> void:
+	if replay_runtime_mode == "playback":
+		replay_runtime_mode = "none"
+
+func capture_bullet_world_state() -> Dictionary:
+	return bullet_world.capture_state()
+
+func restore_bullet_world_state(snapshot: Dictionary) -> bool:
+	var restored: Dictionary = bullet_world.restore_state(snapshot)
+	if not bool(restored.get("ok", false)):
+		return false
+	_sync_bullet_world_compatibility_views()
+	return true
+
+func _sync_bullet_world_compatibility_views() -> void:
+	bullet_pool = bullet_world.pool
+	active_bullet_indices = bullet_world.active_indices
+
+func capture_boss_state() -> Dictionary:
+	return boss_state_machine.capture_state(boss)
+
+func _capture_game_manager_state() -> Dictionary:
+	var manager_state := {}
+	if game_manager_ref:
+		for property_name in GAME_MANAGER_STATE_FIELDS:
+			var value = game_manager_ref.get(property_name)
+			manager_state[property_name] = value.duplicate(true) if value is Array or value is Dictionary else value
+	return manager_state
+
+func _capture_replay_runtime_state() -> Dictionary:
+	var state := {
+		"mode": replay_runtime_mode,
+		"identity": replay_identity.duplicate(true),
+	}
+	if replay_runtime_mode != "none" and replay_data.header != null:
+		state["data"] = replay_data.capture_runtime_state()
+	return state
+
+func capture_simulation_state() -> Dictionary:
+	return {
+		"version": SIMULATION_SNAPSHOT_VERSION,
+		"tick": simulation_tick_index,
+		"gameplay_seed": gameplay_seed,
+		"gameplay_difficulty": gameplay_difficulty,
+		"clock": fixed_tick_clock.snapshot(),
+		"rng": gameplay_rng.snapshot(),
+		"input": gameplay_input_buffer.snapshot(),
+		"manager": _capture_game_manager_state(),
+		"current_stage_local": current_stage_local,
+		"stage_timer": stage_timer,
+		"stage_controller": stage_controller.duplicate(true),
+		"player": {
+			"position": Vector2(player_x, player_y),
+			"last_move_dir": player_last_move_dir,
+			"invincible": player_invincible,
+			"invincible_timer": player_invincible_timer,
+			"just_hit": player_just_hit,
+			"bombing": player_bombing,
+			"bomb_timer": player_bomb_timer,
+			"bomb_radius": player_bomb_radius,
+			"bomb_phase": player_bomb_phase,
+			"bomb_wave_timer": player_bomb_wave_timer,
+			"bomb_config": player_bomb_config.duplicate(true),
+			"deathbomb_primed": player_deathbomb_primed,
+			"deathbomb_timer": player_deathbomb_timer,
+			"fire_cooldown": player_fire_cooldown,
+			"shoot_sfx_skip": _sfx_shoot_skip,
+		},
+		"boss_alive": boss_alive,
+		"boss": capture_boss_state(),
+		"bullets": capture_bullet_world_state(),
+		"enemies": enemies.duplicate(true),
+		"items": items.duplicate(true),
+		"combat_effects": combat_effects.duplicate(true),
+		"replay": _capture_replay_runtime_state(),
+	}
+
+func _validate_manager_snapshot(manager_state: Dictionary) -> bool:
+	for field in GAME_MANAGER_STATE_FIELDS:
+		if not manager_state.has(field):
+			return false
+	for field in ["score", "graze", "shared_power", "bullet_type", "lives", "bombs", "life_fragments", "bomb_fragments", "night_festival_seals", "current_stage", "practice_stage", "highest_reached_stage"]:
+		if typeof(manager_state[field]) != TYPE_INT or int(manager_state[field]) < 0:
+			return false
+	for field in ["state", "selected_protagonist_id", "selected_shot_id", "pause_return_state", "settings_return_state"]:
+		if typeof(manager_state[field]) != TYPE_STRING:
+			return false
+	if int(manager_state.current_stage) < 1 or int(manager_state.practice_stage) < 1 or int(manager_state.highest_reached_stage) < 1:
+		return false
+	return typeof(manager_state.practice_mode) == TYPE_BOOL and manager_state.settings is Dictionary
+
+func _is_valid_snapshot_number(value: Variant, minimum: float = -INF) -> bool:
+	if typeof(value) not in [TYPE_FLOAT, TYPE_INT]:
+		return false
+	var number := float(value)
+	return not is_nan(number) and not is_inf(number) and number >= minimum
+
+func _validate_replay_runtime_snapshot(replay_state: Dictionary) -> bool:
+	var mode := String(replay_state.get("mode", ""))
+	if mode not in REPLAY_RUNTIME_MODES or not (replay_state.get("identity", {}) is Dictionary):
+		return false
+	if mode == "none":
+		return not replay_state.has("data")
+	var data = replay_state.get("data", null)
+	if not (data is Dictionary):
+		return false
+	var probe := ReplayData.new()
+	return probe.validate_runtime_state(data)
+
+func validate_simulation_state(snapshot: Dictionary) -> bool:
+	if int(snapshot.get("version", -1)) != SIMULATION_SNAPSHOT_VERSION:
+		return false
+	for section in ["clock", "rng", "input", "manager", "player", "boss", "bullets", "replay"]:
+		if not (snapshot.get(section) is Dictionary):
+			return false
+	for section in ["stage_controller"]:
+		if not (snapshot.get(section) is Dictionary):
+			return false
+	for section in ["enemies", "items", "combat_effects"]:
+		if not (snapshot.get(section) is Array):
+			return false
+	if typeof(snapshot.get("tick")) != TYPE_INT or int(snapshot.tick) < 0:
+		return false
+	if typeof(snapshot.get("gameplay_seed")) != TYPE_INT or int(snapshot.gameplay_seed) != int(snapshot.rng.get("initial_seed", 0)):
+		return false
+	if String(snapshot.get("gameplay_difficulty", "")) not in ReplayHeader.SUPPORTED_DIFFICULTIES:
+		return false
+	if typeof(snapshot.get("current_stage_local")) != TYPE_INT or int(snapshot.current_stage_local) < 1:
+		return false
+	if not _is_valid_snapshot_number(snapshot.get("stage_timer"), 0.0):
+		return false
+	var clock_probe := FixedTickClock.new()
+	var rng_probe := DeterministicRng.new()
+	var input_probe := GameplayInputBuffer.new()
+	var bullet_probe := BulletWorld.new()
+	if not clock_probe.restore(snapshot.clock) or clock_probe.tick_index != int(snapshot.tick):
+		return false
+	if not rng_probe.restore(snapshot.rng) or not input_probe.restore(snapshot.input):
+		return false
+	if not bullet_probe.validate_snapshot(snapshot.bullets):
+		return false
+	if not _validate_manager_snapshot(snapshot.manager) or not _validate_replay_runtime_snapshot(snapshot.replay):
+		return false
+	var player_state: Dictionary = snapshot.player
+	for field in ["position", "last_move_dir", "invincible", "invincible_timer", "just_hit", "bombing", "bomb_timer", "bomb_radius", "bomb_phase", "bomb_wave_timer", "bomb_config", "deathbomb_primed", "deathbomb_timer", "fire_cooldown", "shoot_sfx_skip"]:
+		if not player_state.has(field):
+			return false
+	if not (player_state.position is Vector2) or not (player_state.last_move_dir is Vector2) or not (player_state.bomb_config is Dictionary):
+		return false
+	if is_nan(player_state.position.x) or is_nan(player_state.position.y) or is_inf(player_state.position.x) or is_inf(player_state.position.y):
+		return false
+	if is_nan(player_state.last_move_dir.x) or is_nan(player_state.last_move_dir.y) or is_inf(player_state.last_move_dir.x) or is_inf(player_state.last_move_dir.y):
+		return false
+	for field in ["invincible", "just_hit", "bombing", "deathbomb_primed"]:
+		if typeof(player_state[field]) != TYPE_BOOL:
+			return false
+	for field in ["invincible_timer", "bomb_timer", "bomb_radius", "bomb_wave_timer", "deathbomb_timer", "fire_cooldown"]:
+		if not _is_valid_snapshot_number(player_state[field]):
+			return false
+	for field in ["bomb_phase", "shoot_sfx_skip"]:
+		if typeof(player_state[field]) != TYPE_INT or int(player_state[field]) < 0:
+			return false
+	for collection_name in ["enemies", "items", "combat_effects"]:
+		for entry in snapshot[collection_name]:
+			if not (entry is Dictionary):
+				return false
+	if typeof(snapshot.get("boss_alive")) != TYPE_BOOL:
+		return false
+	var boss_snapshot: Dictionary = snapshot.boss
+	if int(boss_snapshot.get("version", -1)) != BossStateMachine.VERSION or not (boss_snapshot.get("state", {}) is Dictionary):
+		return false
+	var boss_state: Dictionary = boss_snapshot.state
+	if not boss_state.is_empty() and boss_state_machine.restore_state(boss_snapshot).is_empty():
+		return false
+	if bool(snapshot.boss_alive) and boss_state.is_empty():
+		return false
+	return true
+
+func restore_simulation_state(snapshot: Dictionary) -> bool:
+	if not validate_simulation_state(snapshot):
+		return false
+	# Every component has been validated against a disposable owner above; the
+	# assignments below therefore form an all-or-nothing aggregate commit.
+	fixed_tick_clock.restore(snapshot.clock)
+	gameplay_rng.restore(snapshot.rng)
+	gameplay_seed = int(snapshot.gameplay_seed)
+	gameplay_difficulty = String(snapshot.gameplay_difficulty)
+	gameplay_input_buffer.restore(snapshot.input)
+	restore_bullet_world_state(snapshot.bullets)
+	for property_name in GAME_MANAGER_STATE_FIELDS:
+		var value = snapshot.manager[property_name]
+		game_manager_ref.set(property_name, value.duplicate(true) if value is Array or value is Dictionary else value)
+	simulation_tick_index = int(snapshot.tick)
+	current_stage_local = int(snapshot.current_stage_local)
+	stage_timer = float(snapshot.stage_timer)
+	stage_controller = snapshot.stage_controller.duplicate(true)
+	var player_state: Dictionary = snapshot.player
+	player_x = float(player_state.position.x)
+	player_y = float(player_state.position.y)
+	player_last_move_dir = player_state.last_move_dir
+	player_invincible = bool(player_state.invincible)
+	player_invincible_timer = float(player_state.invincible_timer)
+	player_just_hit = bool(player_state.just_hit)
+	player_bombing = bool(player_state.bombing)
+	player_bomb_timer = float(player_state.bomb_timer)
+	player_bomb_radius = float(player_state.bomb_radius)
+	player_bomb_phase = int(player_state.bomb_phase)
+	player_bomb_wave_timer = float(player_state.bomb_wave_timer)
+	player_bomb_config = player_state.bomb_config.duplicate(true)
+	player_deathbomb_primed = bool(player_state.deathbomb_primed)
+	player_deathbomb_timer = float(player_state.deathbomb_timer)
+	player_fire_cooldown = float(player_state.fire_cooldown)
+	_sfx_shoot_skip = int(player_state.shoot_sfx_skip)
+	boss_alive = bool(snapshot.boss_alive)
+	boss = boss_state_machine.restore_state(snapshot.boss) if boss_alive else snapshot.boss.state.duplicate(true)
+	enemies = snapshot.enemies.duplicate(true)
+	items = snapshot.items.duplicate(true)
+	combat_effects = snapshot.combat_effects.duplicate(true)
+	var replay_state: Dictionary = snapshot.replay
+	replay_runtime_mode = String(replay_state.mode)
+	replay_identity = replay_state.identity.duplicate(true)
+	if replay_runtime_mode == "none":
+		replay_data = ReplayData.new()
+	else:
+		replay_data.restore_runtime_state(replay_state.data)
+	current_tick_input = gameplay_input_buffer.current_tick_frame.duplicate(true)
+	return true
+
+func simulation_state_hash() -> String:
+	return simulation_state_hasher.hash_state(capture_simulation_state())
+
+func _transition_boss_phase(next_phase: String, reset_timer: bool = false) -> bool:
+	return boss_state_machine.transition(boss, next_phase, reset_timer)
 
 func _active_stage() -> int:
 	return game_manager_ref.current_stage if game_manager_ref else current_stage_local
@@ -896,19 +1216,19 @@ func _apply_viewport_layout() -> void:
 
 func _ready():
 	_resolve_singletons()
-	randomize()
-	for i in range(MAX_BULLETS):
-		bullet_pool.append(_make_bullet())
-	_active_bullet_membership.resize(MAX_BULLETS)
-	_active_bullet_membership.fill(0)
-	_active_index_initialized = true
+	set_gameplay_seed(gameplay_seed)
+	fixed_tick_clock.reset()
+	gameplay_input_buffer.reset()
+	simulation_tick_index = 0
+	bullet_world.configure(MAX_BULLETS, bullet_pool_hard_capacity, BULLET_POOL_GROWTH)
+	_sync_bullet_world_compatibility_views()
 	# Ensure GameManager globals are initialized
 	game_manager_ref.reset()
 	_apply_runtime_settings()
 	_show_title()
 
 func _make_bullet() -> Dictionary:
-	return {"active":false,"x":0.0,"y":0.0,"vx":0.0,"vy":0.0,"radius":6.0,"color":Color.RED,"type":"circle","lifetime":600.0,"age":0.0,"damage":1.0,"homing":false,"btype":-1,"grazed":false,"boss_hit":false,"motion":{},"has_motion":false,"motion_triggered":false}
+	return bullet_world.make_bullet_state()
 
 func _show_title():
 	_resolve_singletons()
@@ -937,6 +1257,11 @@ func _start_game():
 	game_manager_ref.settings = selected_settings
 	game_manager_ref.apply_selected_shot()
 	_apply_runtime_settings()
+	set_gameplay_seed(gameplay_seed)
+	fixed_tick_clock.reset()
+	gameplay_input_buffer.reset()
+	simulation_tick_index = 0
+	current_tick_input = GameplayInputBuffer.empty_tick_frame(0)
 	game_manager_ref.state = "stage"
 	_sync_canvas_origin("stage")
 	var starting_stage := selected_practice_stage if selected_practice_mode else 1
@@ -956,6 +1281,7 @@ func _reset_player():
 	player_invincible = false; player_invincible_timer = 0.0
 	player_just_hit = false; player_bombing = false
 	player_bomb_timer = 0.0; player_bomb_radius = 0.0; player_bomb_phase = 0
+	player_bomb_wave_timer = 0.0; player_bomb_config = {}
 	player_fire_cooldown = 0.0
 	player_deathbomb_primed = false; player_deathbomb_timer = 0.0
 	player_last_move_dir = Vector2(0, -1)
@@ -965,7 +1291,7 @@ func _respawn():
 	game_manager_ref.bombs = game_manager_ref.PLAYER_INITIAL_BOMBS
 	var dropped: int = int(game_manager_ref.shared_power * game_manager_ref.DEATH_POWER_DROP)
 	for i in range(mini(50, dropped)):
-		_spawn_item(player_x+randf_range(-80,80), player_y+randf_range(-60,60), "power")
+		_spawn_item(player_x + gameplay_rng.range_float(-80.0, 80.0), player_y + gameplay_rng.range_float(-60.0, 60.0), "power")
 	game_manager_ref.shared_power = max(0, game_manager_ref.shared_power - dropped)
 	_reset_player()
 	player_invincible = true
@@ -1014,86 +1340,46 @@ func _load_stage(stage: int):
 	stage_controller["boss_spawned"] = false
 
 func _clear_bullets():
-	for b in bullet_pool: b.active = false
-	active_bullet_indices.clear()
-	_next_active_bullet_indices.clear()
-	if not _active_bullet_membership.is_empty():
-		_active_bullet_membership.fill(0)
-	_bullet_spawn_cursor = 0
-	_active_index_initialized = true
+	bullet_world.reset()
+	_sync_bullet_world_compatibility_views()
 
 func _rebuild_active_bullet_indices() -> void:
-	active_bullet_indices.clear()
-	_active_bullet_membership.resize(bullet_pool.size())
-	_active_bullet_membership.fill(0)
-	for i in range(bullet_pool.size()):
-		if bool(bullet_pool[i].get("active", false)):
-			active_bullet_indices.append(i)
-			_active_bullet_membership[i] = 1
-	_active_index_initialized = true
+	bullet_world.rebuild_active_order()
+	_sync_bullet_world_compatibility_views()
 
 func _ensure_active_bullet_indices() -> void:
-	if not _active_index_initialized:
-		_rebuild_active_bullet_indices()
+	_sync_bullet_world_compatibility_views()
 
 func _claim_free_bullet_slot() -> int:
-	_ensure_active_bullet_indices()
-	var pool_size := bullet_pool.size()
-	if pool_size <= 0:
-		return -1
-	for offset in range(pool_size):
-		var index := (_bullet_spawn_cursor + offset) % pool_size
-		if not bool(bullet_pool[index].get("active", false)):
-			_bullet_spawn_cursor = (index + 1) % pool_size
-			return index
-	if pool_size < bullet_pool_hard_capacity:
-		var previous_size := pool_size
-		var new_size := mini(pool_size + BULLET_POOL_GROWTH, bullet_pool_hard_capacity)
-		for _index in range(previous_size, new_size):
-			bullet_pool.append(_make_bullet())
-		_active_bullet_membership.resize(new_size)
-		_bullet_spawn_cursor = (previous_size + 1) % new_size
-		return previous_size
-	return -1
+	return bullet_world.claim_free_slot()
 
 func _spawn_bullet_player(x: float, y: float, vx: float, vy: float, radius: float = 5.0, color: Color = Color(0,0.7,1), damage: float = 1.0, homing: bool = false, btype: int = -1, persist: bool = false, lifetime: float = 100.0):
-	var i := _claim_free_bullet_slot()
-	if i < 0:
-		return false
-	var b = bullet_pool[i]
-	b.active = true; b.x = x; b.y = y; b.vx = vx; b.vy = vy
-	b.radius = radius; b.color = color
-	# Persisting player bullets use the bomb owner branch and survive hits.
-	b.type = "bomb" if persist else "player"
-	b.lifetime = lifetime; b.age = 0; b.damage = damage
-	b.homing = homing; b.btype = btype; b.grazed = false; b.boss_hit = false
-	b.motion = {}; b.has_motion = false; b.motion_triggered = false
-	if _active_bullet_membership.size() != bullet_pool.size():
-		_active_bullet_membership.resize(bullet_pool.size())
-	if _active_bullet_membership[i] == 0:
-		active_bullet_indices.append(i)
-		_active_bullet_membership[i] = 1
-	_active_index_initialized = true
-	return true
+	var bullet_index: int = int(bullet_world.spawn_bullet({
+		"x": x, "y": y, "vx": vx, "vy": vy,
+		"radius": radius, "color": color,
+		"type": "bomb" if persist else "player",
+		"lifetime": lifetime, "age": 0.0, "damage": damage,
+		"homing": homing, "btype": btype, "grazed": false,
+		"boss_hit": false, "motion": {}, "has_motion": false,
+		"motion_triggered": false,
+	}))
+	_sync_bullet_world_compatibility_views()
+	return bullet_index >= 0
 
 func _spawn_bullet_enemy(x: float, y: float, vx: float, vy: float, radius: float = 6.0, color: Color = Color.RED, btype: String = "circle", lifetime: float = 350.0, motion: Dictionary = {}):
-	var i := _claim_free_bullet_slot()
-	if i < 0:
+	var bullet_index: int = int(bullet_world.spawn_bullet({
+		"x": x, "y": y, "vx": vx, "vy": vy,
+		"radius": maxf(0.001, radius), "color": color, "type": btype,
+		"lifetime": lifetime, "age": 0.0, "damage": 1.0,
+		"homing": false, "btype": -1, "grazed": false, "boss_hit": false,
+		"motion": motion.duplicate(true), "has_motion": not motion.is_empty(),
+		"motion_triggered": false,
+		"laser_warning_remaining": maxf(float(motion.get("warning_frames", 0.0)), 0.0),
+		"laser_active_remaining": float(motion.get("active_frames", -1.0)),
+	}))
+	_sync_bullet_world_compatibility_views()
+	if bullet_index < 0:
 		return false
-	var b = bullet_pool[i]
-	b.active = true; b.x = x; b.y = y; b.vx = vx; b.vy = vy
-	b.radius = maxf(0.001, radius); b.color = color; b.type = btype
-	b.lifetime = lifetime; b.age = 0; b.damage = 1.0
-	b.homing = false; b.btype = -1; b.grazed = false; b.boss_hit = false
-	b.motion = motion.duplicate(true)
-	b.has_motion = not motion.is_empty()
-	b.motion_triggered = false
-	if _active_bullet_membership.size() != bullet_pool.size():
-		_active_bullet_membership.resize(bullet_pool.size())
-	if _active_bullet_membership[i] == 0:
-		active_bullet_indices.append(i)
-		_active_bullet_membership[i] = 1
-	_active_index_initialized = true
 	if btype == "laser" and audio_manager_ref:
 		audio_manager_ref.play_sfx("laser_warning", -12.0)
 	return true
@@ -1118,13 +1404,13 @@ func _spawn_enemy_bullet_spec(spec: Dictionary) -> void:
 	)
 
 func _spawn_item(x: float, y: float, item_type: String = "power"):
-	items.append({"alive":true,"collected":false,"x":x,"y":y,"type":item_type,"radius":9.0,"vy":-2.5,"vx":randf_range(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":randf_range(0,TAU),"birth":15.0,"anim":randf_range(0,TAU)})
+	items.append({"alive":true,"collected":false,"x":x,"y":y,"type":item_type,"radius":9.0,"vy":-2.5,"vx":gameplay_rng.range_float(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":gameplay_rng.range_float(0.0,TAU),"birth":15.0,"anim":gameplay_rng.range_float(0.0,TAU)})
 
 func _spawn_enemy(x: float, y: float, hp: float = 5.0, pattern: String = "aimed", move: String = "straight", vx: float = 0.0, vy: float = 1.5, move_data: Dictionary = {}, strong: bool = false):
 	var cfg: Dictionary = enemy_pattern_executor.spawn_config(pattern, hp, _stage_enemy_hp_mult(), strong)
 	var ehp: float = float(cfg.hp)
 	var radius := float(cfg.radius)
-	enemies.append({"alive":true,"x":x,"y":y,"hp":ehp,"max_hp":ehp,"radius":radius,"vx":vx,"vy":vy,"move_timer":0.0,"move":move,"move_data":move_data.duplicate(true),"pattern":pattern,"shoot_timer":randf_range(0,30),"shoot_phase":0,"strong":strong,"dying":false,"death_timer":0.0,"family_id":String(cfg.family_id),"drop_tier":String(cfg.drop_tier),"shoot_interval":float(cfg.shoot_interval)})
+	enemies.append({"alive":true,"x":x,"y":y,"hp":ehp,"max_hp":ehp,"radius":radius,"vx":vx,"vy":vy,"move_timer":0.0,"move":move,"move_data":move_data.duplicate(true),"pattern":pattern,"shoot_timer":gameplay_rng.range_float(0.0,30.0),"shoot_phase":0,"strong":strong,"dying":false,"death_timer":0.0,"family_id":String(cfg.family_id),"drop_tier":String(cfg.drop_tier),"shoot_interval":float(cfg.shoot_interval)})
 
 func _nearest_enemy(px: float, py: float) -> Vector2:
 	var best: float = 99999.0; var best_v: Vector2 = Vector2(px, py - 100)
@@ -1253,40 +1539,73 @@ func _update_pause_menu() -> void:
 
 func _process(delta: float):
 	_resolve_singletons()
-	delta = clampf(delta, 0.0, 0.05)
 	var gm = game_manager_ref
 	var current_state: String = gm.state if gm else "title"
-	match current_state:
-		"title":
-			_update_title_menu()
-		"practice_select":
-			_update_practice_select_menu()
-		"character_select":
-			_update_character_select_menu()
-		"shot_select":
-			_update_shot_select_menu()
-		"settings":
-			_update_settings_menu()
-		"stage":
-			_update_stage(delta)
-		"boss":
-			_update_boss(delta)
-		"stage_clear":
-			if Input.is_action_just_pressed("shoot"): _advance_stage()
-		"final_clear", "game_over":
-			if Input.is_action_just_pressed("shoot"): _show_title()
-		"paused":
-			_update_pause_menu()
+	if current_state in ["stage", "boss"]:
+		if replay_runtime_mode != "playback":
+			gameplay_input_buffer.sample_live_frame()
+		_advance_gameplay_clock(delta)
+	else:
+		fixed_tick_clock.clear_accumulator()
+		match current_state:
+			"title":
+				_update_title_menu()
+			"practice_select":
+				_update_practice_select_menu()
+			"character_select":
+				_update_character_select_menu()
+			"shot_select":
+				_update_shot_select_menu()
+			"settings":
+				_update_settings_menu()
+			"stage_clear":
+				if Input.is_action_just_pressed("shoot"): _advance_stage()
+			"final_clear", "game_over":
+				if Input.is_action_just_pressed("shoot"): _show_title()
+			"paused":
+				_update_pause_menu()
 	_sync_canvas_origin(String(gm.state if gm else "title"))
 	_update_performance_counters()
 	queue_redraw()
+
+func _advance_gameplay_clock(frame_delta: float, sampled_frame: Dictionary = {}) -> int:
+	if not sampled_frame.is_empty() and replay_runtime_mode != "playback":
+		gameplay_input_buffer.sample_frame(sampled_frame)
+	fixed_tick_clock.push_frame_delta(frame_delta)
+	var executed_ticks := 0
+	while fixed_tick_clock.pending_ticks > 0:
+		if replay_runtime_mode == "playback" and not replay_data.has_next_frame():
+			break
+		if not fixed_tick_clock.consume_tick():
+			break
+		simulation_tick_index = fixed_tick_clock.tick_index
+		if replay_runtime_mode == "playback":
+			current_tick_input = gameplay_input_buffer.consume_injected_tick(simulation_tick_index, replay_data.next_frame())
+		else:
+			current_tick_input = gameplay_input_buffer.consume_tick(simulation_tick_index)
+			if replay_runtime_mode == "recording":
+				replay_data.record_tick(current_tick_input)
+		var current_state := String(game_manager_ref.state if game_manager_ref else "title")
+		match current_state:
+			"stage":
+				_update_stage(FixedTickClock.FIXED_DELTA_SECONDS)
+			"boss":
+				_update_boss(FixedTickClock.FIXED_DELTA_SECONDS)
+			_:
+				fixed_tick_clock.clear_accumulator()
+				break
+		executed_ticks += 1
+		if String(game_manager_ref.state if game_manager_ref else "title") not in ["stage", "boss"]:
+			fixed_tick_clock.clear_accumulator()
+			break
+	return executed_ticks
 
 func _sync_canvas_origin(state: String) -> void:
 	var gameplay_state := state in ["stage", "boss", "stage_clear", "final_clear", "game_over", "paused"]
 	position = Vector2(0.0, HUD_HEIGHT if gameplay_state else 0.0)
 
 func _update_stage(delta: float):
-	if Input.is_action_just_pressed("pause"):
+	if bool(current_tick_input.get("pause", false)):
 		pause_menu_cursor = 0
 		_pause_gameplay(game_manager_ref.STATE_STAGE)
 		return
@@ -1309,7 +1628,7 @@ func _update_stage(delta: float):
 		_enter_boss()
 
 func _update_boss(delta: float):
-	if Input.is_action_just_pressed("pause"):
+	if bool(current_tick_input.get("pause", false)):
 		pause_menu_cursor = 0
 		_pause_gameplay(game_manager_ref.STATE_BOSS)
 		return
@@ -1335,15 +1654,14 @@ func _update_boss(delta: float):
 func _enter_boss():
 	game_manager_ref.state = "boss"
 	enemies.clear()
-	_ensure_active_bullet_indices()
-	for bullet_index in active_bullet_indices:
+	for bullet_index in bullet_world.active_order():
 		var b = bullet_pool[bullet_index]
-		if b.active and _is_enemy_bullet_type(String(b.type)): b.active = false
+		if b.active and _is_enemy_bullet_type(String(b.type)): bullet_world.retire_slot(bullet_index)
 	_init_boss()
 	if audio_manager_ref: audio_manager_ref.bgm_stage_boss(game_manager_ref.current_stage)
 
 func _init_boss():
-	boss = {"x":_screen_center_x(),"y":-60.0,"hp":500.0,"max_hp":500.0,"radius":28.0,"phase":"entering","timer":0.0,"entered":false,"sway":randf_range(0,100),"declaring":false,"declare_timer":0.0,"card_name":"","cards":[],"card_idx":0,"card_hp":0.0,"card_timer":0.0,"card_shot":0.0,"flash":0.0,"rot":0.0,"anim":0.0,"alive":true}
+	boss = boss_state_machine.create_initial_state(_screen_center_x(), -60.0, gameplay_rng.range_float(0.0, 100.0))
 	_load_boss_cards()
 	boss_alive = true
 
@@ -1396,7 +1714,7 @@ func _start_boss_card():
 	boss.last_countdown_second = -1
 	boss.move_mode = _boss_movement_mode(c)
 	boss.declaring = true; boss.declare_timer = 90.0
-	boss.phase = "active"
+	_transition_boss_phase(BossStateMachine.PHASE_ACTIVE)
 	if audio_manager_ref:
 		audio_manager_ref.play_sfx("spell_announce")
 
@@ -1472,7 +1790,8 @@ func _boss_enter(delta: float):
 	var target_y := _boss_anchor_y()
 	boss.y = -60.0 + (target_y + 60.0) * (1.0 - (1.0-p)*(1.0-p))
 	if p >= 1.0:
-		boss.phase = "active"; boss.entered = true
+		_transition_boss_phase(BossStateMachine.PHASE_ACTIVE)
+		boss.entered = true
 
 func _boss_active(delta: float):
 	if boss.declaring: return
@@ -1505,11 +1824,11 @@ func _boss_switching(delta: float):
 		if boss.card_idx < boss.cards.size():
 			_start_boss_card()
 		else:
-			boss.phase = "defeated"; boss.timer = 0.0
+			_transition_boss_phase(BossStateMachine.PHASE_DEFEATED, true)
 
 func _boss_defeated(delta: float):
 	boss.timer += delta * 60.0
-	boss.x += randf_range(-2.0, 2.0) * delta * 60.0
+	boss.x += gameplay_rng.range_float(-2.0, 2.0) * delta * 60.0
 	boss.y += 0.5 * delta * 60.0
 	if boss.timer > 180: boss_alive = false
 
@@ -1517,31 +1836,27 @@ func _boss_card_clear():
 	var was_last_card: bool = boss.card_idx >= boss.cards.size() - 1
 	var effect_position := Vector2(float(boss.get("x", _screen_center_x())), float(boss.get("y", _boss_anchor_y())))
 	_spawn_combat_effect("boss_defeat" if was_last_card else "boss_phase", effect_position, 44.0 if was_last_card else 34.0, Color(1.0, 0.34, 0.25) if was_last_card else Color(0.98, 0.76, 0.32))
-	_ensure_active_bullet_indices()
-	for bullet_index in active_bullet_indices:
+	for bullet_index in bullet_world.active_order():
 		var b = bullet_pool[bullet_index]
-		if b.active and _is_enemy_bullet_type(String(b.type)): b.active = false
+		if b.active and _is_enemy_bullet_type(String(b.type)): bullet_world.retire_slot(bullet_index)
 	# If the just-cleared card was the LAST card, the boss is dead - go to
 	# the defeat animation instead of "switching" so we never try to start
 	# a non-existent next card (which was an out-of-range index bug).
 	if was_last_card:
-		boss.phase = "defeated"
-		boss.timer = 0.0
+		_transition_boss_phase(BossStateMachine.PHASE_DEFEATED, true)
 	else:
-		boss.phase = "switching"; boss.timer = 0.0
+		_transition_boss_phase(BossStateMachine.PHASE_SWITCHING, true)
 	if audio_manager_ref: audio_manager_ref.play_sfx("boss_phase_clear", -5.0)
 
 func _boss_card_timeout():
-	_ensure_active_bullet_indices()
-	for bullet_index in active_bullet_indices:
+	for bullet_index in bullet_world.active_order():
 		var b = bullet_pool[bullet_index]
-		if b.active and _is_enemy_bullet_type(String(b.type)): b.active = false
+		if b.active and _is_enemy_bullet_type(String(b.type)): bullet_world.retire_slot(bullet_index)
 	# Same as above - timeout on the last card also ends the fight.
 	if boss.card_idx >= boss.cards.size() - 1:
-		boss.phase = "defeated"
-		boss.timer = 0.0
+		_transition_boss_phase(BossStateMachine.PHASE_DEFEATED, true)
 	else:
-		boss.phase = "switching"; boss.timer = 0.0
+		_transition_boss_phase(BossStateMachine.PHASE_SWITCHING, true)
 	if audio_manager_ref: audio_manager_ref.play_sfx("boss_phase_clear", -7.0)
 
 func _boss_fire_pattern(delta: float):
@@ -1674,7 +1989,10 @@ func _bullets_apocalypse(mult: float):
 		var a: float = (Vector2(player_x,player_y)-Vector2(boss.x,boss.y)).angle()
 		for off in [-0.5,-0.25,0,0.25,0.5]: _spawn_bullet_enemy(boss.x,boss.y,cos(a+off)*4.5*mult,sin(a+off)*4.5*mult,6,Color(0.71,0.2,0.24),"laser")
 	if int(boss.card_shot) % (2 if boss.card_timer < 600 else 4) == 0:
-		var a: float = randf_range(0,TAU); _spawn_bullet_enemy(boss.x,boss.y,cos(a)*randf_range(3,6)*mult,sin(a)*randf_range(3,6)*mult,3,Color.WHITE)
+		var a: float = gameplay_rng.range_float(0.0, TAU)
+		var speed_x: float = gameplay_rng.range_float(3.0, 6.0) * mult
+		var speed_y: float = gameplay_rng.range_float(3.0, 6.0) * mult
+		_spawn_bullet_enemy(boss.x, boss.y, cos(a) * speed_x, sin(a) * speed_y, 3, Color.WHITE)
 
 func _bullets_wind_aimed(mult: float):
 	if int(boss.card_shot) % 6 == 0:
@@ -1824,7 +2142,7 @@ func _waves_s3(timer: int):
 func _update_player(delta: float):
 	if player_deathbomb_primed:
 		player_deathbomb_timer -= delta
-		if Input.is_action_just_pressed("bomb") and game_manager_ref.bombs > 0: _start_bomb(); player_deathbomb_primed = false; player_just_hit = false; return
+		if bool(current_tick_input.get("bomb", false)) and game_manager_ref.bombs > 0: _start_bomb(); player_deathbomb_primed = false; player_just_hit = false; return
 		if player_deathbomb_timer <= 0: player_deathbomb_primed = false; return
 
 	if player_invincible and not player_bombing:
@@ -1835,8 +2153,8 @@ func _update_player(delta: float):
 
 	var focus: bool = _focus_held()
 	var speed: float = game_manager_ref.selected_speed_low() if focus else game_manager_ref.selected_speed_high()
-	var dx: float = Input.get_axis("move_left", "move_right")
-	var dy: float = Input.get_axis("move_up", "move_down")
+	var dx: float = GameplayInputBuffer.axis_float(int(current_tick_input.get("move_x", 0)))
+	var dy: float = GameplayInputBuffer.axis_float(int(current_tick_input.get("move_y", 0)))
 	if dx != 0 and dy != 0: dx *= 0.7071; dy *= 0.7071
 	if dx != 0.0 or dy != 0.0:
 		player_last_move_dir = Vector2(dx, dy).normalized()
@@ -1846,11 +2164,11 @@ func _update_player(delta: float):
 	player_y = clampf(player_y, PLAYFIELD_MARGIN, SCREEN_H - PLAYFIELD_MARGIN)
 
 	player_fire_cooldown -= delta
-	if Input.is_action_pressed("shoot") and player_fire_cooldown <= 0:
+	if bool(current_tick_input.get("shoot", false)) and player_fire_cooldown <= 0:
 		player_fire_cooldown = game_manager_ref.selected_fire_interval_frames() / 60.0
 		_shoot()
 
-	if Input.is_action_just_pressed("bomb") and game_manager_ref.bombs > 0 and not player_deathbomb_primed and not player_bombing:
+	if bool(current_tick_input.get("bomb", false)) and game_manager_ref.bombs > 0 and not player_deathbomb_primed and not player_bombing:
 		_start_bomb()
 
 func _shoot():
@@ -1924,12 +2242,11 @@ func _update_bomb(delta: float):
 			var ratio_damage: float = float(boss.get("max_hp", boss.get("hp", 0.0))) * float(bc.get("boss_damage_ratio", 0.0)) / float(total_waves)
 			boss.hp -= ratio_damage if ratio_damage > 0.0 else float(bc.get("boss_damage_per_wave", 0.0))
 		player_bomb_phase += 1
-	_ensure_active_bullet_indices()
-	for bullet_index in active_bullet_indices:
+	for bullet_index in bullet_world.active_order():
 		var b = bullet_pool[bullet_index]
 		if b.active and _is_enemy_bullet_type(String(b.type)):
 			if bomb_executor.should_clear_enemy_bullet(bc, b, Vector2(player_x, player_y)):
-				b.active = false
+				bullet_world.retire_slot(bullet_index)
 	if player_bomb_timer <= 0:
 		# End bomb state but DO NOT clear player_invincible here.
 		# _start_bomb() set the invincibility timer to the bomb's duration;
@@ -2002,14 +2319,12 @@ func _apply_enemy_bullet_bounce(b: Dictionary) -> void:
 		b.motion = motion
 
 func _update_bullets(delta: float, target: Vector2):
-	_ensure_active_bullet_indices()
-	_next_active_bullet_indices.clear()
 	var dt := delta * 60.0
-	for bullet_index in active_bullet_indices:
-		var b = bullet_pool[bullet_index]
-		if not b.active:
-			_active_bullet_membership[bullet_index] = 0
-			continue
+	bullet_world.update_bullets(dt, Rect2(-60.0, -60.0, SCREEN_W + 120.0, SCREEN_H + 120.0), Callable(self, "_prepare_bullet_world_step"), Callable(self, "_finish_bullet_world_step"))
+	_sync_bullet_world_compatibility_views()
+
+func _prepare_bullet_world_step(_bullet_index: int, b: Dictionary, dt: float) -> void:
+	if true:
 		if b.homing and b.btype >= 0:
 			# Tracking ("seeker") player bullet.
 			# Behaviour contract:
@@ -2058,25 +2373,10 @@ func _update_bullets(delta: float, target: Vector2):
 		var has_enemy_motion: bool = bool(b.has_motion)
 		if has_enemy_motion:
 			_update_enemy_bullet_motion(b, dt)
-		b.x += b.vx * dt; b.y += b.vy * dt
-		if has_enemy_motion and int(b.motion.get("bounce_count", 0)) > 0:
-			_apply_enemy_bullet_bounce(b)
-		b.age += dt
-		var outside_retention_bounds: bool = b.x < -60 or b.x > SCREEN_W + 60 or b.y < -60 or b.y > SCREEN_H + 60
-		if outside_retention_bounds:
-			b.active = false
-		elif b.type == "player" or b.type == "bomb":
-			if b.age > b.lifetime:
-				b.active = false
-		elif b.age > 1800.0 and b.age > b.lifetime:
-			b.active = false
-		if b.active:
-			_next_active_bullet_indices.append(bullet_index)
-		else:
-			_active_bullet_membership[bullet_index] = 0
-	var previous_indices := active_bullet_indices
-	active_bullet_indices = _next_active_bullet_indices
-	_next_active_bullet_indices = previous_indices
+
+func _finish_bullet_world_step(_bullet_index: int, b: Dictionary, _dt: float) -> void:
+	if bool(b.has_motion) and int(b.motion.get("bounce_count", 0)) > 0:
+		_apply_enemy_bullet_bounce(b)
 
 func _update_enemies(delta: float):
 	for e in enemies:
@@ -2138,7 +2438,7 @@ func _update_items(delta: float):
 				it.floating = false
 				# Initialize horizontal drift direction (random, +1 or -1).
 				if it.get("drift_dir", 0.0) == 0.0:
-					it["drift_dir"] = 1.0 if randf() < 0.5 else -1.0
+					it["drift_dir"] = 1.0 if gameplay_rng.next_float() < 0.5 else -1.0
 				it.vy = 0.4   # slow fall after reaching top
 				it.vx = it["drift_dir"] * 0.7
 			else:
@@ -2232,34 +2532,28 @@ func _update_performance_counters() -> void:
 func _check_collisions(is_boss: bool):
 	var player_hitbox_radius: float = _player_hitbox_radius()
 	var player_graze_radius: float = _player_graze_radius()
-	_ensure_active_bullet_indices()
-	for bullet_index in active_bullet_indices:
+	var player_candidates: Array[int] = bullet_world.query_circle(Vector2(player_x, player_y), player_graze_radius, [], ["player", "bomb"])
+	for bullet_index in bullet_world.active_order():
 		var b = bullet_pool[bullet_index]
-		if not b.active: continue
+		if not bullet_world.collision_enabled(b): continue
 		if b.type == "player" or b.type == "bomb":
 			if is_boss and boss_alive:
 				if boss.declaring or boss.phase in ["entering","switching","defeated"]: continue
 				if b.type == "bomb" and bool(b.get("boss_hit", false)): continue
-				var boss_dx: float = float(b.x) - float(boss.x)
-				var boss_dy: float = float(b.y) - float(boss.y)
-				var boss_limit: float = float(b.radius) + _boss_collision_radius()
-				if boss_dx * boss_dx + boss_dy * boss_dy < boss_limit * boss_limit:
+				if bullet_world.circles_overlap(Vector2(float(b.x), float(b.y)), float(b.radius), Vector2(float(boss.x), float(boss.y)), _boss_collision_radius()):
 					boss.hp -= b.damage
 					if audio_manager_ref: audio_manager_ref.play_sfx("boss_hit")
 					if b.type == "player":
-						b.active = false
+						bullet_world.retire_slot(bullet_index)
 					else:
 						b.boss_hit = true
 			else:
 				for e in enemies:
 					if not e.alive or e.dying: continue
-					var enemy_dx: float = float(b.x) - float(e.x)
-					var enemy_dy: float = float(b.y) - float(e.y)
-					var enemy_limit: float = float(b.radius) + float(e.radius)
-					if enemy_dx * enemy_dx + enemy_dy * enemy_dy < enemy_limit * enemy_limit:
+					if bullet_world.circles_overlap(Vector2(float(b.x), float(b.y)), float(b.radius), Vector2(float(e.x), float(e.y)), float(e.radius)):
 						e.hp -= b.damage
 						if audio_manager_ref: audio_manager_ref.play_sfx("enemy_hit")
-						if b.type == "player": b.active = false
+						if b.type == "player": bullet_world.retire_slot(bullet_index)
 						if e.hp <= 0 and not e.dying:
 							e.dying = true; e.death_timer = 8.0
 							_spawn_combat_effect("enemy_defeat", Vector2(e.x, e.y), float(e.radius), Color(1.0, 0.72, 0.28) if e.strong else Color(0.76, 0.42, 1.0))
@@ -2268,6 +2562,8 @@ func _check_collisions(is_boss: bool):
 							if audio_manager_ref: audio_manager_ref.play_sfx("enemy_defeat", -6.0 if e.strong else -8.0)
 						break
 		else:
+			if bullet_index not in player_candidates:
+				continue
 			var dx: float = float(b.x) - player_x
 			var dy: float = float(b.y) - player_y
 			var graze_limit: float = float(b.radius) + player_graze_radius
@@ -2277,7 +2573,7 @@ func _check_collisions(is_boss: bool):
 			var hit_limit: float = float(b.radius) + player_hitbox_radius
 			if not player_invincible and distance_squared < hit_limit * hit_limit:
 				player_deathbomb_primed = true; player_deathbomb_timer = game_manager_ref.DEATHBOMB_WINDOW/60.0
-				player_just_hit = true; b.active = false
+				player_just_hit = true; bullet_world.retire_slot(bullet_index)
 				if audio_manager_ref:
 					audio_manager_ref.play_sfx("player_hit", -2.0)
 					audio_manager_ref.play_sfx("deathbomb_window")
@@ -2323,9 +2619,9 @@ func _drop_item_type(strong: bool, roll: float, drop_tier: String = "") -> Strin
 	return item_reward_system.choose_drop(tier, roll)
 
 func _drop_item(x: float, y: float, strong: bool, drop_tier: String = "", roll_override: float = -1.0):
-	var drop_roll: float = roll_override if roll_override >= 0.0 else randf()
+	var drop_roll: float = roll_override if roll_override >= 0.0 else gameplay_rng.next_float()
 	var t: String = _drop_item_type(strong, drop_roll, drop_tier)
-	items.append({"alive":true,"collected":false,"x":x,"y":y,"type":t,"radius":9.0,"vy":-2.5,"vx":randf_range(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":randf_range(0,TAU),"birth":15.0,"anim":randf_range(0,TAU)})
+	items.append({"alive":true,"collected":false,"x":x,"y":y,"type":t,"radius":9.0,"vy":-2.5,"vx":gameplay_rng.range_float(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":gameplay_rng.range_float(0.0,TAU),"birth":15.0,"anim":gameplay_rng.range_float(0.0,TAU)})
 
 func _collect(it: Dictionary):
 	_collect_item(it)

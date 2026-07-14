@@ -35,21 +35,17 @@ func _run() -> void:
 	var gm = load("res://autoload/game_manager.gd").new()
 	var main_shell = load("res://scripts/main.gd").new()
 	main_shell.game_manager_ref = gm
-	main_shell.bullet_pool_hard_capacity = 8
+	main_shell.bullet_world.configure(4, 8, 4)
+	main_shell._sync_bullet_world_compatibility_views()
 	for i in range(4):
-		var bullet: Dictionary = main_shell._make_bullet()
-		bullet.active = true
-		bullet.x = 100.0 + i
-		main_shell.bullet_pool.append(bullet)
-	main_shell._rebuild_active_bullet_indices()
+		_assert(main_shell._spawn_bullet_enemy(100.0 + i, 0.0, 0.0, 0.0), "Initial-capacity setup must spawn an enemy bullet.")
 	var original_positions: Array = main_shell.bullet_pool.map(func(b): return b.x)
 	_assert(main_shell._spawn_bullet_enemy(300, 200, 0, 2), "A saturated initial pool must expand for a new boss bullet.")
 	_assert(main_shell.bullet_pool.size() == 8, "Bullet pool should grow only up to its configured hard capacity.")
 	for i in range(4):
 		_assert(main_shell.bullet_pool[i].active and main_shell.bullet_pool[i].x == original_positions[i], "Pool expansion must never overwrite an active bullet.")
-	for i in range(5, 8):
-		main_shell.bullet_pool[i].active = true
-	main_shell._active_index_initialized = false
+	for i in range(3):
+		_assert(main_shell._spawn_bullet_enemy(500.0 + i, 200.0, 0.0, 2.0), "Hard-cap setup must fill every remaining BulletWorld slot.")
 	_assert(not main_shell._spawn_bullet_enemy(400, 200, 0, 2), "A pool at hard capacity must reject new bullets instead of evicting old ones.")
 	main_shell._clear_bullets()
 	_assert(main_shell._spawn_bullet_enemy(360.0, main_shell.SCREEN_H - 2.0, 0.0, 0.0, 5.0, Color.RED, "circle", 1.0), "Lifetime regression setup must spawn an enemy bullet.")
@@ -79,9 +75,8 @@ func _run() -> void:
 	main_shell.player_y = main_shell.SCREEN_H * gm.ITEM_TOP_RATIO
 	_assert(main_shell._item_magnetize_requested(true), "Shift collection must trigger in the top fifth even while a bomb is active.")
 	main_shell._spawn_item(200.0, 300.0, "power")
-	Input.action_press("focus")
+	main_shell.current_tick_input = main_shell.gameplay_input_buffer.consume_injected_tick(0, {"focus": true})
 	main_shell._update_items(1.0 / 60.0)
-	Input.action_release("focus")
 	_assert(bool(main_shell.items[0].get("magnetized", false)), "A floating drop must magnetize when Shift is held during a bomb.")
 	_assert(not bool(main_shell.items[0].get("floating", true)), "Magnetized drops must immediately leave the floating phase.")
 	for type_id in ["power", "point", "bomb_fragment", "life_fragment", "night_festival_seal", "full_power"]:
