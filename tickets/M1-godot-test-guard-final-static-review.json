@@ -1,0 +1,32 @@
+{
+  "id": "M1-godot-test-guard-final-static-review",
+  "objective": "Perform the required independent final static architecture review of candidate 7e7889c5215277f392e4fd5a1a529e9bdb7ee51a against the architecture frozen by deep_reviewer run 20260714T184331Z-M1-godot-test-guard-architecture-freeze-deep_reviewer-6410e14f. Review only; change zero files and launch Godot zero times. Do not rerun the 18-test fake suite: implementation evidence from validated run 20260714T191011Z-M1-godot-test-guard-architecture-implementation-test_performance-r1-fbff1b3a already records 18/18 passing in 67.856 seconds, x86/x64 ABI probes, parser, scope, diff check, zero temporary artifacts, and zero real Godot launches. Independently inspect the code to prove or refute that the public supervisor contains no unbounded or risky native/file work, the same-script worker is the only owner of Add-Type/native/canonicalization/engine work, authenticated GO is read from bounded redirected stdin after READY and Global mutex acquisition, all protocol streams and waits are capped by the monotonic deadline plus fixed emergency grace, engine creation is suspended and atomically assigned with JOB_LIST/HANDLE_LIST before resume with no create-then-assign fallback, job ownership and watcher failure cannot leak recursive descendants, every relevant native return/last-error/ABI/handle path fails closed, inventory and cleanup use retained verified handles and canonical identities rather than PID/parent/fixture authority, command-line/path classification is unambiguous, QueryInformationJobObject failure cannot be interpreted as an empty job, cleanup precedence is correct, and test seams can only force failure or pause and cannot confer kill/identity authority. Return GATE: APPROVE only if the candidate is safe enough to authorize exactly one guarded real-Godot smoke; otherwise return GATE: REPAIR with line-specific blocker evidence and the smallest bounded correction scope.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": [
+    "**"
+  ],
+  "dependency_commit": "7e7889c5215277f392e4fd5a1a529e9bdb7ee51a",
+  "acceptance_commands": [
+    "if((git rev-parse HEAD).Trim() -ne '7e7889c5215277f392e4fd5a1a529e9bdb7ee51a'){throw 'Wrong candidate HEAD'}; Write-Host 'STATIC_REVIEW_HEAD=pass'",
+    "$changed=@(git diff --name-only 095653c19ee299208c4eb5387d6cada3bb1d65d2..HEAD); $expected=@('tools/testing/invoke_godot_test.ps1','tools/testing/tests/fake_engine.py','tools/testing/tests/test_invoke_godot_test.py'); if(Compare-Object $expected $changed){throw \"Unexpected candidate paths: $($changed -join ',')\"}; Write-Host 'STATIC_REVIEW_SCOPE=pass'",
+    "git diff 095653c19ee299208c4eb5387d6cada3bb1d65d2..HEAD --check",
+    "if(git status --porcelain){throw 'Reviewer worktree is not clean'}; Write-Host 'STATIC_REVIEW_CLEAN=pass'"
+  ],
+  "output_requirements": [
+    "State GATE: APPROVE or GATE: REPAIR in the summary; APPROVE is the only authorization for one real guarded smoke",
+    "Audit supervisor S0-S6, worker W0-W8, atomic JOB_LIST containment, watcher/job ownership, timeout and protocol bounds, retained-handle identity, Toolhelp and command-line fail-closed behavior, native ABI and return checking, cleanup precedence, and failure-only test seams",
+    "For every blocker, cite exact file and line, concrete failure/leak mechanism, severity, and smallest bounded correction; do not replace a blocker with a residual-risk note",
+    "Report actual model/reasoning/CLI through bridge metadata, exact commands, zero changed files, fake suite not rerun, and real Godot launch count zero"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "The frozen file set is exactly tools/testing/invoke_godot_test.ps1, tools/testing/tests/fake_engine.py, and tools/testing/tests/test_invoke_godot_test.py. No production Python helper is permitted.",
+    "The first implementation turn ran at test_performance Terra/high and truthfully failed; the same thread/worktree resumed at Sol/high, passed 18/18 plus all ticket gates, and closed its lineage. This review is a different Agent and must remain read-only.",
+    "Candidate ancestry includes earlier rejected guard attempts and gameplay candidate work. Review only the diff from 095653c to 7e7889c and do not authorize merging the whole branch; release_lead will cherry-pick individual guard commits only after approval.",
+    "Do not run Godot, any project GDScript, the fake-engine unittest suite, or a full repository test. This gate is static because the focused behavioral evidence already exists and tests must not be repeated at every Agent boundary.",
+    "The current main-worktree audio/**/*.import modifications are user/environment state outside this detached read-only review and must not be inspected, reset, staged, or mentioned as candidate changes."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
