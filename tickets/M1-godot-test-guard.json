@@ -1,0 +1,49 @@
+{
+  "id": "M1-godot-test-guard",
+  "objective": "Implement a Windows-safe, project-scoped Godot test runner before any further executable M1 validation. Create tools/testing/invoke_godot_test.ps1 plus the smallest helper/test files needed under tools/testing. The runner must launch exactly one Godot headless command at a time for a resolved project path, always pass an explicit --log-file, capture stdout/stderr and exit code, enforce a configurable hard timeout, recognize script/parser/runtime failure patterns and Godot native crash markers including CrashHandlerException, Program crashed, signal 11, and C++ backtrace, and return nonzero for process failure, timeout, or matched fatal output. It must acquire a per-project exclusive lock so two runner instances cannot execute concurrently. Before launch it must inventory same-project Godot processes whose command line contains both --headless and the resolved project path; default behavior must fail safely if any exist, with an explicit opt-in cleanup switch allowed only for those same-project headless processes. Track the launched process and descendants; on timeout, native failure, interruption, or normal completion, terminate any surviving descendants created by that invocation and verify none remain. Never kill non-headless Godot, a different project, or a pre-existing process outside the explicit cleanup scope. Emit a concise machine-readable summary containing status, category, process exit code, elapsed time, project, log path, and cleaned PIDs. Keep test commands serial. Add deterministic unit/integration tests using fake child processes; tests must cover success, nonzero exit, fatal-pattern detection despite zero exit, timeout, descendant cleanup, lock contention, path scoping, and no collateral process termination. Do not launch the real Godot executable in this ticket, do not edit gameplay/content, and do not absorb ignored .godot caches. The PowerShell entrypoint is the stable public interface later tickets will call.",
+  "mode": "write",
+  "allowed_paths": [
+    "tools/testing/invoke_godot_test.ps1",
+    "tools/testing/invoke_godot_test.py",
+    "tools/testing/tests/test_invoke_godot_test.py",
+    "tools/testing/tests/fake_engine.py"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "content/**",
+    "docs/**",
+    "tests/**",
+    ".godot/**"
+  ],
+  "dependency_commit": "cb66d261a25df71d56cb5abdcdd5d8d06da69414",
+  "acceptance_commands": [
+    "python -m unittest tools.testing.tests.test_invoke_godot_test -v",
+    "$tokens=$null; $errors=$null; $null=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/testing/invoke_godot_test.ps1'),[ref]$tokens,[ref]$errors); if($errors.Count-ne 0){throw ($errors|Out-String)}; Write-Host 'POWERSHELL_PARSE=pass'",
+    "$changed=@(git status --porcelain|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $outside=@($changed|Where-Object{$_-notin @('tools/testing/invoke_godot_test.ps1','tools/testing/invoke_godot_test.py','tools/testing/tests/test_invoke_godot_test.py','tools/testing/tests/fake_engine.py')}); if($outside.Count-ne 0){throw \"Outside changes: $($outside -join ',')\"}",
+    "git diff --check"
+  ],
+  "output_requirements": [
+    "Report the public PowerShell parameters, exit categories/codes, lock strategy, process ownership rules, timeout behavior, and cleanup verification",
+    "Report every fake-process test and prove timeout/descendant cleanup without launching real Godot",
+    "Report safeguards preventing non-headless, other-project, or pre-existing unrelated process termination",
+    "Report all acceptance commands with exit codes, exact changed files, and confirm real Godot launch count is zero",
+    "Report remaining Windows process-management limitations before the release lead performs one guarded real smoke"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "A core_simulation read-only audit reproduced two Godot 4.7 startup signal-11 crashes before any GDScript output. The same system also held 24 stale same-project headless processes dating from July 9; those were explicitly removed.",
+    "Read-only Agents are now prohibited from launching Godot. This runner is for writable isolated worktrees or release_lead only.",
+    "Do not use dangerous permission bypasses or broad process-name kills. Command-line project scoping and descendant ownership are mandatory.",
+    "The runner must support later calls for --script tests and a scene smoke with --quit-after, but this ticket uses only fake processes."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}

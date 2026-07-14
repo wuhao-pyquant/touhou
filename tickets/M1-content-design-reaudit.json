@@ -1,0 +1,50 @@
+{
+  "id": "M1-content-design-reaudit",
+  "objective": "Perform the bounded read-only re-audit of repaired design candidate 67dd1a5fbaa35ebd3679d50d3f21ffbdcb70b317. Confirm the prior mechanical gate's only blocker is closed: all 40 content/design/m1_phase_cards.json records must map one-to-one and in order to the 40 card objects in scripts/data/stage_content_database.gd with exact decoded display_name and kind, including Japanese text, Traditional/Simplified glyph choice, and punctuation; docs/content/m1-design-freeze.md must contain every exact repaired phase name. Confirm the repair changed exactly 24 JSON display_name values and the corresponding 24 markdown index names, with no ID, owner, kind, stream, fingerprint, timing, warning, emitter, movement, failure, Normal, Hard, score-route, stage-beat, plan, or runtime drift. Reconfirm the original approved counts: six stages, 108 beats, 40 phases, 26 spells, 14 nonspells, 40 unique IDs/streams/fingerprints. Do not launch Godot, edit files, or repeat subjective design review. Return GATE: APPROVE or GATE: REPAIR with exact evidence.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "content/design/m1_phase_cards.json",
+    "content/design/m1_stage_beats.json",
+    "docs/content/m1-design-freeze.md",
+    "scripts/data/stage_content_database.gd"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "tests/**",
+    "tools/**",
+    "docs/production/**",
+    "scripts/main.gd",
+    "scripts/runtime/**",
+    "scripts/player/**",
+    "scripts/ui/**"
+  ],
+  "dependency_commit": "67dd1a5fbaa35ebd3679d50d3f21ffbdcb70b317",
+  "acceptance_commands": [
+    "$cards=Get-Content -Raw content/design/m1_phase_cards.json|ConvertFrom-Json; $source=Get-Content -Raw scripts/data/stage_content_database.gd; $pattern='\\{\\s*\"name\":\\s*\"[^\"]+\"\\s*,\\s*\"hp\":\\s*\\d+\\s*,\\s*\"time\":\\s*\\d+\\s*,\\s*\"pattern\":\\s*\"[^\"]+\"\\s*,\\s*\"kind\":\\s*\"[^\"]+\"\\s*\\}'; $records=[regex]::Matches($source,$pattern); if($records.Count -ne 40 -or $cards.phases.Count -ne 40){throw 'Expected 40 cards'}; for($i=0;$i -lt 40;$i++){ $record=$records[$i].Value|ConvertFrom-Json; $phase=$cards.phases[$i]; if($phase.display_name -cne $record.name -or $phase.kind -cne $record.kind){throw \"Mismatch at $i $($phase.id)\"} }; Write-Host 'M1_CARD_NAMES=pass'",
+    "$cards=Get-Content -Raw content/design/m1_phase_cards.json|ConvertFrom-Json; $doc=Get-Content -Raw docs/content/m1-design-freeze.md; if(@($cards.phases|Where-Object kind -eq spell).Count -ne 26 -or @($cards.phases|Where-Object kind -eq nonspell).Count -ne 14 -or @($cards.phases.id|Sort-Object -Unique).Count -ne 40 -or @($cards.phases.structure_fingerprint|Sort-Object -Unique).Count -ne 40 -or @($cards.phases.deterministic_random_stream_id|Sort-Object -Unique).Count -ne 40){throw 'Identity/count regression'}; foreach($phase in $cards.phases){if(-not $doc.Contains([string]$phase.display_name)){throw \"Markdown missing $($phase.id)\"}}; Write-Host 'M1_CONTENT_REAUDIT=pass'",
+    "git diff 08812e71f86501ff7a1db31f8bdf94ac588705ba..HEAD --check",
+    "if(git status --porcelain){exit 1}"
+  ],
+  "output_requirements": [
+    "Begin summary with GATE: APPROVE or GATE: REPAIR and state that no Godot command was run",
+    "Report 40/40 exact card-name/kind mapping and the exact repaired count of 24",
+    "Confirm counts, IDs, streams, fingerprints, stage beats, and all non-name fields did not drift",
+    "Report all four acceptance command exit codes and zero changed files",
+    "List any remaining blocker with exact phase ID and field"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "The first audit approved all mechanics and structure but rejected 24 normalized card-name glyphs.",
+    "The repair Agent reported exactly 24 JSON display_name replacements and matching markdown index replacements, with zero Godot launches.",
+    "This is a narrow closure check, not permission to reopen the authored design."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}
