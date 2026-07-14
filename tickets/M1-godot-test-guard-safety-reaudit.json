@@ -1,0 +1,47 @@
+{
+  "id": "M1-godot-test-guard-safety-reaudit",
+  "objective": "Perform a bounded read-only static re-audit of safety-repair candidate 095653c19ee299208c4eb5387d6cada3bb1d65d2. Do not launch Godot and do not repeat the fake-process suite. Re-evaluate every blocker from the prior GATE: REPAIR against the complete repaired code, not the implementation report. Authorize a real smoke only if the runner is fail-closed and bounded. In particular verify: the one lifecycle deadline cannot be bypassed by synchronous Add-Type/native inventory, file IO, stream drain, cleanup, summary, or mutex release; exact --path association handles duplicate/malformed values and a target path appearing only in another argument; executable and creation identity cannot be supplied or overridden by a test fixture in a way that authorizes a kill; PROCESSENTRY32W and all job-object structs have correct x86/x64 native layouts; Toolhelp enumeration distinguishes end-of-list from failure; inaccessible same-basename processes fail closed rather than being silently skipped; job creation and assignment results are checked, and the fallback tracks arbitrary-executable descendants/grandchildren without a Process.Start-to-job race; a launch-identity failure cannot leak an already-started process; IsSame distinguishes gone from inaccessible; preexisting and invocation cleanup cannot report success while a process remains; abandoned/global mutex behavior stays fail-closed; runner-owned Godot options are actually exercised in production order. Confirm whether focused tests truly cover exact path-in-other-argument, executable mismatch, creation/PID mismatch, cleanup failure, job assignment failure, native architecture layout, orphaned inherited streams, and launch failure. Return GATE: APPROVE only if no material safety or correctness blocker remains; otherwise GATE: REPAIR with severity, exact line, concrete failure, and smallest correction. Do not review gameplay, content, or the plan.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "tools/testing/invoke_godot_test.ps1",
+    "tools/testing/tests/fake_engine.py",
+    "tools/testing/tests/test_invoke_godot_test.py"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "content/**",
+    "docs/**",
+    "tests/**",
+    ".godot/**"
+  ],
+  "dependency_commit": "095653c19ee299208c4eb5387d6cada3bb1d65d2",
+  "acceptance_commands": [
+    "$ErrorActionPreference='Stop'; $tokens=$null; $errors=$null; $null=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/testing/invoke_godot_test.ps1'),[ref]$tokens,[ref]$errors); if($errors.Count -ne 0){throw ($errors|Out-String)}; Write-Host 'POWERSHELL_PARSE=pass'",
+    "$changed=@(git diff --name-only 899fd938fc76deb92b3546f0e2105e8adc17b2c4..HEAD); $expected=@('tools/testing/invoke_godot_test.ps1','tools/testing/tests/fake_engine.py','tools/testing/tests/test_invoke_godot_test.py'); if(Compare-Object $expected $changed){throw \"Unexpected candidate paths: $($changed -join ',')\"}; Write-Host 'REVIEW_SCOPE=pass'",
+    "git diff 899fd938fc76deb92b3546f0e2105e8adc17b2c4..HEAD --check",
+    "if(git status --porcelain){exit 1}"
+  ],
+  "output_requirements": [
+    "Begin with GATE: APPROVE or GATE: REPAIR and state that no Godot command or fake-process suite was run",
+    "Map every original critical/high blocker to CLOSED or OPEN with exact evidence",
+    "List every remaining blocker by severity, exact file/line, concrete failure path, and smallest correction",
+    "Explicitly rule on native layouts, fixture authority, fail-closed inaccessible processes, job assignment/fallback, launch leak, deadline completeness, path parsing, and missing tests",
+    "Report all four acceptance command exit codes and zero changed files"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "The repair was implemented by test_performance at its restored default gpt-5.6-terra/high and reported 11/11 fake tests, with zero real Godot launches.",
+    "This is the independent gate before any real engine smoke. If it fails, the repeated-failure rule requires deep_reviewer involvement rather than another ordinary planning pass.",
+    "The prior review was core_simulation Sol/xhigh and found two critical plus six high/medium blocker groups."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}
