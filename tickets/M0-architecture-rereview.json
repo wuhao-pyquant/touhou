@@ -1,0 +1,36 @@
+{
+  "id": "M0-architecture-rereview",
+  "objective": "Perform the required second-failure, maximum-depth, strictly read-only rereview of repaired M0 candidate 4cf3b5291136c7a37b08a264b696fbf3920b1259 against base d67c26a and the prior GATE: REPAIR findings. Verify whether the five original blockers are actually closed: render-independent tick input and accounted long frames; production-runtime replay proof; complete all-or-nothing capture/restore; immutable complete replay identity with compatibility rejection; and authoritative BulletWorld ownership. Then adjudicate three newly observed adjacent regression failures without assuming that either code or tests are correct. Evidence: assert_phase3_protagonist_profiles.gd fails its selected-hitbox collision assertion after directly replacing main_shell.bullet_pool; assert_phase4_main_data_integration.gd writes removed private field _active_index_initialized and sees zero injected bullets; assert_phase8_followup_regressions.gd configures old main fields/direct pool state, fails hard-capacity behavior, and writes the same removed private field. Determine for each whether production behavior regressed, a public/semipublic compatibility contract was broken, or the test fixture is obsolete after the approved ownership extraction. Do not accept weakening behavior assertions merely to get green tests. Review pause buffering, long-frame policy, capture/restore atomicity and alias safety, BulletWorld order/capacity/spawn/update/collision behavior, direct main compatibility views, and the real-runtime test's schedule/hash interpretation. Do not edit files, run Godot, broaden into M1, or rewrite the plan. Return exactly one gate category in the summary: GATE: ACCEPT, GATE: TEST_MIGRATION, or GATE: RUNTIME_REPAIR. TEST_MIGRATION is allowed only if production invariants are preserved and you provide exact bounded test-fixture changes. RUNTIME_REPAIR must provide the minimum code correction and focused verification.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": ["**"],
+  "dependency_commit": "4cf3b5291136c7a37b08a264b696fbf3920b1259",
+  "acceptance_commands": [
+    "git rev-parse HEAD",
+    "git diff --check d67c26a..HEAD",
+    "git diff --stat d67c26a..HEAD",
+    "git diff 1653ea8..HEAD -- scripts/main.gd scripts/runtime scripts/replay tests/assert_m0_determinism.gd tests/assert_m0_replay_runtime.gd tests/fixtures/m0/baseline_replay.json",
+    "git show d67c26a:tests/assert_phase3_protagonist_profiles.gd",
+    "git show d67c26a:tests/assert_phase4_main_data_integration.gd",
+    "git show d67c26a:tests/assert_phase8_followup_regressions.gd"
+  ],
+  "output_requirements": [
+    "Start summary with exactly GATE: ACCEPT, GATE: TEST_MIGRATION, or GATE: RUNTIME_REPAIR",
+    "Rule separately on all five original blockers with exact code evidence",
+    "Classify each of the three adjacent failures as production regression, compatibility break, obsolete fixture, or a combination",
+    "If TEST_MIGRATION, specify exact test setup/API replacements that retain the original behavioral assertions and the focused rerun list",
+    "If RUNTIME_REPAIR, specify exact minimum production files/functions and focused rerun list without proposing another broad rewrite",
+    "Explicitly rule on pause edge evidence, long-frame hash difference, real-runtime fixture validity, restore continuation equality, and BulletWorld authority",
+    "Report reviewed commit and zero changed files"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "The repair bridge verified core_simulation as gpt-5.6-sol/xhigh on CLI 0.144.4 with zero policy violations.",
+    "Root reran five ticket-focused scripts using Godot_v4.7-stable_win64_console.exe with explicit log files; all returned exit 0 and no SCRIPT ERROR, Parse Error, Invalid call/access, or M0_FAIL.",
+    "The production replay test reported the same 0bfbc0e89b64ba03eb711413bc433c8dcbbf02ce26ba2d420cef3bff6e6fb9dd hash at 30/60/120 Hz, one bomb edge, a separate pause-edge half-tick test consuming exactly once, and an accounted long-frame run with 9 dropped ticks and a deliberately different clock-inclusive hash.",
+    "The aggregate restore fixture reported immediate/restored hash abd2d1c3c14007c6795cc1abb3dea73123899a1edcc4767c079c80101e124cd9 and verified continued equality internally.",
+    "The adjacent run passed seven other main/BulletWorld tests but failed the three named tests. Existing private-field-based tests may be brittle, yet selected hitbox and hard-capacity behaviors remain mandatory."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}
