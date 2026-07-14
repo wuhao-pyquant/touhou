@@ -2,6 +2,20 @@ extends Node2D
 
 # Main game scene - all game logic in one script for simplicity
 
+const FixedTickClock := preload("res://scripts/runtime/fixed_tick_clock.gd")
+const DeterministicRng := preload("res://scripts/runtime/deterministic_rng.gd")
+const SimulationStateHasher := preload("res://scripts/runtime/simulation_state_hasher.gd")
+const BulletWorld := preload("res://scripts/runtime/bullet_world.gd")
+const BossStateMachine := preload("res://scripts/runtime/boss_state_machine.gd")
+
+var fixed_tick_clock: RefCounted = FixedTickClock.new()
+var gameplay_rng: RefCounted = DeterministicRng.new(1)
+var simulation_state_hasher: RefCounted = SimulationStateHasher.new()
+var bullet_world: RefCounted = BulletWorld.new()
+var boss_state_machine: RefCounted = BossStateMachine.new()
+var gameplay_seed: int = 1
+var simulation_tick_index: int = 0
+
 var bullet_pool: Array = []
 var active_bullet_indices: Array[int] = []
 var _next_active_bullet_indices: Array[int] = []
@@ -664,7 +678,7 @@ func _spawn_combat_effect(kind: String, position: Vector2, radius: float, color:
 	combat_effects.append({
 		"kind": kind, "position": position, "radius": radius, "color": color,
 		"age": 0.0, "duration": 46.0 if kind == "enemy_defeat" else 92.0,
-		"seed": int(position.x * 17.0 + position.y * 31.0 + Time.get_ticks_msec()) & 1023,
+		"seed": int(position.x * 17.0 + position.y * 31.0 + simulation_tick_index * 13 + combat_effects.size()) & 1023,
 	})
 
 func _update_combat_effects(delta: float) -> void:
@@ -882,6 +896,73 @@ func _init() -> void:
 		SCREEN_H = 960
 	_apply_viewport_layout()
 
+func set_gameplay_seed(seed_value: int) -> void:
+	gameplay_seed = seed_value
+	gameplay_rng.reseed(gameplay_seed)
+
+func capture_bullet_world_state() -> Dictionary:
+	_ensure_active_bullet_indices()
+	return bullet_world.capture_state(bullet_pool, active_bullet_indices, _bullet_spawn_cursor)
+
+func restore_bullet_world_state(snapshot: Dictionary) -> bool:
+	var restored: Dictionary = bullet_world.restore_state(snapshot, bullet_pool)
+	if not bool(restored.get("ok", false)):
+		return false
+	active_bullet_indices.clear()
+	for value in restored.get("active_indices", []):
+		active_bullet_indices.append(int(value))
+	_next_active_bullet_indices.clear()
+	_active_bullet_membership.resize(bullet_pool.size())
+	_active_bullet_membership.fill(0)
+	for bullet_index in active_bullet_indices:
+		_active_bullet_membership[bullet_index] = 1
+	_bullet_spawn_cursor = int(restored.get("spawn_cursor", 0))
+	_active_index_initialized = true
+	return true
+
+func capture_boss_state() -> Dictionary:
+	return boss_state_machine.capture_state(boss)
+
+func capture_simulation_state() -> Dictionary:
+	var manager_state := {}
+	if game_manager_ref:
+		for property_name in ["state", "current_stage", "score", "graze", "shared_power", "lives", "bombs", "selected_protagonist_id", "selected_shot_id"]:
+			manager_state[property_name] = game_manager_ref.get(property_name)
+	return {
+		"version": 1,
+		"tick": simulation_tick_index,
+		"rng": gameplay_rng.snapshot(),
+		"manager": manager_state,
+		"stage_timer": stage_timer,
+		"stage_controller": stage_controller.duplicate(true),
+		"player": {
+			"position": Vector2(player_x, player_y),
+			"last_move_dir": player_last_move_dir,
+			"invincible": player_invincible,
+			"invincible_timer": player_invincible_timer,
+			"just_hit": player_just_hit,
+			"bombing": player_bombing,
+			"bomb_timer": player_bomb_timer,
+			"bomb_radius": player_bomb_radius,
+			"bomb_phase": player_bomb_phase,
+			"deathbomb_primed": player_deathbomb_primed,
+			"deathbomb_timer": player_deathbomb_timer,
+			"fire_cooldown": player_fire_cooldown,
+		},
+		"boss_alive": boss_alive,
+		"boss": capture_boss_state(),
+		"bullets": capture_bullet_world_state(),
+		"enemies": enemies.duplicate(true),
+		"items": items.duplicate(true),
+		"combat_effects": combat_effects.duplicate(true),
+	}
+
+func simulation_state_hash() -> String:
+	return simulation_state_hasher.hash_state(capture_simulation_state())
+
+func _transition_boss_phase(next_phase: String, reset_timer: bool = false) -> bool:
+	return boss_state_machine.transition(boss, next_phase, reset_timer)
+
 func _active_stage() -> int:
 	return game_manager_ref.current_stage if game_manager_ref else current_stage_local
 
@@ -896,7 +977,9 @@ func _apply_viewport_layout() -> void:
 
 func _ready():
 	_resolve_singletons()
-	randomize()
+	set_gameplay_seed(gameplay_seed)
+	fixed_tick_clock.reset()
+	simulation_tick_index = 0
 	for i in range(MAX_BULLETS):
 		bullet_pool.append(_make_bullet())
 	_active_bullet_membership.resize(MAX_BULLETS)
@@ -908,7 +991,7 @@ func _ready():
 	_show_title()
 
 func _make_bullet() -> Dictionary:
-	return {"active":false,"x":0.0,"y":0.0,"vx":0.0,"vy":0.0,"radius":6.0,"color":Color.RED,"type":"circle","lifetime":600.0,"age":0.0,"damage":1.0,"homing":false,"btype":-1,"grazed":false,"boss_hit":false,"motion":{},"has_motion":false,"motion_triggered":false}
+	return bullet_world.make_bullet_state()
 
 func _show_title():
 	_resolve_singletons()
@@ -937,6 +1020,9 @@ func _start_game():
 	game_manager_ref.settings = selected_settings
 	game_manager_ref.apply_selected_shot()
 	_apply_runtime_settings()
+	set_gameplay_seed(gameplay_seed)
+	fixed_tick_clock.reset()
+	simulation_tick_index = 0
 	game_manager_ref.state = "stage"
 	_sync_canvas_origin("stage")
 	var starting_stage := selected_practice_stage if selected_practice_mode else 1
@@ -965,7 +1051,7 @@ func _respawn():
 	game_manager_ref.bombs = game_manager_ref.PLAYER_INITIAL_BOMBS
 	var dropped: int = int(game_manager_ref.shared_power * game_manager_ref.DEATH_POWER_DROP)
 	for i in range(mini(50, dropped)):
-		_spawn_item(player_x+randf_range(-80,80), player_y+randf_range(-60,60), "power")
+		_spawn_item(player_x + gameplay_rng.range_float(-80.0, 80.0), player_y + gameplay_rng.range_float(-60.0, 60.0), "power")
 	game_manager_ref.shared_power = max(0, game_manager_ref.shared_power - dropped)
 	_reset_player()
 	player_invincible = true
@@ -1068,6 +1154,7 @@ func _spawn_bullet_player(x: float, y: float, vx: float, vy: float, radius: floa
 	b.lifetime = lifetime; b.age = 0; b.damage = damage
 	b.homing = homing; b.btype = btype; b.grazed = false; b.boss_hit = false
 	b.motion = {}; b.has_motion = false; b.motion_triggered = false
+	b.laser_state = BulletWorld.LASER_NONE
 	if _active_bullet_membership.size() != bullet_pool.size():
 		_active_bullet_membership.resize(bullet_pool.size())
 	if _active_bullet_membership[i] == 0:
@@ -1088,6 +1175,7 @@ func _spawn_bullet_enemy(x: float, y: float, vx: float, vy: float, radius: float
 	b.motion = motion.duplicate(true)
 	b.has_motion = not motion.is_empty()
 	b.motion_triggered = false
+	b.laser_state = BulletWorld.LASER_ACTIVE if btype == "laser" else BulletWorld.LASER_NONE
 	if _active_bullet_membership.size() != bullet_pool.size():
 		_active_bullet_membership.resize(bullet_pool.size())
 	if _active_bullet_membership[i] == 0:
@@ -1118,13 +1206,13 @@ func _spawn_enemy_bullet_spec(spec: Dictionary) -> void:
 	)
 
 func _spawn_item(x: float, y: float, item_type: String = "power"):
-	items.append({"alive":true,"collected":false,"x":x,"y":y,"type":item_type,"radius":9.0,"vy":-2.5,"vx":randf_range(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":randf_range(0,TAU),"birth":15.0,"anim":randf_range(0,TAU)})
+	items.append({"alive":true,"collected":false,"x":x,"y":y,"type":item_type,"radius":9.0,"vy":-2.5,"vx":gameplay_rng.range_float(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":gameplay_rng.range_float(0.0,TAU),"birth":15.0,"anim":gameplay_rng.range_float(0.0,TAU)})
 
 func _spawn_enemy(x: float, y: float, hp: float = 5.0, pattern: String = "aimed", move: String = "straight", vx: float = 0.0, vy: float = 1.5, move_data: Dictionary = {}, strong: bool = false):
 	var cfg: Dictionary = enemy_pattern_executor.spawn_config(pattern, hp, _stage_enemy_hp_mult(), strong)
 	var ehp: float = float(cfg.hp)
 	var radius := float(cfg.radius)
-	enemies.append({"alive":true,"x":x,"y":y,"hp":ehp,"max_hp":ehp,"radius":radius,"vx":vx,"vy":vy,"move_timer":0.0,"move":move,"move_data":move_data.duplicate(true),"pattern":pattern,"shoot_timer":randf_range(0,30),"shoot_phase":0,"strong":strong,"dying":false,"death_timer":0.0,"family_id":String(cfg.family_id),"drop_tier":String(cfg.drop_tier),"shoot_interval":float(cfg.shoot_interval)})
+	enemies.append({"alive":true,"x":x,"y":y,"hp":ehp,"max_hp":ehp,"radius":radius,"vx":vx,"vy":vy,"move_timer":0.0,"move":move,"move_data":move_data.duplicate(true),"pattern":pattern,"shoot_timer":gameplay_rng.range_float(0.0,30.0),"shoot_phase":0,"strong":strong,"dying":false,"death_timer":0.0,"family_id":String(cfg.family_id),"drop_tier":String(cfg.drop_tier),"shoot_interval":float(cfg.shoot_interval)})
 
 func _nearest_enemy(px: float, py: float) -> Vector2:
 	var best: float = 99999.0; var best_v: Vector2 = Vector2(px, py - 100)
@@ -1256,30 +1344,47 @@ func _process(delta: float):
 	delta = clampf(delta, 0.0, 0.05)
 	var gm = game_manager_ref
 	var current_state: String = gm.state if gm else "title"
-	match current_state:
-		"title":
-			_update_title_menu()
-		"practice_select":
-			_update_practice_select_menu()
-		"character_select":
-			_update_character_select_menu()
-		"shot_select":
-			_update_shot_select_menu()
-		"settings":
-			_update_settings_menu()
-		"stage":
-			_update_stage(delta)
-		"boss":
-			_update_boss(delta)
-		"stage_clear":
-			if Input.is_action_just_pressed("shoot"): _advance_stage()
-		"final_clear", "game_over":
-			if Input.is_action_just_pressed("shoot"): _show_title()
-		"paused":
-			_update_pause_menu()
+	if current_state in ["stage", "boss"]:
+		_advance_gameplay_clock(delta)
+	else:
+		fixed_tick_clock.clear_accumulator()
+		match current_state:
+			"title":
+				_update_title_menu()
+			"practice_select":
+				_update_practice_select_menu()
+			"character_select":
+				_update_character_select_menu()
+			"shot_select":
+				_update_shot_select_menu()
+			"settings":
+				_update_settings_menu()
+			"stage_clear":
+				if Input.is_action_just_pressed("shoot"): _advance_stage()
+			"final_clear", "game_over":
+				if Input.is_action_just_pressed("shoot"): _show_title()
+			"paused":
+				_update_pause_menu()
 	_sync_canvas_origin(String(gm.state if gm else "title"))
 	_update_performance_counters()
 	queue_redraw()
+
+func _advance_gameplay_clock(frame_delta: float) -> int:
+	fixed_tick_clock.push_frame_delta(frame_delta)
+	var executed_ticks := 0
+	while fixed_tick_clock.consume_tick():
+		simulation_tick_index = fixed_tick_clock.tick_index
+		var current_state := String(game_manager_ref.state if game_manager_ref else "title")
+		match current_state:
+			"stage":
+				_update_stage(FixedTickClock.FIXED_DELTA_SECONDS)
+			"boss":
+				_update_boss(FixedTickClock.FIXED_DELTA_SECONDS)
+			_:
+				fixed_tick_clock.clear_accumulator()
+				break
+		executed_ticks += 1
+	return executed_ticks
 
 func _sync_canvas_origin(state: String) -> void:
 	var gameplay_state := state in ["stage", "boss", "stage_clear", "final_clear", "game_over", "paused"]
@@ -1343,7 +1448,7 @@ func _enter_boss():
 	if audio_manager_ref: audio_manager_ref.bgm_stage_boss(game_manager_ref.current_stage)
 
 func _init_boss():
-	boss = {"x":_screen_center_x(),"y":-60.0,"hp":500.0,"max_hp":500.0,"radius":28.0,"phase":"entering","timer":0.0,"entered":false,"sway":randf_range(0,100),"declaring":false,"declare_timer":0.0,"card_name":"","cards":[],"card_idx":0,"card_hp":0.0,"card_timer":0.0,"card_shot":0.0,"flash":0.0,"rot":0.0,"anim":0.0,"alive":true}
+	boss = boss_state_machine.create_initial_state(_screen_center_x(), -60.0, gameplay_rng.range_float(0.0, 100.0))
 	_load_boss_cards()
 	boss_alive = true
 
@@ -1396,7 +1501,7 @@ func _start_boss_card():
 	boss.last_countdown_second = -1
 	boss.move_mode = _boss_movement_mode(c)
 	boss.declaring = true; boss.declare_timer = 90.0
-	boss.phase = "active"
+	_transition_boss_phase(BossStateMachine.PHASE_ACTIVE)
 	if audio_manager_ref:
 		audio_manager_ref.play_sfx("spell_announce")
 
@@ -1472,7 +1577,8 @@ func _boss_enter(delta: float):
 	var target_y := _boss_anchor_y()
 	boss.y = -60.0 + (target_y + 60.0) * (1.0 - (1.0-p)*(1.0-p))
 	if p >= 1.0:
-		boss.phase = "active"; boss.entered = true
+		_transition_boss_phase(BossStateMachine.PHASE_ACTIVE)
+		boss.entered = true
 
 func _boss_active(delta: float):
 	if boss.declaring: return
@@ -1505,11 +1611,11 @@ func _boss_switching(delta: float):
 		if boss.card_idx < boss.cards.size():
 			_start_boss_card()
 		else:
-			boss.phase = "defeated"; boss.timer = 0.0
+			_transition_boss_phase(BossStateMachine.PHASE_DEFEATED, true)
 
 func _boss_defeated(delta: float):
 	boss.timer += delta * 60.0
-	boss.x += randf_range(-2.0, 2.0) * delta * 60.0
+	boss.x += gameplay_rng.range_float(-2.0, 2.0) * delta * 60.0
 	boss.y += 0.5 * delta * 60.0
 	if boss.timer > 180: boss_alive = false
 
@@ -1525,10 +1631,9 @@ func _boss_card_clear():
 	# the defeat animation instead of "switching" so we never try to start
 	# a non-existent next card (which was an out-of-range index bug).
 	if was_last_card:
-		boss.phase = "defeated"
-		boss.timer = 0.0
+		_transition_boss_phase(BossStateMachine.PHASE_DEFEATED, true)
 	else:
-		boss.phase = "switching"; boss.timer = 0.0
+		_transition_boss_phase(BossStateMachine.PHASE_SWITCHING, true)
 	if audio_manager_ref: audio_manager_ref.play_sfx("boss_phase_clear", -5.0)
 
 func _boss_card_timeout():
@@ -1538,10 +1643,9 @@ func _boss_card_timeout():
 		if b.active and _is_enemy_bullet_type(String(b.type)): b.active = false
 	# Same as above - timeout on the last card also ends the fight.
 	if boss.card_idx >= boss.cards.size() - 1:
-		boss.phase = "defeated"
-		boss.timer = 0.0
+		_transition_boss_phase(BossStateMachine.PHASE_DEFEATED, true)
 	else:
-		boss.phase = "switching"; boss.timer = 0.0
+		_transition_boss_phase(BossStateMachine.PHASE_SWITCHING, true)
 	if audio_manager_ref: audio_manager_ref.play_sfx("boss_phase_clear", -7.0)
 
 func _boss_fire_pattern(delta: float):
@@ -1674,7 +1778,10 @@ func _bullets_apocalypse(mult: float):
 		var a: float = (Vector2(player_x,player_y)-Vector2(boss.x,boss.y)).angle()
 		for off in [-0.5,-0.25,0,0.25,0.5]: _spawn_bullet_enemy(boss.x,boss.y,cos(a+off)*4.5*mult,sin(a+off)*4.5*mult,6,Color(0.71,0.2,0.24),"laser")
 	if int(boss.card_shot) % (2 if boss.card_timer < 600 else 4) == 0:
-		var a: float = randf_range(0,TAU); _spawn_bullet_enemy(boss.x,boss.y,cos(a)*randf_range(3,6)*mult,sin(a)*randf_range(3,6)*mult,3,Color.WHITE)
+		var a: float = gameplay_rng.range_float(0.0, TAU)
+		var speed_x: float = gameplay_rng.range_float(3.0, 6.0) * mult
+		var speed_y: float = gameplay_rng.range_float(3.0, 6.0) * mult
+		_spawn_bullet_enemy(boss.x, boss.y, cos(a) * speed_x, sin(a) * speed_y, 3, Color.WHITE)
 
 func _bullets_wind_aimed(mult: float):
 	if int(boss.card_shot) % 6 == 0:
@@ -2138,7 +2245,7 @@ func _update_items(delta: float):
 				it.floating = false
 				# Initialize horizontal drift direction (random, +1 or -1).
 				if it.get("drift_dir", 0.0) == 0.0:
-					it["drift_dir"] = 1.0 if randf() < 0.5 else -1.0
+					it["drift_dir"] = 1.0 if gameplay_rng.next_float() < 0.5 else -1.0
 				it.vy = 0.4   # slow fall after reaching top
 				it.vx = it["drift_dir"] * 0.7
 			else:
@@ -2323,9 +2430,9 @@ func _drop_item_type(strong: bool, roll: float, drop_tier: String = "") -> Strin
 	return item_reward_system.choose_drop(tier, roll)
 
 func _drop_item(x: float, y: float, strong: bool, drop_tier: String = "", roll_override: float = -1.0):
-	var drop_roll: float = roll_override if roll_override >= 0.0 else randf()
+	var drop_roll: float = roll_override if roll_override >= 0.0 else gameplay_rng.next_float()
 	var t: String = _drop_item_type(strong, drop_roll, drop_tier)
-	items.append({"alive":true,"collected":false,"x":x,"y":y,"type":t,"radius":9.0,"vy":-2.5,"vx":randf_range(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":randf_range(0,TAU),"birth":15.0,"anim":randf_range(0,TAU)})
+	items.append({"alive":true,"collected":false,"x":x,"y":y,"type":t,"radius":9.0,"vy":-2.5,"vx":gameplay_rng.range_float(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":gameplay_rng.range_float(0.0,TAU),"birth":15.0,"anim":gameplay_rng.range_float(0.0,TAU)})
 
 func _collect(it: Dictionary):
 	_collect_item(it)
