@@ -1,6 +1,7 @@
 .godot/
 .superpowers/
 .worktrees/
+.agent-runs/
 __pycache__/
 *.pyc
 *.tmp

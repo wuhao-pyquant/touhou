@@ -1,0 +1,13 @@
+{
+  "id": "B0-worktree-probe",
+  "objective": "Verify isolated write execution by creating B0_BRIDGE_PROBE.md containing exactly two lines: a title '# B0 bridge probe' and 'isolated-worktree: true'. Do not modify any other file.",
+  "mode": "write",
+  "allowed_paths": ["B0_BRIDGE_PROBE.md"],
+  "forbidden_paths": ["audio/**", ".codex/**", "scripts/**", "tests/**"],
+  "dependency_commit": "HEAD",
+  "acceptance_commands": ["git diff --check", "git status --short"],
+  "output_requirements": ["Report the created file", "Report the focused checks"],
+  "max_repair_rounds": 0,
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}

@@ -1,0 +1,49 @@
+{
+  "milestone": "B0",
+  "status": "completed",
+  "codex_cli_version": "0.144.4",
+  "unit_tests": {
+    "command": "python -m unittest discover -s tools/agents/tests -v",
+    "status": "passed"
+  },
+  "read_only_probes": [
+    {
+      "agent": "release_lead",
+      "run_id": "20260714T143312Z-B0-probe-sol-release_lead-f1496c64",
+      "thread_id": "019f610b-dd07-7fa1-b521-68248181f606",
+      "actual_model": "gpt-5.6-sol",
+      "actual_model_reasoning_effort": "high",
+      "changed_paths": [],
+      "policy_violations": []
+    },
+    {
+      "agent": "build_release",
+      "run_id": "20260714T143312Z-B0-probe-terra-build_release-2a0ff273",
+      "thread_id": "019f610b-dd1b-7db1-bffc-a0b97139c839",
+      "actual_model": "gpt-5.6-terra",
+      "actual_model_reasoning_effort": "medium",
+      "changed_paths": [],
+      "policy_violations": []
+    },
+    {
+      "agent": "mechanical_auditor",
+      "run_id": "20260714T143312Z-B0-probe-luna-mechanical_auditor-6e22bd8a",
+      "thread_id": "019f610b-dd10-7a50-ab14-7635124608e4",
+      "actual_model": "gpt-5.6-luna",
+      "actual_model_reasoning_effort": "medium",
+      "changed_paths": [],
+      "policy_violations": []
+    }
+  ],
+  "isolated_write_probe": {
+    "agent": "build_release",
+    "run_id": "20260714T143413Z-B0-worktree-probe-build_release-b8b51dc4",
+    "thread_id": "019f610c-cb06-73d2-88d0-c20639e1a3c5",
+    "actual_model": "gpt-5.6-terra",
+    "actual_model_reasoning_effort": "medium",
+    "changed_paths": ["B0_BRIDGE_PROBE.md"],
+    "policy_violations": [],
+    "main_worktree_changed": false,
+    "disposable_worktree_removed": true
+  }
+}

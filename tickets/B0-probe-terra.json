@@ -1,0 +1,12 @@
+{
+  "id": "B0-probe-terra",
+  "objective": "Perform a read-only bridge probe. Count tracked GDScript files and report the current Git commit. Do not modify files and do not run project tests.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": ["**"],
+  "dependency_commit": "HEAD",
+  "acceptance_commands": ["git status --short", "git rev-parse HEAD"],
+  "output_requirements": ["Report tracked GDScript count and commit", "Report zero changed files"],
+  "max_repair_rounds": 0,
+  "require_runtime_identity": true
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Agent Ticket",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "objective",
+    "mode",
+    "allowed_paths",
+    "forbidden_paths",
+    "dependency_commit",
+    "acceptance_commands",
+    "output_requirements",
+    "max_repair_rounds"
+  ],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "objective": {"type": "string", "minLength": 1},
+    "mode": {"type": "string", "enum": ["read_only", "write"]},
+    "allowed_paths": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "forbidden_paths": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "dependency_commit": {"type": "string", "minLength": 1},
+    "acceptance_commands": {"type": "array", "items": {"type": "string"}},
+    "output_requirements": {"type": "array", "items": {"type": "string"}},
+    "max_repair_rounds": {"type": "integer", "minimum": 0, "maximum": 2},
+    "context": {"type": "array", "items": {"type": "string"}},
+    "require_runtime_identity": {"type": "boolean", "default": true},
+    "keep_worktree": {"type": "boolean", "default": false}
+  }
+}

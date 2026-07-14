@@ -1,0 +1,12 @@
+{
+  "id": "B0-probe-luna",
+  "objective": "Perform a read-only mechanical bridge probe. Report whether project.godot, scenes/main.tscn, and scripts/main.gd exist. Do not modify files and do not run project tests.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": ["**"],
+  "dependency_commit": "HEAD",
+  "acceptance_commands": ["git status --short", "git rev-parse HEAD"],
+  "output_requirements": ["Report the three path checks", "Report zero changed files"],
+  "max_repair_rounds": 0,
+  "require_runtime_identity": true
+}

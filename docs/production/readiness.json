@@ -1,0 +1,22 @@
+{
+  "plan": "Hyakki Night Festival Incident Windows 1.0 Maturation v3",
+  "plan_status": "frozen",
+  "current_milestone": "M0",
+  "milestones": {
+    "B0": "completed",
+    "M0": "in_progress",
+    "M1": "pending",
+    "M2": "pending",
+    "M3": "pending",
+    "M4": "pending",
+    "M5": "pending",
+    "M6": "pending",
+    "M7": "pending",
+    "M8": "pending"
+  },
+  "notes": [
+    "Named-model agents must use the independent Codex CLI bridge.",
+    "Existing audio import changes belong to the user and are outside B0 scope.",
+    "B0 verified actual Sol/high, Terra/medium, and Luna/medium runtime identities on Codex CLI 0.144.4."
+  ]
+}
