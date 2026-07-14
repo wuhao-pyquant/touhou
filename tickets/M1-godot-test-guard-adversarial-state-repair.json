@@ -1,0 +1,56 @@
+{
+  "id": "M1-godot-test-guard-adversarial-state-repair",
+  "objective": "Repair only the seven open adversarial state-machine blockers returned by deep_reviewer run 20260714T203347Z-M1-godot-test-guard-post-repair-static-review-deep_reviewer-021e71d6 for candidate b767e76634eb44f77e5b0eea5cd2d0425bf5dda7. Keep the frozen same-script supervisor/worker architecture and exact two-file correction boundary. Preserve already-approved suspended CreateProcessW with JOB_LIST/HANDLE_LIST, fail-closed job membership/query behavior, retained synchronize-capable preexisting cleanup, continuously bounded protocol pumps, full ABI/native-return checking, retained handle-based capture, frozen close ordering, and failure-only seams. Close only: non-replaceable retained project authority through ResumeThread; a synchronously armed watcher with ready acknowledgement, fail-closed deadline, and synchronized job attach/detach; exactly one supervisor emergency grace with mutex abandonment after unconfirmed exit; complete command-line parsing before VerifiedOther so later duplicate or malformed paths are Ambiguous; aggregate input bounds, retained project.godot validation, exact READY/FINAL schemas and categories; one absolute QPC deadline created at S0 and passed unchanged; and real-branch evidence for each correction. Launch real Godot zero times and do not touch gameplay, audio, plans, Agent configuration, bridge code, fake_engine.py, or already-approved guard mechanisms.",
+  "mode": "write",
+  "allowed_paths": [
+    "tools/testing/invoke_godot_test.ps1",
+    "tools/testing/tests/test_invoke_godot_test.py"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "tools/agents/**",
+    "tools/testing/tests/fake_engine.py",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "content/**",
+    "docs/**",
+    "tests/**",
+    ".godot/**"
+  ],
+  "dependency_commit": "b767e76634eb44f77e5b0eea5cd2d0425bf5dda7",
+  "acceptance_commands": [
+    "python -m unittest tools.testing.tests.test_invoke_godot_test -v",
+    "$ErrorActionPreference='Stop'; $tokens=$null; $errors=$null; $null=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/testing/invoke_godot_test.ps1'),[ref]$tokens,[ref]$errors); if($errors.Count -ne 0){throw ($errors|Out-String)}; Write-Host 'POWERSHELL_PARSE=pass'",
+    "$changed=@(git status --porcelain -uall|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $allowed=@('tools/testing/invoke_godot_test.ps1','tools/testing/tests/test_invoke_godot_test.py'); $outside=@($changed|Where-Object{$_-notin $allowed}); if($outside.Count -ne 0){throw \"Outside changes: $($outside -join ',')\"}; $temps=@(Get-ChildItem tools/testing/tests -Force -Directory -ErrorAction SilentlyContinue|Where-Object Name -Match '^(?:_test_work|\\.invoke_godot_test_|debug_)'); if($temps.Count -ne 0){throw \"Temporary test artifacts remain: $($temps.Name -join ',')\"}; Write-Host 'PATH_SCOPE=pass'",
+    "git diff --check b767e76634eb44f77e5b0eea5cd2d0425bf5dda7 -- tools/testing/invoke_godot_test.ps1 tools/testing/tests/test_invoke_godot_test.py"
+  ],
+  "output_requirements": [
+    "Map each B01, B02, B03, B06, B07, B08, and B11 finding from review run 20260714T203347Z-M1-godot-test-guard-post-repair-static-review-deep_reviewer-021e71d6 to exact repaired code and a behavioral test that reaches the real branch",
+    "Report S0-S6 and W0-W8 compliance, project authority lifetime, watcher ready/deadline/job synchronization, one-grace mutex behavior, full command classification, exact READY/FINAL schema and categories, aggregate bounds, project.godot validation, and the one absolute QPC deadline",
+    "Report every focused test result, all four acceptance exits, exact changed files, zero temporary artifacts, and real Godot launch count zero",
+    "Do not report completion if any listed blocker remains a residual risk; a new independent static review remains mandatory"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "GATE: REPAIR is authoritative. No real Godot smoke is authorized. The complete reviewer report is available at .agent-runs/20260714T203347Z-M1-godot-test-guard-post-repair-static-review-deep_reviewer-021e71d6/final.json in the main repository.",
+    "B01 at runner lines 166,193-200,228,240-241: FILE_SHARE_DELETE plus cached DiagnosticPath permits project rename/replacement under the old identity mutex. Retain non-replaceable project/path authority through ResumeThread or equivalently revalidate without a replacement window; validate the retained project is a directory containing project.godot; add a real project-path replacement test.",
+    "B02 at lines 162-163,185-187,207: StartWatch has no watcher-thread ready handshake, silently stops at the deadline, and can observe a stale raw job value. Add a watcher Ready acknowledgement after its own first validated supervisor wait, require synchronous arming before inventory, fail closed on watcher deadline, and synchronize job attach/detach/close so a closed handle is never observable.",
+    "B03 at lines 277,287-289: the supervisor can perform two 1000 ms kill waits and then release the mutex. Record the sole emergency grace, prohibit any later wait/retry, keep CleanupFailure, and leave an owned mutex unreleased when exit is still unconfirmed. Add deterministic elapsed-time and abandonment evidence.",
+    "B06 at lines 173,176: Classify returns VerifiedOther on the first different project before detecting later duplicate or malformed paths. Parse all pre-double-dash options first; every zero/duplicate/empty/relative/inaccessible/malformed path is Ambiguous; decide VerifiedOther only after the complete parse. Add an actual existing exact-image process whose other-project path appears before the target duplicate.",
+    "B07 at lines 58-66,164-168,228,268,271-282,289: cap direct and decoded aggregate count/bytes before base64 transport; require the retained project directory and project.godot; validate exact READY and FINAL property sets, types, domains, status/category/exit/project/log/cleanedPids consistency, and Success exit zero before assignment. Malformed or partial protocol before the deadline must produce exactly one public JSON with LaunchFailure, not Timeout/InvalidInput or a conversion exception.",
+    "B08 at lines 162,218-219,239-241,261,264-265,277,287: create one absolute QPC deadline at S0 before validation, pass it unchanged to worker/native operations, derive every normal wait and reserve from it, make watcher expiry fail closed, and allow only the supervisor's single fixed emergency grace.",
+    "B11: add bounded tests for watcher ready and deadline, project replacement, other-project-first duplicate paths, exact pre-deadline partial protocol classification, malformed READY/FINAL, aggregate limits, and unconfirmed one-grace termination. Failure seams may pause or force failure only after real authority/resource acquisition; they must never synthesize success, identity, handle, PID, command line, path, or kill authority.",
+    "Run targeted tests while repairing. After the last code change, run the revised focused suite once for final ticket acceptance plus parser/scope/diff checks. Do not run any full repository suite or launch Godot. After success, a different deep_reviewer must perform another read-only static gate before one guarded smoke.",
+    "The previous successful implementation lineage is closed, so this fresh ticket must start at the test_performance profile default gpt-5.6-terra/high. If this ticket fails, resume its same session/worktree at escalation level 1. A successful lineage closes and later fresh tickets again use Terra/high."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
