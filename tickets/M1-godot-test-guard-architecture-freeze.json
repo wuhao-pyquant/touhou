@@ -1,0 +1,50 @@
+{
+  "id": "M1-godot-test-guard-architecture-freeze",
+  "objective": "Perform the mandated deep, read-only architecture freeze after two rejected safety iterations of the Windows Godot test guard. Review candidate 095653c19ee299208c4eb5387d6cada3bb1d65d2 and prescribe the minimum implementable architecture that makes tools/testing/invoke_godot_test.ps1 a genuinely bounded, fail-closed public entrypoint before any real Godot smoke. Do not edit files, run Godot, rerun fake tests, or rewrite M1. Resolve the core contradiction that synchronous Add-Type/native inventory/file operations cannot be forcefully bounded inside the same PowerShell process. Decide whether the stable design should be a thin supervisor plus isolated worker/helper, and specify exactly how the outer watchdog always emits JSON and releases the global lock while the worker creates a kill-on-close job, creates the engine suspended, assigns it before resume, and cannot leak descendants if killed. Freeze the exact process-identity rules for preexisting cleanup, inaccessible same-basename processes, command-line parsing, exactly one canonical --path value, executable image and creation identity, PID reuse, Toolhelp errors, arbitrary-executable recursive descendants, and fixture/test seam authority. Freeze correct x86/x64 PROCESSENTRY32W and job-object ABI layouts and whether native helper compilation must occur only inside the watchdog worker. Preserve the existing public parameters and exit categories where possible, but explicitly remove or gate unsafe test-only public switches. Define the smallest file set, worker/supervisor state machine, timeout budget, atomic result contract, cleanup order, failure precedence, and a focused deterministic test matrix that covers every open blocker without launching real Godot. Return a single architecture decision and implementation contract, not alternatives or another project plan. End with GATE: ARCHITECTURE_FROZEN only if an implementation Agent can follow it without inventing safety decisions; otherwise GATE: BLOCKED with the exact missing fact.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "tools/testing/invoke_godot_test.ps1",
+    "tools/testing/invoke_godot_test.py",
+    "tools/testing/tests/fake_engine.py",
+    "tools/testing/tests/test_invoke_godot_test.py"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "content/**",
+    "docs/**",
+    "tests/**",
+    ".godot/**"
+  ],
+  "dependency_commit": "095653c19ee299208c4eb5387d6cada3bb1d65d2",
+  "acceptance_commands": [
+    "if((git rev-parse HEAD).Trim() -ne '095653c19ee299208c4eb5387d6cada3bb1d65d2'){exit 1}; Write-Host 'ARCH_REVIEW_HEAD=pass'",
+    "$changed=@(git diff --name-only 899fd938fc76deb92b3546f0e2105e8adc17b2c4..HEAD); $expected=@('tools/testing/invoke_godot_test.ps1','tools/testing/tests/fake_engine.py','tools/testing/tests/test_invoke_godot_test.py'); if(Compare-Object $expected $changed){throw \"Unexpected candidate paths: $($changed -join ',')\"}; Write-Host 'ARCH_REVIEW_SCOPE=pass'",
+    "git diff 899fd938fc76deb92b3546f0e2105e8adc17b2c4..HEAD --check",
+    "if(git status --porcelain){exit 1}"
+  ],
+  "output_requirements": [
+    "State exactly one frozen architecture, its file set, public interface, supervisor/worker state machine, process-containment primitive, and atomic result contract",
+    "Define fail-closed rules for every native/identity/path/mutex/timeout/cleanup failure and exact exit-category precedence",
+    "Provide correct native ABI field layouts or require a helper implementation that proves them with architecture assertions",
+    "Provide a finite focused test matrix mapping every prior open blocker to one test, with no real Godot launch and no repeated full-project suite",
+    "Specify the implementation Agent's allowed judgment boundary and the separate static re-review gate",
+    "Report all four acceptance exit codes, zero changed files, and end with GATE: ARCHITECTURE_FROZEN or GATE: BLOCKED"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "First core_simulation Sol/xhigh review rejected candidate 899fd93 for unbounded stream drain, unsafe path/executable scoping, broken x64 snapshot layout, PID-only cleanup, launch classification, orphan cleanup, Local mutex fallback, and missing tests.",
+    "test_performance first repaired at restored default Terra/high and produced candidate 095653c with 11 passing fake tests and zero real Godot launches.",
+    "Second core_simulation Sol/xhigh re-audit rejected 095653c because synchronous lifecycle work remains unbounded; job failure/race and incomplete descendant tracking remain; inaccessible processes fail open; post-start identity failure leaks; fixtures can authorize kills; Toolhelp termination, duplicate --path, job ABI, and negative tests remain open.",
+    "This deep review is the single escalation allowed by the frozen repeated-failure rule."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}
