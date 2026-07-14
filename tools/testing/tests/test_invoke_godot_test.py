@@ -432,6 +432,62 @@ class InvokeGodotTestTests(unittest.TestCase):
         self.assert_pid_gone(worker_pid)
         self.assertEqual(capture.read_bytes(), b"", "replacement executable reached user code")
 
+    # 25: if the project pathname is replaced after W1 but before ResumeThread,
+    # the retained directory handle is revalidated and the suspended child never runs.
+    def test_25_project_replacement_is_blocked_through_resume(self) -> None:
+        command, env = self.invocation(fault="pause-before-resume", timeout=15)
+        supervisor = subprocess.Popen(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.processes.append(supervisor)
+        worker_pid = self.wait_for_child(supervisor.pid, Path(command[0]).name)
+        engine_pid = self.wait_for_child(worker_pid, self.engine.name)
+        relocated = self.temp / "replaced-project"
+        os.rename(self.project, relocated)
+        stdout, stderr = supervisor.communicate(timeout=20)
+        lines = [line for line in stdout.splitlines() if line.startswith("{")]
+        self.assertEqual(len(lines), 1, f"stdout={stdout}\nstderr={stderr}")
+        summary = json.loads(lines[0])
+        self.assertEqual((supervisor.returncode, summary["category"]), (7, "CleanupFailure"), stderr)
+        self.assert_pid_gone(engine_pid)
+        capture = Path(env["GTR_LOG"] + ".stdout")
+        self.assertEqual(capture.read_bytes(), b"", "replaced project reached executable code")
+
+    # 26: command classification reads every pre-- path before deciding that a
+    # process is collateral.  An other-project path preceding a duplicate target
+    # path is ambiguous and remains untouched.
+    def test_26_other_project_before_duplicate_path_is_ambiguous(self) -> None:
+        other = self.temp / "other"
+        other.mkdir()
+        (other / "project.godot").write_text("[application]\n", encoding="utf-8")
+        existing = subprocess.Popen(
+            [str(self.engine), "--mode", "sleep", "--duration", "30", "--headless", "--path", str(other), "--path", str(self.project)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        self.processes.append(existing)
+        time.sleep(0.2)
+        self.assert_category(7, "CleanupFailure", cleanup=True)
+        self.assertIsNone(existing.poll(), "ambiguous duplicate process was mutated")
+
+    # 27: partial and malformed authenticated frames before the deadline have
+    # one public result and are classified as LaunchFailure, not Timeout/Input.
+    def test_27_predeadline_protocol_schema_failures_are_launch_failures(self) -> None:
+        for fault in ("partial", "malformed-ready", "malformed-final", "final-duplicate"):
+            with self.subTest(fault=fault):
+                self.assert_category(8, "LaunchFailure", fault=fault, timeout=5)
+
+    # 28: W0 cannot proceed until the watcher has observed the supervisor once.
+    def test_28_watcher_ready_deadline_fails_closed(self) -> None:
+        summary = self.assert_category(7, "CleanupFailure", fault="watcher-ready-timeout", timeout=1)
+        self.assertLess(summary["elapsedSeconds"], 2.5)
+
+    # 29: bounded aggregate argument transport and a retained project.godot are
+    # validated before any engine authority is granted.
+    def test_29_aggregate_arguments_and_project_marker_are_required(self) -> None:
+        self.assert_category(6, "InvalidInput", *(["x"] * 257))
+        markerless = self.temp / "markerless"
+        markerless.mkdir()
+        self.assert_category(6, "InvalidInput", project=markerless)
+
 
 if __name__ == "__main__":
     unittest.main()
