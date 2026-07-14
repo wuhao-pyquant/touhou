@@ -532,7 +532,7 @@ def main() -> int:
             or report_problems
             or identity_problems
             or report is None
-            or report.get("status") == "failed"
+            or report.get("status") != "completed"
         )
         summary = {
             "status": "failed" if failed else "completed",

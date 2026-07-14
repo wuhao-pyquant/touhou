@@ -1,0 +1,59 @@
+{
+  "id": "M0-runtime-foundation",
+  "objective": "Implement the M0 deterministic runtime foundation without changing stage content, balance, art, audio, menus, or the frozen v3 plan. Establish a fixed 60 Hz simulation seam in scripts/main.gd; add a deterministic seeded RNG with snapshot/restore; extract reusable BulletWorld and BossStateMachine state boundaries without rewriting their gameplay rules; add canonical simulation-state hashing; add versioned replay header plus frame-input recording/playback data for build version, content hash, seed, difficulty, protagonist, shot type, and per-tick input; and add the initial StageTimeline, PatternDefinition, BossPhaseDefinition, and DifficultyProfile runtime interfaces. DifficultyProfile must accept only normal and hard and must represent at least one topology-changing Hard field rather than speed/count-only scaling. Replace gameplay-affecting global randf/randf_range calls in main.gd with the seeded stream. Preserve the current visible gameplay contract as the baseline. Add a compact committed baseline replay fixture and expected state hash, and prove that replaying it three times produces the same hash. Keep main.gd integration narrow and move new logic into owned modules. Do not implement M1 content, new difficulty selections, scoring redesign, midboss content, or UI.",
+  "mode": "write",
+  "allowed_paths": [
+    "scripts/main.gd",
+    "scripts/runtime/fixed_tick_clock.gd",
+    "scripts/runtime/deterministic_rng.gd",
+    "scripts/runtime/simulation_state_hasher.gd",
+    "scripts/runtime/bullet_world.gd",
+    "scripts/runtime/boss_state_machine.gd",
+    "scripts/runtime/*.gd.uid",
+    "scripts/replay/**",
+    "scripts/content/**",
+    "tests/assert_m0_*.gd",
+    "tests/assert_m0_*.gd.uid",
+    "tests/fixtures/m0/**",
+    "docs/production/m0-*.json",
+    "docs/production/m0-*.md"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/data/**",
+    "scripts/ui/**",
+    "docs/production/readiness.json"
+  ],
+  "dependency_commit": "d67c26a",
+  "acceptance_commands": [
+    "& 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64.exe' --headless --path . --script res://tests/assert_m0_determinism.gd",
+    "& 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64.exe' --headless --path . --script res://tests/assert_m0_content_interfaces.gd",
+    "& 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64.exe' --headless --path . --script res://tests/assert_pause_contract.gd",
+    "& 'C:\\Users\\e\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\\Godot_v4.7-stable_win64.exe' --headless --path . --script res://tests/assert_danmaku_balance.gd",
+    "git diff --check"
+  ],
+  "output_requirements": [
+    "Report each new runtime interface and the narrow main.gd integration points",
+    "Report every gameplay-affecting random call left in main.gd and justify any remainder",
+    "Report the baseline fixture path, expected hash, and three observed replay hashes",
+    "Report focused test commands with exit codes and any Godot parser warnings",
+    "Report changed files and residual determinism risks; do not claim full-game replay compatibility beyond M0"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "The project is Godot 4.7 and currently advances gameplay from scripts/main.gd using delta * 60.0.",
+    "Existing content uses a monolithic main.gd; preserve public methods relied upon by tests.",
+    "M0 is an architecture and determinism milestone, not a balance or content-production milestone.",
+    "The release lead will review and commit; do not commit, merge, or spawn subagents.",
+    "The apparent audio .import modifications in the main checkout are protected user/environment state and are outside this worktree ticket."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}

@@ -1,0 +1,27 @@
+{
+  "id": "M0-runtime-audit",
+  "objective": "Perform a strictly read-only M0 seam audit against commit d67c26a. Inventory every gameplay-affecting randf/randf_range/randi call, every frame-delta-driven simulation entry point, Boss state transition function, bullet-pool ownership function, stage timer/wave boundary, and existing test that constrains scripts/main.gd. Identify the smallest extraction seams for fixed 60 Hz simulation, seeded RNG, BulletWorld, BossStateMachine, replay input/header, and canonical state hashing. Flag specific compatibility hazards and exact file/line evidence. Do not propose a replacement plan, judge creative content, edit files, launch Godot, or regenerate imports.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": ["**"],
+  "dependency_commit": "d67c26a",
+  "acceptance_commands": [
+    "git rev-parse HEAD",
+    "git status --short",
+    "rg -n \"randf|randi|RandomNumberGenerator|func _process|func _physics_process|delta \\\\* 60|boss_alive|active_bullet_indices|stage_timer\" scripts tests"
+  ],
+  "output_requirements": [
+    "Report exact file and line evidence for randomness and frame-time dependencies",
+    "Report current Boss, BulletWorld, stage timeline, and replay ownership seams",
+    "Report existing focused regression tests that a core implementation must preserve",
+    "Report zero changed files and distinguish facts from uncertain recommendations"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "This audit runs independently from the core implementation and must remain read-only.",
+    "The approved v3 plan is frozen; this ticket only validates implementation boundaries.",
+    "Do not inspect or touch user audio import state outside the detached worktree."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}
