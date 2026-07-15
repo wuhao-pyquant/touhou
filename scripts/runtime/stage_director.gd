@@ -2,6 +2,7 @@ extends RefCounted
 class_name StageDirector
 
 var _content: Object = null
+var _m1_contract_catalog: Object = null
 
 func _content_db() -> Object:
 	if _content == null:
@@ -51,6 +52,35 @@ func midboss_definition(stage_index: int) -> Dictionary:
 
 func pattern_aliases() -> Dictionary:
 	return _content_db().pattern_aliases()
+
+# Additive M1 contract queries. Current stage_controller(), wave schedules,
+# aliases, and playable boss definitions intentionally remain on the legacy
+# content database until their later implementation milestones.
+func m1_content_catalog() -> Object:
+	if _m1_contract_catalog == null:
+		var catalog_script = load("res://scripts/content/m1_content_catalog.gd")
+		_m1_contract_catalog = catalog_script.new()
+	return _m1_contract_catalog
+
+func m1_stage_timeline(stage_index: int):
+	return m1_content_catalog().stage_timeline(stage_index)
+
+func m1_stage_segments(stage_index: int) -> Array:
+	var timeline = m1_stage_timeline(stage_index)
+	return [] if timeline == null else timeline.segments.duplicate(true)
+
+func m1_stage_beats(stage_index: int) -> Array:
+	var timeline = m1_stage_timeline(stage_index)
+	return [] if timeline == null else timeline.events.duplicate(true)
+
+func m1_phase_definitions(stage_index: int, encounter_role: String = "") -> Array:
+	return m1_content_catalog().phase_definitions_for_stage(stage_index, encounter_role)
+
+func m1_phase_definition(phase_id: String):
+	return m1_content_catalog().phase_definition(phase_id)
+
+func m1_phase_local_seed(run_seed: int, phase_id: String) -> int:
+	return m1_content_catalog().phase_local_seed(run_seed, phase_id)
 
 func _event_key(stage_index: int, event_index: int, event_time: int) -> String:
 	return "%d:%d:%d" % [stage_index, event_index, event_time]

@@ -28,6 +28,8 @@ var bullet_speed_scale: float = 1.0
 var emission_count_scale: float = 1.0
 var topology_variant: String = "baseline"
 var topology_overrides: Dictionary = {}
+var normal_structure: Dictionary = {}
+var authored_hard_transformation: Dictionary = {}
 
 func _init(profile_id: String = "normal", overrides: Dictionary = {}) -> void:
 	configure(profile_id, overrides)
@@ -43,6 +45,8 @@ func configure(profile_id: String, overrides: Dictionary = {}) -> void:
 	if authored_topology is Dictionary:
 		for key in authored_topology:
 			topology_overrides[key] = authored_topology[key]
+	normal_structure = _dictionary_copy(overrides.get("normal_structure", {}))
+	authored_hard_transformation = _dictionary_copy(overrides.get("hard_topology_change", {}))
 
 func validation_errors() -> Array[String]:
 	var errors: Array[String] = []
@@ -64,8 +68,23 @@ func is_valid() -> bool:
 func has_topology_change() -> bool:
 	if id != "hard":
 		return false
+	if not authored_hard_transformation.is_empty():
+		return (
+			not String(authored_hard_transformation.get("type", "")).is_empty()
+			and not String(authored_hard_transformation.get("graph_change", "")).is_empty()
+		)
 	var normal: Dictionary = DEFAULTS.normal
 	return topology_variant != String(normal.topology_variant) or topology_overrides != normal.topology_overrides
+
+func configure_for_phase(profile_id: String, source_normal: Dictionary, source_hard: Dictionary) -> void:
+	configure(profile_id, {
+		"normal_structure": source_normal,
+		"hard_topology_change": source_hard,
+		"topology_variant": String(source_hard.get("type", "authored")) if profile_id.to_lower() == "hard" else "baseline",
+		"topology_overrides": {
+			"graph_change": String(source_hard.get("graph_change", "")) if profile_id.to_lower() == "hard" else "authored",
+		},
+	})
 
 func to_dict() -> Dictionary:
 	return {
@@ -75,4 +94,9 @@ func to_dict() -> Dictionary:
 		"emission_count_scale": emission_count_scale,
 		"topology_variant": topology_variant,
 		"topology_overrides": topology_overrides.duplicate(true),
+		"normal_structure": normal_structure.duplicate(true),
+		"authored_hard_transformation": authored_hard_transformation.duplicate(true),
 	}
+
+func _dictionary_copy(value: Variant) -> Dictionary:
+	return value.duplicate(true) if value is Dictionary else {}

@@ -6,11 +6,27 @@ var stage_id: String = ""
 var events: Array[Dictionary] = []
 var cursor: int = 0
 
+# M1 choreography metadata. These fields are optional so the version-1
+# constructor remains a valid, minimal timeline contract.
+var stage_index: int = 0
+var display_name: String = ""
+var location: String = ""
+var midboss_id: String = ""
+var boss_id: String = ""
+var approved_identity: String = ""
+var segments: Array[Dictionary] = []
+var midboss: Dictionary = {}
+var preboss_climax: Dictionary = {}
+var normal_route: String = ""
+var hard_route: String = ""
+var score_route: Dictionary = {}
+
 func _init(initial_stage_id: String = "", initial_events: Array = []) -> void:
 	configure(initial_stage_id, initial_events)
 
 func configure(next_stage_id: String, source_events: Array) -> void:
 	stage_id = next_stage_id
+	_clear_m1_metadata()
 	events.clear()
 	for source in source_events:
 		if source is Dictionary:
@@ -21,6 +37,44 @@ func configure(next_stage_id: String, source_events: Array) -> void:
 		return a_tick < b_tick if a_tick != b_tick else String(a.get("id", "")) < String(b.get("id", ""))
 	)
 	cursor = 0
+
+func configure_m1(values: Dictionary) -> void:
+	var authored_events: Array[Dictionary] = []
+	for source in values.get("beats", []):
+		if not (source is Dictionary):
+			continue
+		var payload: Dictionary = source.duplicate(true)
+		payload.erase("id")
+		payload.erase("frame")
+		payload.erase("kind")
+		authored_events.append({
+			"id": String(source.get("id", "")),
+			"tick": int(source.get("frame", -1)),
+			"frame": int(source.get("frame", -1)),
+			"kind": String(source.get("kind", "")),
+			"payload": payload,
+		})
+	configure(String(values.get("stage_id", "")), authored_events)
+	stage_index = int(values.get("stage_index", 0))
+	display_name = String(values.get("display_name", ""))
+	location = String(values.get("location", ""))
+	midboss_id = String(values.get("midboss_id", ""))
+	boss_id = String(values.get("boss_id", ""))
+	approved_identity = String(values.get("approved_identity", ""))
+	for source in values.get("segments", []):
+		if source is Dictionary:
+			segments.append(source.duplicate(true))
+	var source_midboss = values.get("midboss", {})
+	if source_midboss is Dictionary:
+		midboss = source_midboss.duplicate(true)
+	var source_climax = values.get("preboss_climax", {})
+	if source_climax is Dictionary:
+		preboss_climax = source_climax.duplicate(true)
+	normal_route = String(values.get("normal_route", ""))
+	hard_route = String(values.get("hard_route", ""))
+	var source_score_route = values.get("score_route", {})
+	if source_score_route is Dictionary:
+		score_route = source_score_route.duplicate(true)
 
 func validation_errors() -> Array[String]:
 	var errors: Array[String] = []
@@ -41,6 +95,25 @@ func validation_errors() -> Array[String]:
 			errors.append("events[%d].kind is required" % index)
 		if event.has("payload") and not (event.payload is Dictionary):
 			errors.append("events[%d].payload must be a Dictionary" % index)
+	if is_m1_contract():
+		if stage_index <= 0:
+			errors.append("stage_index must be positive for an M1 timeline")
+		if segments.size() != 3:
+			errors.append("M1 timeline must contain exactly three segments")
+		var seen_segments := {}
+		for index in range(segments.size()):
+			var segment_id := String(segments[index].get("id", ""))
+			if segment_id.is_empty():
+				errors.append("segments[%d].id is required" % index)
+			elif seen_segments.has(segment_id):
+				errors.append("segments[%d].id must be unique" % index)
+			seen_segments[segment_id] = true
+		for index in range(events.size()):
+			var event_segment_id := String(events[index].get("payload", {}).get("segment", ""))
+			if not seen_segments.has(event_segment_id):
+				errors.append("events[%d] references unknown segment %s" % [index, event_segment_id])
+			if int(events[index].get("payload", {}).get("max_gap_after_frames", -1)) < 0:
+				errors.append("events[%d].max_gap_after_frames must be non-negative" % index)
 	return errors
 
 func is_valid() -> bool:
@@ -48,6 +121,30 @@ func is_valid() -> bool:
 
 func reset() -> void:
 	cursor = 0
+
+func is_m1_contract() -> bool:
+	return stage_index > 0 or not segments.is_empty()
+
+func beat_count() -> int:
+	return events.size()
+
+func segment_count() -> int:
+	return segments.size()
+
+func beats_for_segment(segment_id: String) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for event in events:
+		if String(event.get("payload", {}).get("segment", "")) == segment_id:
+			result.append(event.duplicate(true))
+	return result
+
+func max_non_transition_gap() -> int:
+	var maximum := 0
+	for event in events:
+		if String(event.get("kind", "")) == "transition":
+			continue
+		maximum = maxi(maximum, int(event.get("payload", {}).get("max_gap_after_frames", 0)))
+	return maximum
 
 func events_at_tick(tick: int) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
@@ -64,4 +161,34 @@ func pop_events_through(tick: int) -> Array[Dictionary]:
 	return result
 
 func to_dict() -> Dictionary:
-	return {"version": VERSION, "stage_id": stage_id, "events": events.duplicate(true)}
+	return {
+		"version": VERSION,
+		"stage_id": stage_id,
+		"events": events.duplicate(true),
+		"stage_index": stage_index,
+		"display_name": display_name,
+		"location": location,
+		"midboss_id": midboss_id,
+		"boss_id": boss_id,
+		"approved_identity": approved_identity,
+		"segments": segments.duplicate(true),
+		"midboss": midboss.duplicate(true),
+		"preboss_climax": preboss_climax.duplicate(true),
+		"normal_route": normal_route,
+		"hard_route": hard_route,
+		"score_route": score_route.duplicate(true),
+	}
+
+func _clear_m1_metadata() -> void:
+	stage_index = 0
+	display_name = ""
+	location = ""
+	midboss_id = ""
+	boss_id = ""
+	approved_identity = ""
+	segments.clear()
+	midboss.clear()
+	preboss_climax.clear()
+	normal_route = ""
+	hard_route = ""
+	score_route.clear()
