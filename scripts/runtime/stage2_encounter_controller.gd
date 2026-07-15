@@ -175,7 +175,7 @@ func active_phase_definition() -> Dictionary:
 func _phase_definition_at(index: int, kind: String) -> Dictionary:
 	if index < 0 or index >= PHASE_IDS.size():
 		return {}
-	var phase_id := PHASE_IDS[index]
+	var phase_id: String = PHASE_IDS[index]
 	var phase_metadata: Dictionary = _metadata.get("phase_metadata", {}).get(phase_id, {})
 	var source_phase: Dictionary = phase_metadata.get("source_phase", {})
 	var owner: Dictionary = source_phase.get("owner", {})
@@ -409,7 +409,7 @@ func _validate_package(stage2_package: Dictionary) -> Array[String]:
 		errors.append("Stage 2 phase metadata is missing")
 	else:
 		for index in range(PHASE_IDS.size()):
-			var phase_id := PHASE_IDS[index]
+			var phase_id: String = PHASE_IDS[index]
 			var entry_value = metadata.phase_metadata.get(phase_id)
 			if not (entry_value is Dictionary) or not (entry_value.get("source_phase") is Dictionary):
 				errors.append("Stage 2 phase metadata is missing for %s" % phase_id)

@@ -1986,7 +1986,7 @@ func _update_stage2_main_flow(delta: float) -> void:
 	if stage2_encounter_controller.encounter_kind() == "complete":
 		_finish_stage2_after_boss()
 		return
-	var encounter_active := stage2_encounter_controller.encounter_kind() in ["midboss", "boss"]
+	var encounter_active: bool = stage2_encounter_controller.encounter_kind() in ["midboss", "boss"]
 	if encounter_active and not boss_alive:
 		_sync_stage2_phase_boss()
 	_update_player(delta)
@@ -1996,7 +1996,7 @@ func _update_stage2_main_flow(delta: float) -> void:
 		boss.anim = float(boss.get("anim", 0.0)) + 1.0
 		boss.sway = float(boss.get("sway", 0.0)) + 1.0
 		boss.card_shot = float(stage2_encounter_controller.active_phase_tick())
-		var definition := stage2_encounter_controller.active_phase_definition()
+		var definition: Dictionary = stage2_encounter_controller.active_phase_definition()
 		boss.card_timer = float(maxi(0, int(definition.get("timeout_ticks", 0)) - stage2_encounter_controller.active_phase_tick()))
 	else:
 		_update_enemies(delta)
