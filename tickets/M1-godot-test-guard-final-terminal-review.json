@@ -1,0 +1,32 @@
+{
+  "id": "M1-godot-test-guard-final-terminal-review",
+  "objective": "Perform the independent read-only final static gate for candidate d6f670abfe65a3300c063969f124b1c8e319e16e. Review against the frozen architecture and every blocker from GATE: REPAIR run 20260714T210656Z-M1-godot-test-guard-final-adversarial-review-deep_reviewer-02852cd2. Change zero files, rerun zero fake-engine tests, and launch Godot zero times. Supplied implementation run 20260715T012021Z-M1-godot-test-guard-supervisor-terminal-repair-test_performance-4aabe4a1 records 36/36 passing in 165.508 seconds plus parser/scope/diff gates. Independently prove or refute: no synchronous public-supervisor Add-Type/bootstrap work; bounded ReadAsync pump initialization and operation; lifetime-safe duplicated watcher job handles; a genuinely surviving unconfirmed worker retaining mutex exclusion after the supervisor has exited; exactly one emergency grace; live CLEANUP_BEGIN precedence; same-image zero/duplicate/malformed path ambiguity and different-image early ignore; immutable exact integral protocol validation before assignment; full quoted command cap; and safe unstarted Process handling with exactly one JSON. Re-audit approved atomic JOB_LIST, identity, cleanup, ABI and capture behavior. Return GATE: APPROVE only if exactly one guarded real-Godot smoke is safe; otherwise GATE: REPAIR with exact lines and the smallest correction.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": [
+    "**"
+  ],
+  "dependency_commit": "d6f670abfe65a3300c063969f124b1c8e319e16e",
+  "acceptance_commands": [
+    "if((git rev-parse HEAD).Trim() -ne 'd6f670abfe65a3300c063969f124b1c8e319e16e'){throw 'Wrong candidate HEAD'}; Write-Host 'STATIC_REVIEW_HEAD=pass'",
+    "$changed=@(git diff --name-only 095653c19ee299208c4eb5387d6cada3bb1d65d2..HEAD); $expected=@('tools/testing/invoke_godot_test.ps1','tools/testing/tests/fake_engine.py','tools/testing/tests/test_invoke_godot_test.py'); if(Compare-Object $expected $changed){throw \"Unexpected candidate paths: $($changed -join ',')\"}; Write-Host 'STATIC_REVIEW_SCOPE=pass'",
+    "git diff 095653c19ee299208c4eb5387d6cada3bb1d65d2..HEAD --check",
+    "if(git status --porcelain){throw 'Reviewer worktree is not clean'}; Write-Host 'STATIC_REVIEW_CLEAN=pass'"
+  ],
+  "output_requirements": [
+    "State GATE: APPROVE or GATE: REPAIR in the summary; APPROVE is the only authorization for exactly one guarded real-Godot smoke",
+    "Map every failure from run 20260714T210656Z-M1-godot-test-guard-final-adversarial-review-deep_reviewer-02852cd2 to final code and real-branch evidence, and audit S0-S6 plus W0-W8 end to end",
+    "Explicitly inspect test_36_unconfirmed_worker_keeps_mutex_for_sequential_contender: APPROVE only if the sequential contender starts after the first supervisor has exited while the worker is still alive and holds or has inherited real mutex exclusion; a contender started while the supervisor still owns the mutex is insufficient evidence",
+    "For every blocker cite exact file and line, mechanism, severity and smallest correction; report actual runtime identity, exact commands, zero changed files, fake suite not rerun, and real Godot launch count zero"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "The complete guard delta is the three files tools/testing/invoke_godot_test.ps1, tools/testing/tests/fake_engine.py, and tools/testing/tests/test_invoke_godot_test.py. The latest repair changed only the runner and unittest file.",
+    "Implementation ran as a fresh test_performance task at restored default gpt-5.6-terra/high and succeeded without escalation. This review is a different deep_reviewer at gpt-5.6-sol/max and must remain read-only.",
+    "Candidate ancestry includes unrelated gameplay work. Review only the guard delta from 095653c to d6f670a and never authorize whole-branch integration; release_lead will cherry-pick individual guard commits only after approval.",
+    "Do not run Godot, project GDScript, fake-engine tests, or a full repository test. Supplied behavioral evidence is not a substitute for static proof and must not be duplicated.",
+    "Current main-worktree audio/**/*.import modifications are user/environment state outside this detached review and must not be inspected, reset, staged, or mentioned as candidate changes."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
