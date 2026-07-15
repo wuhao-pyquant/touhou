@@ -22,6 +22,9 @@ func _check(condition: bool, message: String) -> bool:
 func _check_equal(actual, expected, message: String) -> bool:
 	return _check(actual == expected, "%s Expected %s, got %s" % [message, expected, actual])
 
+func _check_vector_close(actual: Vector2, expected: Vector2, message: String) -> bool:
+	return _check(actual.distance_to(expected) <= 0.00001, "%s Expected %s, got %s" % [message, expected, actual])
+
 func _new_main(difficulty: String = "normal", seed: int = 73001) -> Node:
 	var main = MainScript.new()
 	main.game_manager_ref = load("res://autoload/game_manager.gd").new()
@@ -124,6 +127,26 @@ func _assert_contract_loading_and_first_construction() -> void:
 	_check_equal(Vector2(float(bullet.vx), float(bullet.vy)), Vector2(float(runtime_bullet.velocity_px_per_second[0]), float(runtime_bullet.velocity_px_per_second[1])) / 60.0, "Authored px/s velocity was not converted exactly to px/tick.")
 	for seam_field in MainScript.STAGE2_FIELD_SEAM_FIELDS:
 		_check(bullet.has(seam_field), "Field bullet lost seam field %s." % seam_field)
+	var authored_anchor := Vector2(float(runtime_bullet.position[0]), float(runtime_bullet.position[1]))
+	var authored_velocity := Vector2(float(bullet.vx), float(bullet.vy))
+	normal._update_bullets(1.0 / 60.0, Vector2.ZERO)
+	bullet = _bullet_for_uid(normal, uid)
+	_check_vector_close(Vector2(float(bullet.x), float(bullet.y)), authored_anchor, "First construction moved before its authored-tick collision pass.")
+	normal.player_x = authored_anchor.x
+	normal.player_y = authored_anchor.y
+	normal.player_invincible = false
+	normal.player_just_hit = false
+	normal.player_deathbomb_primed = false
+	normal._check_collisions(false)
+	_check(normal.player_just_hit, "Real BulletWorld collision path missed an enabled field construction at its authored anchor.")
+	_check(normal.stage_controller.stage2_field_uid_to_slot.has(uid) and bool(_bullet_for_uid(normal, uid).get("active", false)), "Player collision incorrectly retired a runtime-owned field bullet.")
+	normal.player_just_hit = false
+	normal.player_deathbomb_primed = false
+	normal.player_deathbomb_timer = 0.0
+	_check(_advance_field_to(normal, 25), "First construction continuation tick failed.")
+	normal._update_bullets(1.0 / 60.0, Vector2.ZERO)
+	bullet = _bullet_for_uid(normal, uid)
+	_check_vector_close(Vector2(float(bullet.x), float(bullet.y)), authored_anchor + authored_velocity, "Field construction did not begin linear BulletWorld movement on the next tick.")
 	_check(normal._spawn_bullet_player(360.0, 700.0, 0.0, -8.0), "Compatibility player bullet fixture failed.")
 	var saw_integer_uid := false
 	for bullet_index in normal.bullet_world.active_order():
@@ -145,16 +168,44 @@ func _assert_delayed_seed_rebound_removal_and_projection() -> void:
 	var delayed_bullet := _bullet_for_uid(delayed, delayed_uid)
 	_check(delayed_uid != "" and not delayed._stage2_field_collision_enabled(delayed_bullet), "Delayed seed collided before its authored activation.")
 	_check_equal(Vector2(float(delayed_bullet.vx), float(delayed_bullet.vy)), Vector2.ZERO, "Delayed seed moved before activation.")
+	var delayed_anchor := Vector2(float(delayed_bullet.x), float(delayed_bullet.y))
+	delayed._update_bullets(1.0 / 60.0, Vector2.ZERO)
+	delayed_bullet = _bullet_for_uid(delayed, delayed_uid)
+	_check_vector_close(Vector2(float(delayed_bullet.x), float(delayed_bullet.y)), delayed_anchor, "Delayed-seed construction moved on its authored tick.")
+	delayed.player_x = delayed_anchor.x
+	delayed.player_y = delayed_anchor.y
+	delayed.player_invincible = false
+	delayed.player_just_hit = false
+	delayed._check_collisions(false)
+	_check(not delayed.player_just_hit, "Real collision path ignored delayed-seed collision gating.")
 	_check(_advance_field_to(delayed, 2147), "Delayed seed pre-activation trace failed.")
 	_check(not delayed._stage2_field_collision_enabled(_bullet_for_uid(delayed, delayed_uid)), "Delayed seed collision opened one tick early.")
 	_check(_advance_field_to(delayed, 2148), "Delayed seed activation tick failed.")
 	delayed_bullet = _bullet_for_uid(delayed, delayed_uid)
 	_check(delayed._stage2_field_collision_enabled(delayed_bullet), "Delayed seed collision did not open at the authored tick.")
 	_check(Vector2(float(delayed_bullet.vx), float(delayed_bullet.vy)) != Vector2.ZERO, "Delayed seed activation did not atomically install velocity.")
+	var delayed_velocity := Vector2(float(delayed_bullet.vx), float(delayed_bullet.vy))
+	delayed._update_bullets(1.0 / 60.0, Vector2.ZERO)
+	delayed_bullet = _bullet_for_uid(delayed, delayed_uid)
+	_check_vector_close(Vector2(float(delayed_bullet.x), float(delayed_bullet.y)), delayed_anchor, "Delayed seed left its authored activation anchor before collision.")
+	delayed.player_x = delayed_anchor.x
+	delayed.player_y = delayed_anchor.y
+	delayed.player_just_hit = false
+	delayed.player_deathbomb_primed = false
+	delayed._check_collisions(false)
+	_check(delayed.player_just_hit, "Real collision path did not open on the delayed-seed activation tick.")
+	_check(delayed.stage_controller.stage2_field_uid_to_slot.has(delayed_uid), "Delayed-seed hit retired the runtime-owned slot.")
+	delayed.player_just_hit = false
+	delayed.player_deathbomb_primed = false
+	delayed.player_deathbomb_timer = 0.0
 	_check(_remove_sources(delayed, ["s2_b15_left_mirror", "s2_b15_right_mirror"], 2148), "Delayed fixture sources were not removed.")
+	_check(_advance_field_to(delayed, 2149), "Delayed seed post-activation continuation failed.")
+	delayed._update_bullets(1.0 / 60.0, Vector2.ZERO)
+	delayed_bullet = _bullet_for_uid(delayed, delayed_uid)
+	_check_vector_close(Vector2(float(delayed_bullet.x), float(delayed_bullet.y)), delayed_anchor + delayed_velocity, "Delayed seed did not begin moving on the tick after activation.")
 	var delayed_state: Dictionary = delayed.stage2_field_topology_runtime.bullet_state(delayed_uid)
 	var delayed_removal_tick := int(delayed_state.get("removal_tick", -1))
-	_check(delayed_removal_tick > 2148 and _advance_field_to(delayed, delayed_removal_tick), "Delayed seed exact removal tick failed.")
+	_check(delayed_removal_tick > 2149 and _advance_field_to(delayed, delayed_removal_tick), "Delayed seed exact removal tick failed.")
 	_check(not delayed.stage_controller.stage2_field_uid_to_slot.has(delayed_uid), "Authored delayed-seed removal left a UID/slot binding.")
 	_free_main(delayed)
 
@@ -171,16 +222,39 @@ func _assert_delayed_seed_rebound_removal_and_projection() -> void:
 	var rebound_bullet := _bullet_for_uid(rebound, rebound_uid)
 	_check_equal(int(rebound_bullet.get("stage2_reflection_count", -1)), 1, "Authored rebound metadata did not latch exactly once.")
 	_check_equal(rebound_bullet.get("stage2_last_reflection_surface_id"), (plan[0] as Dictionary).get("surface_id"), "Authored rebound surface metadata drifted.")
+	var rebound_anchor := Vector2(float((plan[0] as Dictionary).waypoint[0]), float((plan[0] as Dictionary).waypoint[1]))
 	var velocity_before := Vector2(float(rebound_bullet.vx), float(rebound_bullet.vy))
-	rebound._finish_bullet_world_step(int(rebound.stage_controller.stage2_field_uid_to_slot[rebound_uid]), rebound_bullet, 1.0)
-	_check_equal(Vector2(float(rebound_bullet.vx), float(rebound_bullet.vy)), velocity_before, "Generic bounce changed a field-owned authored rebound.")
+	rebound._update_bullets(1.0 / 60.0, Vector2.ZERO)
+	rebound_bullet = _bullet_for_uid(rebound, rebound_uid)
+	_check_vector_close(Vector2(float(rebound_bullet.x), float(rebound_bullet.y)), rebound_anchor, "Authored rebound left its waypoint before the turn-tick collision pass.")
+	_check_vector_close(Vector2(float(rebound_bullet.vx), float(rebound_bullet.vy)), velocity_before, "Turn-tick BulletWorld update changed the authored rebound velocity.")
+	_check(_advance_field_to(rebound, reflection_tick + 1), "Authored rebound continuation tick failed.")
+	rebound._update_bullets(1.0 / 60.0, Vector2.ZERO)
+	rebound_bullet = _bullet_for_uid(rebound, rebound_uid)
+	_check_vector_close(Vector2(float(rebound_bullet.x), float(rebound_bullet.y)), rebound_anchor + velocity_before, "Authored rebound did not move on the tick after its waypoint turn.")
+	rebound_bullet.x = 8.0
+	rebound_bullet.vx = -absf(float(rebound_bullet.vx)) if not is_zero_approx(float(rebound_bullet.vx)) else -1.0
+	rebound_bullet.has_motion = true
+	rebound_bullet.motion = {"kind": "linear", "bounce_count": 1}
+	var non_bounce_velocity := float(rebound_bullet.vx)
+	rebound._update_bullets(1.0 / 60.0, Vector2.ZERO)
+	rebound_bullet = _bullet_for_uid(rebound, rebound_uid)
+	_check(is_equal_approx(float(rebound_bullet.vx), non_bounce_velocity) and int(rebound_bullet.motion.get("bounce_count", -1)) == 1, "Real BulletWorld update applied generic bounce to a field-owned bullet.")
+	_check_equal(int(rebound_bullet.get("stage2_reflection_count", -1)), 1, "Generic update fabricated a second authored reflection.")
 	var score_before := int(rebound.game_manager_ref.score)
+	var graze_before := int(rebound.game_manager_ref.graze)
 	var multiplier_before := float(rebound.game_manager_ref.night_festival_multiplier)
 	var seals_before := int(rebound.game_manager_ref.night_festival_seals)
 	var items_before := rebound.items.duplicate(true)
-	_check(rebound._stage2_field_callback("observe_graze", reflection_tick, {"bullet_uid": rebound_uid}), "Reflected graze callback failed.")
+	rebound.player_x = float(rebound_bullet.x)
+	rebound.player_y = float(rebound_bullet.y)
+	rebound.player_invincible = true
+	rebound._check_collisions(false)
+	rebound.player_invincible = false
+	_check_equal(int(rebound.game_manager_ref.graze), graze_before + 1, "Real collision path did not award exactly one reflected field graze.")
+	_check(bool(_bullet_for_uid(rebound, rebound_uid).get("grazed", false)), "Transactional graze commit did not mark the live BulletWorld slot.")
 	_check(not (rebound.stage_controller.get("stage2_field_score_projections", []) as Array).is_empty(), "Qualifying graze projection was not retained as evidence.")
-	_check_equal(int(rebound.game_manager_ref.score), score_before, "Projection callback directly mutated score.")
+	_check_equal(int(rebound.game_manager_ref.score), score_before + rebound._score_value("graze", 10), "Projection changed score beyond the existing ordinary graze award.")
 	_check_equal(float(rebound.game_manager_ref.night_festival_multiplier), multiplier_before, "Projection callback directly mutated multiplier.")
 	_check_equal(int(rebound.game_manager_ref.night_festival_seals), seals_before, "Projection callback directly mutated seals.")
 	_check_equal(rebound.items, items_before, "Projection callback directly mutated drops.")
@@ -230,14 +304,34 @@ func _assert_fail_closed_paths() -> void:
 	exhausted._sync_bullet_world_compatibility_views()
 	var first: Dictionary = exhausted.stage2_encounter_controller.advance(Vector2(exhausted.player_x, exhausted.player_y))
 	_check(exhausted._consume_stage2_controller_output(first), "Pool fixture rejected activation before construction.")
+	var exhausted_runtime_before: Dictionary = exhausted.stage2_field_topology_runtime.capture_snapshot()
+	var exhausted_world_before: Dictionary = exhausted.capture_bullet_world_state()
+	var exhausted_bindings_before: Dictionary = exhausted.stage_controller.stage2_field_uid_to_slot.duplicate(true)
+	var exhausted_sequence_before := int(exhausted.stage_controller.stage2_field_event_sequence)
+	var exhausted_tick_before := int(exhausted.stage_controller.stage2_field_tick)
 	_check(not exhausted._stage2_field_callback("advance", 24), "Pool exhaustion did not fail closed.")
 	_check(String(exhausted.stage_controller.get("stage2_field_hard_error", "")) != "" and String(exhausted.game_manager_ref.state) == "game_over", "Pool exhaustion did not latch Main failure state.")
-	_check_equal(exhausted.stage_controller.get("stage2_field_uid_to_slot", {}).size(), 0, "Pool exhaustion exposed a partial UID binding.")
+	_check_equal(exhausted.stage2_field_topology_runtime.capture_snapshot(), exhausted_runtime_before, "Pool rejection changed the live cursor, active bullets, or used UID ledger.")
+	_check_equal(exhausted.capture_bullet_world_state(), exhausted_world_before, "Pool rejection changed live BulletWorld slots or spawn cursor.")
+	_check_equal(exhausted.stage_controller.get("stage2_field_uid_to_slot", {}), exhausted_bindings_before, "Pool rejection exposed a partial UID binding.")
+	_check_equal(int(exhausted.stage_controller.stage2_field_event_sequence), exhausted_sequence_before, "Pool rejection consumed a live callback sequence.")
+	_check_equal(int(exhausted.stage_controller.stage2_field_tick), exhausted_tick_before, "Pool rejection advanced the live field tick.")
 	_free_main(exhausted)
 
 	var hard_error: Node = _new_main("normal", 73042)
-	_check(not hard_error._stage2_field_callback("activate_event", 0, {"event_id": "s2_unknown", "active_entity_ids": []}), "Runtime hard error was accepted.")
+	_check(_activate_direct_event(hard_error, "s2_b01") and _advance_field_to(hard_error, 24), "Runtime-hard-error fixture did not create live field state.")
+	var hard_runtime_before: Dictionary = hard_error.stage2_field_topology_runtime.capture_snapshot()
+	var hard_world_before: Dictionary = hard_error.capture_bullet_world_state()
+	var hard_bindings_before: Dictionary = hard_error.stage_controller.stage2_field_uid_to_slot.duplicate(true)
+	var hard_sequence_before := int(hard_error.stage_controller.stage2_field_event_sequence)
+	var hard_tick_before := int(hard_error.stage_controller.stage2_field_tick)
+	_check(not hard_error._stage2_field_callback("activate_event", 24, {"event_id": "s2_unknown", "active_entity_ids": []}), "Runtime hard error was accepted.")
 	_check(String(hard_error.stage_controller.get("stage2_field_hard_error", "")) != "" and String(hard_error.game_manager_ref.state) == "game_over", "Runtime hard error did not fail Main closed.")
+	_check_equal(hard_error.stage2_field_topology_runtime.capture_snapshot(), hard_runtime_before, "Rejected runtime hard error contaminated the live runtime state.")
+	_check_equal(hard_error.capture_bullet_world_state(), hard_world_before, "Rejected runtime hard error changed live BulletWorld state.")
+	_check_equal(hard_error.stage_controller.get("stage2_field_uid_to_slot", {}), hard_bindings_before, "Rejected runtime hard error changed live UID bindings.")
+	_check_equal(int(hard_error.stage_controller.stage2_field_event_sequence), hard_sequence_before, "Rejected runtime hard error consumed a live sequence.")
+	_check_equal(int(hard_error.stage_controller.stage2_field_tick), hard_tick_before, "Rejected runtime hard error moved the live cursor.")
 	_free_main(hard_error)
 
 func _advance_real_ticks(main: Node, count: int) -> bool:

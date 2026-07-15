@@ -2457,38 +2457,226 @@ func _stage2_remove_all_field_enemy_sources(authored_tick: int, reason: String) 
 	return true
 
 func _stage2_field_callback(kind: String, stage_tick: int, payload: Dictionary = {}) -> bool:
-	if stage2_field_topology_runtime == null or not stage2_field_topology_runtime.is_configured():
-		_stage2_fail_closed("Stage 2 field topology runtime is unavailable")
+	if String(stage_controller.get("stage2_field_hard_error", "")) != "":
 		return false
+	if stage2_field_topology_runtime == null or not stage2_field_topology_runtime.is_configured():
+		_stage2_reject_field_callback("Stage 2 field topology runtime is unavailable")
+		return false
+	if not _stage2_validate_live_field_bindings():
+		_stage2_reject_field_callback("Stage 2 field runtime, UID binding, and BulletWorld diverged before callback")
+		return false
+	var live_runtime_snapshot: Dictionary = stage2_field_topology_runtime.capture_snapshot()
+	if live_runtime_snapshot.is_empty():
+		_stage2_reject_field_callback("Stage 2 field topology runtime snapshot is unavailable")
+		return false
+	var candidate_runtime: RefCounted = Stage2FieldTopologyRuntime.new()
+	var field_contract: Dictionary = stage_director.stage2_field_topology_contract() if stage_director != null and stage_director.has_method("stage2_field_topology_contract") else {}
+	if field_contract.is_empty() or not candidate_runtime.configure(field_contract, gameplay_difficulty, String(stage_controller.get("stage2_field_run_uid", ""))) or not candidate_runtime.restore_snapshot(live_runtime_snapshot):
+		_stage2_reject_field_callback("Stage 2 field callback could not restore a disposable runtime")
+		return false
+	var candidate_world: RefCounted = BulletWorld.new()
+	var world_restore: Dictionary = candidate_world.restore_state(bullet_world.capture_state())
+	if not bool(world_restore.get("ok", false)):
+		_stage2_reject_field_callback("Stage 2 field callback could not restore a disposable BulletWorld")
+		return false
+	var candidate_stage_controller: Dictionary = stage_controller.duplicate(true)
 	var sequence := int(stage_controller.get("stage2_field_event_sequence", -1)) + 1
-	stage_controller["stage2_field_event_sequence"] = sequence
+	candidate_stage_controller["stage2_field_event_sequence"] = sequence
 	var output: Dictionary = {}
 	match kind:
 		"activate_event":
-			output = stage2_field_topology_runtime.activate_event(String(payload.get("event_id", "")), payload.get("active_entity_ids", []), stage_tick, sequence)
+			output = candidate_runtime.activate_event(String(payload.get("event_id", "")), payload.get("active_entity_ids", []), stage_tick, sequence)
 		"remove_source":
-			output = stage2_field_topology_runtime.remove_source(String(payload.get("spawn_id", "")), stage_tick, sequence, String(payload.get("reason", "despawn")))
+			output = candidate_runtime.remove_source(String(payload.get("spawn_id", "")), stage_tick, sequence, String(payload.get("reason", "despawn")))
 		"accept_defeat":
-			output = stage2_field_topology_runtime.accept_defeat(String(payload.get("spawn_id", "")), stage_tick, sequence)
+			output = candidate_runtime.accept_defeat(String(payload.get("spawn_id", "")), stage_tick, sequence)
 		"clear_field_bullets":
-			output = stage2_field_topology_runtime.clear_field_bullets(stage_tick, sequence, String(payload.get("reason", "explicit_clear")))
+			output = candidate_runtime.clear_field_bullets(stage_tick, sequence, String(payload.get("reason", "explicit_clear")))
 		"observe_graze":
-			output = stage2_field_topology_runtime.observe_graze(String(payload.get("bullet_uid", "")), stage_tick, sequence)
+			output = candidate_runtime.observe_graze(String(payload.get("bullet_uid", "")), stage_tick, sequence)
 		"advance":
-			output = stage2_field_topology_runtime.advance(stage_tick, sequence)
+			output = candidate_runtime.advance(stage_tick, sequence)
 		_:
-			_stage2_fail_closed("Unknown Stage 2 field callback: %s" % kind)
+			_stage2_reject_field_callback("Unknown Stage 2 field callback: %s" % kind)
 			return false
-	var consumed := _consume_stage2_field_output(output)
-	if not consumed or not bool(output.get("ok", false)):
-		_stage2_fail_closed(String(output.get("error", stage2_field_topology_runtime.last_error())))
+	if typeof(output.get("ok")) != TYPE_BOOL or not bool(output.ok):
+		var runtime_error := String(output.get("error", ""))
+		if runtime_error == "":
+			runtime_error = candidate_runtime.last_error()
+		_stage2_reject_field_callback(runtime_error)
 		return false
+	if not _stage2_preflight_field_output(output, stage_tick, sequence, candidate_runtime, candidate_world, candidate_stage_controller):
+		_stage2_reject_field_callback("Stage 2 field callback output failed transactional preflight: %s" % kind)
+		return false
+	# Apply only to disposable owners. The live runtime, cursor, UID ledger,
+	# bindings, and slots remain untouched until every output has been consumed.
+	var live_stage_controller := stage_controller
+	var live_bullet_world := bullet_world
+	var live_field_runtime := stage2_field_topology_runtime
+	stage_controller = candidate_stage_controller
+	bullet_world = candidate_world
+	stage2_field_topology_runtime = candidate_runtime
+	_sync_bullet_world_compatibility_views()
+	var consumed := _consume_stage2_field_output(output)
 	if kind == "advance":
 		stage_controller["stage2_field_tick"] = stage_tick
-	if not _stage2_validate_live_field_bindings():
-		_stage2_fail_closed("Stage 2 field runtime, UID binding, and BulletWorld diverged")
+	var candidate_valid := consumed and _stage2_validate_live_field_bindings()
+	candidate_stage_controller = stage_controller
+	candidate_world = bullet_world
+	candidate_runtime = stage2_field_topology_runtime
+	stage_controller = live_stage_controller
+	bullet_world = live_bullet_world
+	stage2_field_topology_runtime = live_field_runtime
+	_sync_bullet_world_compatibility_views()
+	if not candidate_valid:
+		_stage2_reject_field_callback("Stage 2 field callback could not commit its isolated output: %s" % kind)
 		return false
+	# No user callback can observe the assignment sequence, so these three
+	# validated owners become the live aggregate as one synchronous commit.
+	stage_controller = candidate_stage_controller
+	bullet_world = candidate_world
+	stage2_field_topology_runtime = candidate_runtime
+	_sync_bullet_world_compatibility_views()
 	return true
+
+func _stage2_preflight_field_output(output: Dictionary, expected_stage_tick: int, expected_sequence: int, candidate_runtime: RefCounted, candidate_world: RefCounted, candidate_stage_controller: Dictionary) -> bool:
+	if output.is_empty() or typeof(output.get("stage_tick")) != TYPE_INT or int(output.stage_tick) != expected_stage_tick:
+		return false
+	if typeof(output.get("event_sequence")) != TYPE_INT or int(output.event_sequence) != expected_sequence:
+		return false
+	if not (output.get("telemetry_snapshot") is Dictionary):
+		return false
+	var runtime_telemetry: Dictionary = output.telemetry_snapshot
+	if not (runtime_telemetry.get("active_source_ids") is Array) or not (runtime_telemetry.get("active_bullet_uids") is Array) or not (runtime_telemetry.get("hard_state") is Dictionary) or not (runtime_telemetry.get("counts") is Dictionary):
+		return false
+	for key in STAGE2_FIELD_OUTPUT_ARRAYS:
+		if not (output.get(key) is Array):
+			return false
+		for record_value in output[key]:
+			if not (record_value is Dictionary):
+				return false
+	var bindings_value = candidate_stage_controller.get("stage2_field_uid_to_slot")
+	if not (bindings_value is Dictionary):
+		return false
+	var planned_bindings: Dictionary = (bindings_value as Dictionary).duplicate(true)
+	var next_compatibility_uid = candidate_stage_controller.get("stage2_next_bullet_uid")
+	if typeof(next_compatibility_uid) != TYPE_INT or int(next_compatibility_uid) <= 0:
+		return false
+	var world_pool: Array = candidate_world.pool
+	var active_field_slot_count := 0
+	var compatibility_uids := {}
+	for active_slot_value in candidate_world.active_order():
+		if typeof(active_slot_value) != TYPE_INT:
+			return false
+		var active_slot := int(active_slot_value)
+		if active_slot < 0 or active_slot >= world_pool.size():
+			return false
+		var active_bullet: Dictionary = world_pool[active_slot]
+		var active_uid = active_bullet.get("stage2_bullet_uid")
+		if bool(active_bullet.get("stage2_field_owned", false)):
+			if typeof(active_uid) != TYPE_STRING or not planned_bindings.has(String(active_uid)):
+				return false
+			var active_binding = planned_bindings[String(active_uid)]
+			if typeof(active_binding) != TYPE_INT or int(active_binding) != active_slot:
+				return false
+			active_field_slot_count += 1
+		else:
+			if typeof(active_uid) != TYPE_INT or int(active_uid) <= 0 or int(active_uid) >= int(next_compatibility_uid) or compatibility_uids.has(int(active_uid)):
+				return false
+			compatibility_uids[int(active_uid)] = true
+	if active_field_slot_count != planned_bindings.size():
+		return false
+	var occupied_field_slots := {}
+	for uid_value in planned_bindings.keys():
+		if typeof(uid_value) != TYPE_STRING or typeof(planned_bindings[uid_value]) != TYPE_INT:
+			return false
+		var uid := String(uid_value)
+		var slot := int(planned_bindings[uid_value])
+		if slot < 0 or slot >= world_pool.size() or occupied_field_slots.has(slot):
+			return false
+		var bullet: Dictionary = world_pool[slot]
+		if not bool(bullet.get("active", false)) or not bool(bullet.get("stage2_field_owned", false)) or String(bullet.get("stage2_bullet_uid", "")) != uid:
+			return false
+		occupied_field_slots[slot] = true
+	var removal_uid_lookup := {}
+	for removal_value in output.bullet_removals:
+		var removal: Dictionary = removal_value
+		if typeof(removal.get("bullet_uid")) != TYPE_STRING:
+			return false
+		removal_uid_lookup[String(removal.bullet_uid)] = true
+	for update_value in output.bullet_updates:
+		var update: Dictionary = update_value
+		if not _stage2_field_update_is_valid(update, candidate_runtime):
+			return false
+		if int(update.stage_tick) > expected_stage_tick or int(update.event_sequence) > expected_sequence:
+			return false
+		var update_uid := String(update.stage2_bullet_uid)
+		if not planned_bindings.has(update_uid) or typeof(planned_bindings[update_uid]) != TYPE_INT:
+			return false
+		var update_slot := int(planned_bindings[update_uid])
+		if update_slot < 0 or update_slot >= world_pool.size():
+			return false
+		var update_target: Dictionary = world_pool[update_slot]
+		if not bool(update_target.get("active", false)) or String(update_target.get("stage2_bullet_uid", "")) != update_uid:
+			return false
+		var updated_runtime_bullet: Dictionary = candidate_runtime.bullet_state(update_uid)
+		if updated_runtime_bullet.is_empty():
+			if not removal_uid_lookup.has(update_uid):
+				return false
+		else:
+			if not _stage2_field_record_matches_runtime(update, updated_runtime_bullet):
+				return false
+			if update.position != updated_runtime_bullet.get("position") or update.velocity_px_per_second != updated_runtime_bullet.get("velocity_px_per_second"):
+				return false
+	for removal_value in output.bullet_removals:
+		var removal: Dictionary = removal_value
+		var removal_uid := String(removal.bullet_uid)
+		if typeof(removal.get("stage_tick")) != TYPE_INT or int(removal.stage_tick) < 0 or int(removal.stage_tick) > expected_stage_tick:
+			return false
+		if typeof(removal.get("event_sequence")) != TYPE_INT or int(removal.event_sequence) < 0 or typeof(removal.get("reason")) != TYPE_STRING or String(removal.reason) == "":
+			return false
+		if not planned_bindings.has(removal_uid) or typeof(planned_bindings[removal_uid]) != TYPE_INT:
+			return false
+		var removal_slot := int(planned_bindings[removal_uid])
+		if removal_slot < 0 or removal_slot >= world_pool.size():
+			return false
+		var removal_target: Dictionary = world_pool[removal_slot]
+		if not bool(removal_target.get("active", false)) or String(removal_target.get("stage2_bullet_uid", "")) != removal_uid:
+			return false
+		if not candidate_runtime.bullet_state(removal_uid).is_empty():
+			return false
+		planned_bindings.erase(removal_uid)
+		occupied_field_slots.erase(removal_slot)
+	var constructions: Array = output.bullet_constructions
+	if candidate_world.active_order().size() - output.bullet_removals.size() + constructions.size() > int(candidate_world.hard_capacity):
+		return false
+	var construction_uids := {}
+	for construction_value in constructions:
+		var construction: Dictionary = construction_value
+		if not _stage2_field_construction_is_valid_for_runtime(construction, candidate_runtime):
+			return false
+		if int(construction.stage2_bullet_spawn_tick) > expected_stage_tick:
+			return false
+		var construction_uid := String(construction.stage2_bullet_uid)
+		if planned_bindings.has(construction_uid) or construction_uids.has(construction_uid):
+			return false
+		var visual := _stage2_field_visual_for_primitive(String(construction.stage2_primitive))
+		if visual.is_empty() or typeof(visual.get("family_id")) != TYPE_STRING or String(visual.family_id) == "":
+			return false
+		if typeof(visual.get("radius")) not in [TYPE_INT, TYPE_FLOAT] or float(visual.radius) <= 0.0 or is_nan(float(visual.radius)) or is_inf(float(visual.radius)) or not (visual.get("color") is Color):
+			return false
+		var constructed_runtime_bullet: Dictionary = candidate_runtime.bullet_state(construction_uid)
+		if constructed_runtime_bullet.is_empty() or not _stage2_field_record_matches_runtime(construction, constructed_runtime_bullet):
+			return false
+		if construction.position != constructed_runtime_bullet.get("position") or construction.velocity_px_per_second != constructed_runtime_bullet.get("velocity_px_per_second"):
+			return false
+		construction_uids[construction_uid] = true
+		planned_bindings[construction_uid] = -1
+	var planned_uids: Array = planned_bindings.keys()
+	planned_uids.sort()
+	var runtime_uids: Array = (runtime_telemetry.active_bullet_uids as Array).duplicate()
+	runtime_uids.sort()
+	return planned_uids == runtime_uids
 
 func _consume_stage2_field_output(output: Dictionary) -> bool:
 	if output.is_empty():
@@ -2579,6 +2767,7 @@ func _stage2_materialize_field_constructions(constructions: Array) -> bool:
 			"age": 0.0, "damage": 1.0, "homing": false, "btype": -1, "grazed": false,
 			"boss_hit": false, "motion": {}, "has_motion": false, "motion_triggered": false,
 			"stage2_field_owned": true,
+			"stage2_defer_linear_step_tick": int(construction.stage2_bullet_spawn_tick),
 		}
 		for seam_field in STAGE2_FIELD_SEAM_FIELDS:
 			values[seam_field] = construction[seam_field]
@@ -2594,17 +2783,48 @@ func _stage2_materialize_field_constructions(constructions: Array) -> bool:
 	return true
 
 func _stage2_field_construction_is_valid(construction: Dictionary) -> bool:
+	return _stage2_field_construction_is_valid_for_runtime(construction, stage2_field_topology_runtime)
+
+func _stage2_field_construction_is_valid_for_runtime(construction: Dictionary, runtime: RefCounted) -> bool:
 	if not _stage2_field_record_has_exact_seam(construction) or not _stage2_field_point_is_valid(construction.get("position")) or not _stage2_field_point_is_valid(construction.get("velocity_px_per_second")):
 		return false
-	if typeof(construction.stage2_bullet_uid) != TYPE_STRING or not stage2_field_topology_runtime.validate_bullet_uid(String(construction.stage2_bullet_uid)):
+	if not _stage2_field_seam_is_valid(construction, runtime):
+		return false
+	return int(construction.stage2_bullet_spawn_tick) <= int(construction.stage2_collision_enable_tick) and int(construction.stage2_lifetime_end_tick) >= int(construction.stage2_collision_enable_tick)
+
+func _stage2_field_update_is_valid(update: Dictionary, runtime: RefCounted) -> bool:
+	if not _stage2_field_record_has_exact_seam(update) or not _stage2_field_point_is_valid(update.get("position")) or not _stage2_field_point_is_valid(update.get("velocity_px_per_second")):
+		return false
+	if not _stage2_field_seam_is_valid(update, runtime):
+		return false
+	if typeof(update.get("stage_tick")) != TYPE_INT or int(update.stage_tick) < 0:
+		return false
+	if typeof(update.get("event_sequence")) != TYPE_INT or int(update.event_sequence) < 0:
+		return false
+	return typeof(update.get("update_kind")) == TYPE_STRING and String(update.update_kind) in ["seed_activation", "rebound_turn"]
+
+func _stage2_field_seam_is_valid(record: Dictionary, runtime: RefCounted) -> bool:
+	if runtime == null or typeof(record.get("stage2_bullet_uid")) != TYPE_STRING or not runtime.validate_bullet_uid(String(record.stage2_bullet_uid)):
 		return false
 	for field in STAGE2_FIELD_SOURCE_FIELDS:
-		if typeof(construction[field]) != TYPE_STRING or String(construction[field]) == "":
+		if typeof(record[field]) != TYPE_STRING or String(record[field]) == "":
 			return false
 	for field in ["stage2_reflection_count", "stage2_bullet_spawn_tick", "stage2_collision_enable_tick", "stage2_lifetime_end_tick"]:
-		if typeof(construction[field]) != TYPE_INT or int(construction[field]) < 0:
+		if typeof(record[field]) != TYPE_INT or int(record[field]) < 0:
 			return false
-	return int(construction.stage2_lifetime_end_tick) >= int(construction.stage2_collision_enable_tick)
+	var first_reflection = record.get("stage2_first_reflection_tick")
+	if first_reflection != null and (typeof(first_reflection) != TYPE_INT or int(first_reflection) < int(record.stage2_bullet_spawn_tick)):
+		return false
+	var reflection_surface = record.get("stage2_last_reflection_surface_id")
+	if reflection_surface != null and (typeof(reflection_surface) != TYPE_STRING or String(reflection_surface) == ""):
+		return false
+	return true
+
+func _stage2_field_record_matches_runtime(record: Dictionary, runtime_bullet: Dictionary) -> bool:
+	for seam_field in STAGE2_FIELD_SEAM_FIELDS:
+		if not runtime_bullet.has(seam_field) or record[seam_field] != runtime_bullet[seam_field]:
+			return false
+	return true
 
 func _stage2_field_record_has_exact_seam(record: Dictionary) -> bool:
 	for field in STAGE2_FIELD_SEAM_FIELDS:
@@ -2627,7 +2847,7 @@ func _stage2_field_visual_for_primitive(primitive: String) -> Dictionary:
 		"lane_fan": "rice",
 		"delayed_seed": "spiral_seed",
 	}.get(primitive, "")
-	if String(family_id) == "":
+	if String(family_id) == "" or game_database_ref == null:
 		return {}
 	var family: Dictionary = game_database_ref.bullet_family_by_id(String(family_id))
 	if family.is_empty():
@@ -2635,7 +2855,7 @@ func _stage2_field_visual_for_primitive(primitive: String) -> Dictionary:
 	return {"family_id": String(family_id), "radius": float(family.get("radius", 5.0)), "color": family.get("color", Color.RED)}
 
 func _stage2_apply_field_bullet_update(update: Dictionary) -> bool:
-	if not _stage2_field_record_has_exact_seam(update) or not _stage2_field_point_is_valid(update.get("position")) or not _stage2_field_point_is_valid(update.get("velocity_px_per_second")):
+	if not _stage2_field_update_is_valid(update, stage2_field_topology_runtime):
 		return false
 	var uid := String(update.get("stage2_bullet_uid", ""))
 	var bindings: Dictionary = stage_controller.get("stage2_field_uid_to_slot", {})
@@ -2651,6 +2871,7 @@ func _stage2_apply_field_bullet_update(update: Dictionary) -> bool:
 	bullet.y = float(position[1])
 	bullet.vx = float(velocity[0]) / 60.0
 	bullet.vy = float(velocity[1]) / 60.0
+	bullet["stage2_defer_linear_step_tick"] = int(update.stage_tick)
 	for seam_field in STAGE2_FIELD_SEAM_FIELDS:
 		bullet[seam_field] = update[seam_field]
 	return true
@@ -2870,6 +3091,16 @@ func _stage2_fail_closed(message: String) -> void:
 			bullet_world.retire_slot(slot)
 	stage_controller["stage2_field_uid_to_slot"] = {}
 	_sync_bullet_world_compatibility_views()
+	boss_alive = false
+	if game_manager_ref:
+		game_manager_ref.state = "game_over"
+
+func _stage2_reject_field_callback(message: String) -> void:
+	# Transaction rejection deliberately preserves the live field cursor/runtime,
+	# UID ledger, binding map, and BulletWorld slots for deterministic diagnosis.
+	var stable_message := message if message != "" else "Stage 2 field callback rejected an unspecified runtime fault"
+	stage_controller["stage2_hard_error"] = stable_message
+	stage_controller["stage2_field_hard_error"] = stable_message
 	boss_alive = false
 	if game_manager_ref:
 		game_manager_ref.state = "game_over"
@@ -3589,6 +3820,11 @@ func _update_bullets(delta: float, target: Vector2):
 	_sync_bullet_world_compatibility_views()
 
 func _prepare_bullet_world_step(_bullet_index: int, b: Dictionary, dt: float) -> void:
+	if bool(b.get("stage2_field_owned", false)) and typeof(b.get("stage2_defer_linear_step_tick")) == TYPE_INT and int(b.stage2_defer_linear_step_tick) == int(stage_controller.get("stage2_field_tick", -1)):
+		b["stage2_deferred_vx"] = float(b.vx)
+		b["stage2_deferred_vy"] = float(b.vy)
+		b.vx = 0.0
+		b.vy = 0.0
 	if true:
 		var behavior: Dictionary = b.get("behavior", {})
 		if String(behavior.get("kind", "")) == "returning_blade":
@@ -3658,7 +3894,15 @@ func _prepare_bullet_world_step(_bullet_index: int, b: Dictionary, dt: float) ->
 			_update_enemy_bullet_motion(b, dt)
 
 func _finish_bullet_world_step(_bullet_index: int, b: Dictionary, _dt: float) -> void:
-	if not bool(b.get("stage2_field_owned", false)) and bool(b.has_motion) and int(b.motion.get("bounce_count", 0)) > 0:
+	if bool(b.get("stage2_field_owned", false)):
+		if b.has("stage2_deferred_vx") and b.has("stage2_deferred_vy"):
+			b.vx = float(b.stage2_deferred_vx)
+			b.vy = float(b.stage2_deferred_vy)
+		b.erase("stage2_deferred_vx")
+		b.erase("stage2_deferred_vy")
+		b.erase("stage2_defer_linear_step_tick")
+		return
+	if bool(b.has_motion) and int(b.motion.get("bounce_count", 0)) > 0:
 		_apply_enemy_bullet_bounce(b)
 
 func _stage2_forward_field_source_defeat(enemy: Dictionary) -> bool:
@@ -3976,9 +4220,21 @@ func _check_collisions(is_boss: bool):
 						audio_manager_ref.play_sfx("player_hit", -2.0)
 						audio_manager_ref.play_sfx("deathbomb_window")
 			elif distance_squared < graze_limit * graze_limit and not bool(b.get("grazed", false)):
-				if bool(b.get("stage2_field_owned", false)) and not _stage2_field_callback("observe_graze", int(stage_controller.get("stage2_field_tick", -1)), {"bullet_uid": String(b.get("stage2_bullet_uid", ""))}):
-					return
-				b.grazed = true
+				if bool(b.get("stage2_field_owned", false)):
+					var grazed_uid := String(b.get("stage2_bullet_uid", ""))
+					if not _stage2_field_callback("observe_graze", int(stage_controller.get("stage2_field_tick", -1)), {"bullet_uid": grazed_uid}):
+						return
+					var committed_bindings: Dictionary = stage_controller.get("stage2_field_uid_to_slot", {})
+					if not committed_bindings.has(grazed_uid):
+						_stage2_fail_closed("Stage 2 grazed field bullet lost its committed UID binding")
+						return
+					var committed_slot := int(committed_bindings[grazed_uid])
+					if committed_slot < 0 or committed_slot >= bullet_pool.size() or not bool(bullet_pool[committed_slot].get("active", false)):
+						_stage2_fail_closed("Stage 2 grazed field bullet lost its committed BulletWorld slot")
+						return
+					bullet_pool[committed_slot].grazed = true
+				else:
+					b.grazed = true
 				game_manager_ref.graze += 1; game_manager_ref.score += _score_value("graze", 10)
 				if audio_manager_ref: audio_manager_ref.play_sfx("graze")
 
