@@ -8,6 +8,7 @@ const SimulationStateHasher := preload("res://scripts/runtime/simulation_state_h
 const BulletWorld := preload("res://scripts/runtime/bullet_world.gd")
 const BossStateMachine := preload("res://scripts/runtime/boss_state_machine.gd")
 const GameplayInputBuffer := preload("res://scripts/runtime/gameplay_input_buffer.gd")
+const Stage2EncounterController := preload("res://scripts/runtime/stage2_encounter_controller.gd")
 const ReplayData := preload("res://scripts/replay/replay_data.gd")
 const ReplayHeader := preload("res://scripts/replay/replay_header.gd")
 
@@ -17,6 +18,7 @@ var simulation_state_hasher: RefCounted = SimulationStateHasher.new()
 var bullet_world: RefCounted = BulletWorld.new()
 var boss_state_machine: RefCounted = BossStateMachine.new()
 var gameplay_input_buffer: RefCounted = GameplayInputBuffer.new()
+var stage2_encounter_controller: RefCounted = Stage2EncounterController.new()
 var replay_data: RefCounted = ReplayData.new()
 var gameplay_seed: int = 1
 var gameplay_difficulty: String = "normal"
@@ -60,7 +62,7 @@ const HUD_HEIGHT := 78.0
 const GAMEPLAY_TOP := 82.0
 const BULLET_POOL_GROWTH := 2048
 const MAX_COMBAT_EFFECTS := 96
-const SIMULATION_SNAPSHOT_VERSION := 2
+const SIMULATION_SNAPSHOT_VERSION := 3
 const REPLAY_RUNTIME_MODES := ["none", "recording", "playback"]
 const GAME_MANAGER_STATE_FIELDS := [
 	"score", "graze", "shared_power", "bullet_type", "lives", "bombs",
@@ -296,6 +298,7 @@ func shutdown_runtime() -> void:
 	bomb_executor = null
 	enemy_pattern_executor = null
 	stage_director = null
+	stage2_encounter_controller = null
 	fixed_tick_clock = null
 	gameplay_rng = null
 	simulation_state_hasher = null
@@ -1135,6 +1138,7 @@ func capture_simulation_state() -> Dictionary:
 		"current_stage_local": current_stage_local,
 		"stage_timer": stage_timer,
 		"stage_controller": stage_controller.duplicate(true),
+		"stage2_controller": stage2_encounter_controller.capture_snapshot() if stage2_encounter_controller != null and stage2_encounter_controller.is_configured() else {},
 		"player": {
 			"position": Vector2(player_x, player_y),
 			"last_move_dir": player_last_move_dir,
@@ -1332,7 +1336,7 @@ func validate_simulation_state(snapshot: Dictionary) -> bool:
 	for section in ["clock", "rng", "input", "manager", "player", "boss", "bullets", "replay"]:
 		if not (snapshot.get(section) is Dictionary):
 			return false
-	for section in ["stage_controller"]:
+	for section in ["stage_controller", "stage2_controller"]:
 		if not (snapshot.get(section) is Dictionary):
 			return false
 	for section in ["enemies", "items", "combat_effects"]:
@@ -1345,6 +1349,8 @@ func validate_simulation_state(snapshot: Dictionary) -> bool:
 	if String(snapshot.get("gameplay_difficulty", "")) not in ReplayHeader.SUPPORTED_DIFFICULTIES:
 		return false
 	if typeof(snapshot.get("current_stage_local")) != TYPE_INT or int(snapshot.current_stage_local) < 1:
+		return false
+	if int(snapshot.manager.get("current_stage", -1)) != int(snapshot.current_stage_local):
 		return false
 	if not _is_valid_snapshot_number(snapshot.get("stage_timer"), 0.0):
 		return false
@@ -1362,6 +1368,26 @@ func validate_simulation_state(snapshot: Dictionary) -> bool:
 		return false
 	if not _validate_manager_snapshot(snapshot.manager) or not _validate_replay_runtime_snapshot(snapshot.replay):
 		return false
+	var stage2_snapshot: Dictionary = snapshot.stage2_controller
+	if int(snapshot.current_stage_local) == 2:
+		if stage2_snapshot.is_empty() or not stage_director.has_method("stage2_package"):
+			return false
+		var stage2_probe := Stage2EncounterController.new()
+		if not stage2_probe.configure(stage_director.stage2_package(), String(snapshot.gameplay_difficulty), int(snapshot.gameplay_seed)):
+			return false
+		if not stage2_probe.validate_snapshot(stage2_snapshot) or not stage2_probe.restore_snapshot(stage2_snapshot):
+			return false
+		var stage2_kind := String(stage2_snapshot.get("encounter_kind", ""))
+		if (stage2_kind in ["midboss", "boss"]) != bool(snapshot.get("boss_alive", false)):
+			return false
+		if stage2_kind in ["midboss", "boss"]:
+			var active_definition: Dictionary = stage2_probe.active_phase_definition()
+			var boss_snapshot_state: Dictionary = snapshot.boss.get("state", {})
+			if String(boss_snapshot_state.get("stage2_phase_id", "")) != String(active_definition.get("id", "")):
+				return false
+	else:
+		if not stage2_snapshot.is_empty():
+			return false
 	if snapshot.has("gameplay_ledger") and (not (snapshot.gameplay_ledger is Dictionary) or not _validate_gameplay_ledger_snapshot(snapshot.gameplay_ledger)):
 		return false
 	var player_state: Dictionary = snapshot.player
@@ -1402,6 +1428,12 @@ func validate_simulation_state(snapshot: Dictionary) -> bool:
 func restore_simulation_state(snapshot: Dictionary) -> bool:
 	if not validate_simulation_state(snapshot):
 		return false
+	var restored_stage2_controller := Stage2EncounterController.new()
+	if not snapshot.stage2_controller.is_empty():
+		if not restored_stage2_controller.configure(stage_director.stage2_package(), String(snapshot.gameplay_difficulty), int(snapshot.gameplay_seed)):
+			return false
+		if not restored_stage2_controller.restore_snapshot(snapshot.stage2_controller):
+			return false
 	# Every component has been validated against a disposable owner above; the
 	# assignments below therefore form an all-or-nothing aggregate commit.
 	fixed_tick_clock.restore(snapshot.clock)
@@ -1433,6 +1465,7 @@ func restore_simulation_state(snapshot: Dictionary) -> bool:
 	current_stage_local = int(snapshot.current_stage_local)
 	stage_timer = float(snapshot.stage_timer)
 	stage_controller = snapshot.stage_controller.duplicate(true)
+	stage2_encounter_controller = restored_stage2_controller
 	var player_state: Dictionary = snapshot.player
 	player_x = float(player_state.position.x)
 	player_y = float(player_state.position.y)
@@ -1605,10 +1638,24 @@ func _load_stage(stage: int):
 	if game_manager_ref:
 		game_manager_ref.current_stage = stage
 	stage_controller = stage_director.stage_controller(stage)
+	stage2_encounter_controller = Stage2EncounterController.new()
 	if stage_controller.is_empty():
 		return
 	stage_controller["triggered_waves"] = {}
 	stage_controller["boss_spawned"] = false
+	if stage == 2:
+		stage_controller["stage2_bound"] = false
+		stage_controller["stage2_event_ids"] = []
+		stage_controller["stage2_stage_event_records"] = []
+		stage_controller["stage2_spawn_ids"] = []
+		stage_controller["stage2_warning_records"] = []
+		stage_controller["stage2_phase_event_records"] = []
+		stage_controller["stage2_boss_movement_records"] = []
+		stage_controller["stage2_phase_resolutions"] = []
+		if not stage_director.has_method("stage2_package") or not stage2_encounter_controller.configure(stage_director.stage2_package(), gameplay_difficulty, gameplay_seed):
+			stage_controller["stage2_hard_error"] = stage2_encounter_controller.last_error()
+			return
+		stage_controller["stage2_bound"] = true
 
 func _clear_bullets():
 	bullet_world.reset()
@@ -1889,6 +1936,9 @@ func _sync_canvas_origin(state: String) -> void:
 	position = Vector2(0.0, HUD_HEIGHT if gameplay_state else 0.0)
 
 func _update_stage(delta: float):
+	if _active_stage() == 2:
+		_update_stage2_main_flow(delta)
+		return
 	if bool(current_tick_input.get("pause", false)):
 		pause_menu_cursor = 0
 		_pause_gameplay(game_manager_ref.STATE_STAGE)
@@ -1913,7 +1963,253 @@ func _update_stage(delta: float):
 	if stage_controller.boss_spawned and _count_alive_enemies() == 0:
 		_enter_boss()
 
+func _update_stage2_main_flow(delta: float) -> void:
+	if stage2_encounter_controller == null or not stage2_encounter_controller.is_configured():
+		_stage2_fail_closed(String(stage_controller.get("stage2_hard_error", "Stage 2 controller is unavailable")))
+		return
+	if bool(current_tick_input.get("pause", false)):
+		pause_menu_cursor = 0
+		_pause_gameplay(String(game_manager_ref.state))
+		return
+	var output: Dictionary = stage2_encounter_controller.advance(Vector2(player_x, player_y))
+	if not bool(output.get("ok", false)):
+		_stage2_fail_closed(String(output.get("error", stage2_encounter_controller.last_error())))
+		return
+	_consume_stage2_controller_output(output)
+	var telemetry: Dictionary = stage2_encounter_controller.telemetry_snapshot()
+	stage_timer = float(telemetry.get("stage_runtime", {}).get("stage_tick", stage_timer))
+	if stage2_encounter_controller.encounter_kind() == "complete":
+		_finish_stage2_after_boss()
+		return
+	var encounter_active := stage2_encounter_controller.encounter_kind() in ["midboss", "boss"]
+	if encounter_active and not boss_alive:
+		_sync_stage2_phase_boss()
+	_update_player(delta)
+	var bullet_target := Vector2(float(boss.get("x", _screen_center_x())), float(boss.get("y", _boss_anchor_y()))) if encounter_active and boss_alive else _nearest_enemy(player_x, player_y)
+	_update_bullets(delta, bullet_target)
+	if encounter_active:
+		boss.anim = float(boss.get("anim", 0.0)) + 1.0
+		boss.sway = float(boss.get("sway", 0.0)) + 1.0
+		boss.card_shot = float(stage2_encounter_controller.active_phase_tick())
+		var definition := stage2_encounter_controller.active_phase_definition()
+		boss.card_timer = float(maxi(0, int(definition.get("timeout_ticks", 0)) - stage2_encounter_controller.active_phase_tick()))
+	else:
+		_update_enemies(delta)
+	_update_items(delta)
+	_update_combat_effects(delta)
+	_check_collisions(encounter_active)
+	if encounter_active and boss_alive and float(boss.get("hp", 0.0)) <= 0.0:
+		var resolution: Dictionary = stage2_encounter_controller.resolve_active_phase("clear")
+		if not bool(resolution.get("ok", false)):
+			_stage2_fail_closed(String(resolution.get("error", stage2_encounter_controller.last_error())))
+			return
+		_consume_stage2_controller_output(resolution)
+		if stage2_encounter_controller.encounter_kind() == "complete":
+			_finish_stage2_after_boss()
+	_resolve_stage2_player_hit()
+
+func _consume_stage2_controller_output(output: Dictionary) -> void:
+	for event_value in output.get("stage_events", []):
+		var event: Dictionary = event_value
+		var event_ids: Array = stage_controller.get("stage2_event_ids", [])
+		event_ids.append(String(event.get("id", "")))
+		stage_controller["stage2_event_ids"] = event_ids
+		var stage_records: Array = stage_controller.get("stage2_stage_event_records", [])
+		stage_records.append(event.duplicate(true))
+		stage_controller["stage2_stage_event_records"] = stage_records
+		if not (event.get("gate") is Dictionary):
+			var payload: Dictionary = event.get("payload", {})
+			for spawn_value in payload.get("spawns", []):
+				_spawn_stage2_authored_enemy(String(event.get("id", "")), spawn_value)
+	for warning_value in output.get("warnings", []):
+		var warning_records: Array = stage_controller.get("stage2_warning_records", [])
+		warning_records.append(warning_value.duplicate(true))
+		stage_controller["stage2_warning_records"] = warning_records
+	for phase_event_value in output.get("events", []):
+		var phase_event_records: Array = stage_controller.get("stage2_phase_event_records", [])
+		phase_event_records.append(phase_event_value.duplicate(true))
+		stage_controller["stage2_phase_event_records"] = phase_event_records
+	for movement_value in output.get("boss_movements", []):
+		var movement: Dictionary = movement_value
+		var movement_records: Array = stage_controller.get("stage2_boss_movement_records", [])
+		movement_records.append(movement.duplicate(true))
+		stage_controller["stage2_boss_movement_records"] = movement_records
+		_apply_stage2_boss_movement(movement)
+	for bullet_spec_value in output.get("bullet_specs", []):
+		_spawn_enemy_bullet_spec(bullet_spec_value)
+	for resolution_value in output.get("phase_resolutions", []):
+		var resolution_records: Array = stage_controller.get("stage2_phase_resolutions", [])
+		resolution_records.append(resolution_value.duplicate(true))
+		stage_controller["stage2_phase_resolutions"] = resolution_records
+		_clear_hostile_bullets()
+	if not (output.get("phase_started", {}) as Dictionary).is_empty():
+		_sync_stage2_phase_boss()
+	var gate_completion: Dictionary = output.get("gate_completion", {})
+	if not gate_completion.is_empty():
+		if String(gate_completion.get("encounter_kind", "")) == "midboss":
+			boss_alive = false
+			boss = {}
+			game_manager_ref.state = "stage"
+		else:
+			boss_alive = false
+
+func _spawn_stage2_authored_enemy(event_id: String, spawn_value: Variant) -> void:
+	if not (spawn_value is Dictionary):
+		return
+	var spawn: Dictionary = spawn_value
+	var movement: Dictionary = spawn.get("movement", {})
+	var authored_pattern: Dictionary = spawn.get("pattern", {})
+	var primitive := String(authored_pattern.get("primitive", ""))
+	var translated_pattern := _stage2_legacy_pattern_for_primitive(primitive)
+	var cfg: Dictionary = enemy_pattern_executor.spawn_config(translated_pattern, 5.0, _stage_enemy_hp_mult(), false)
+	var origin: Vector2 = spawn.get("position", Vector2.ZERO)
+	var destination: Vector2 = movement.get("to", origin)
+	var duration_ticks := maxi(1, int(movement.get("duration_ticks", 1)))
+	var hp := float(cfg.get("hp", 5.0))
+	var enemy := {
+		"alive": true,
+		"x": origin.x,
+		"y": origin.y,
+		"hp": hp,
+		"max_hp": hp,
+		"radius": float(cfg.get("radius", 14.0)),
+		"vx": (destination.x - origin.x) / float(duration_ticks),
+		"vy": (destination.y - origin.y) / float(duration_ticks),
+		"move_timer": 0.0,
+		"move": "stage2_authored",
+		"move_data": {
+			"path": String(movement.get("path", "")),
+			"origin": origin,
+			"to": destination,
+			"duration_ticks": duration_ticks,
+		},
+		"pattern": translated_pattern,
+		"authored_pattern": authored_pattern.duplicate(true),
+		"shoot_timer": float(maxi(0, int(authored_pattern.get("start_delay_ticks", 0)))),
+		"shoot_phase": 0,
+		"strong": false,
+		"dying": false,
+		"death_timer": 0.0,
+		"family_id": String(cfg.get("family_id", "low_yokai")),
+		"drop_tier": String(cfg.get("drop_tier", "standard")),
+		"shoot_interval": float(maxi(1, int(authored_pattern.get("interval_ticks", 60)))),
+		"drop_item_ids": (spawn.get("drop_item_ids", []) as Array).duplicate(true),
+		"stage2_event_id": event_id,
+		"stage2_spawn_id": String(spawn.get("id", "")),
+		"source_enemy_id": String(spawn.get("enemy_id", "")),
+	}
+	enemies.append(enemy)
+	var spawn_ids: Array = stage_controller.get("stage2_spawn_ids", [])
+	spawn_ids.append(String(spawn.get("id", "")))
+	stage_controller["stage2_spawn_ids"] = spawn_ids
+
+func _stage2_legacy_pattern_for_primitive(primitive: String) -> String:
+	match primitive:
+		"rebound_bead":
+			return "aimed"
+		"grid_edge":
+			return "spread"
+		"lane_fan":
+			return "downward"
+		"delayed_seed":
+			return "mist_delay"
+		"rhythm_pulse":
+			return "rhythm"
+	return "aimed"
+
+func _sync_stage2_phase_boss() -> void:
+	var definition: Dictionary = stage2_encounter_controller.active_phase_definition()
+	if definition.is_empty():
+		return
+	if not boss_alive:
+		boss = boss_state_machine.create_initial_state(_screen_center_x(), _boss_anchor_y(), 0.0)
+		_transition_boss_phase(BossStateMachine.PHASE_ACTIVE)
+		boss.entered = true
+		boss_alive = true
+		enemies.clear()
+		_clear_hostile_bullets()
+	var phase_hp := float(definition.get("base_hp", 1.0))
+	var timeout_ticks := int(definition.get("timeout_ticks", 1))
+	var card := {
+		"id": String(definition.get("id", "")),
+		"name": String(definition.get("display_name", "")),
+		"kind": String(definition.get("kind", "nonspell")),
+		"hp": phase_hp,
+		"base_hp": phase_hp,
+		"time": float(timeout_ticks) / 60.0,
+		"pattern": String(definition.get("id", "")),
+		"boss_id": String(definition.get("owner_id", "")),
+		"stage_index": 2,
+	}
+	boss.cards = [card]
+	boss.card_idx = 0
+	boss.card_name = String(card.name)
+	boss.card_hp = phase_hp
+	boss.max_hp = phase_hp
+	boss.hp = phase_hp
+	boss.card_timer = float(maxi(0, timeout_ticks - stage2_encounter_controller.active_phase_tick()))
+	boss.card_shot = float(stage2_encounter_controller.active_phase_tick())
+	boss.phase = BossStateMachine.PHASE_ACTIVE
+	boss.entered = true
+	boss.declaring = false
+	boss.alive = true
+	boss["stage2_encounter_kind"] = String(definition.get("encounter_kind", ""))
+	boss["stage2_owner_id"] = String(definition.get("owner_id", ""))
+	boss["stage2_phase_id"] = String(definition.get("id", ""))
+	boss["stage2_phase_index"] = int(definition.get("phase_index", -1))
+	boss["stage2_topology_id"] = String(definition.get("topology_id", ""))
+	game_manager_ref.state = "boss"
+
+func _apply_stage2_boss_movement(movement: Dictionary) -> void:
+	if not boss_alive or not (movement.get("position") is Vector2):
+		return
+	var position_value: Vector2 = movement.position
+	boss.x = clampf(position_value.x, 24.0, SCREEN_W - 24.0)
+	boss.y = clampf(position_value.y, 48.0, SCREEN_H - 24.0)
+	boss.target_x = boss.x
+	boss.target_y = boss.y
+	boss["stage2_movement_id"] = String(movement.get("id", ""))
+
+func _clear_hostile_bullets() -> void:
+	for bullet_index in bullet_world.active_order():
+		var bullet: Dictionary = bullet_pool[bullet_index]
+		if bool(bullet.get("active", false)) and _is_enemy_bullet_type(String(bullet.get("type", ""))):
+			bullet_world.retire_slot(bullet_index)
+	_sync_bullet_world_compatibility_views()
+
+func _resolve_stage2_player_hit() -> void:
+	if player_just_hit and not player_deathbomb_primed:
+		if game_manager_ref.lives > 0:
+			_respawn()
+		else:
+			if game_manager_ref.has_method("record_actual_miss"):
+				game_manager_ref.record_actual_miss()
+			player_just_hit = false
+			game_manager_ref.state = "game_over"
+			if audio_manager_ref:
+				audio_manager_ref.fade_bgm(-30.0, 0.8)
+
+func _finish_stage2_after_boss() -> void:
+	boss_alive = false
+	boss = {}
+	if game_manager_ref.practice_mode or game_manager_ref.current_stage >= game_manager_ref.stage_count():
+		game_manager_ref.state = "final_clear"
+		if audio_manager_ref:
+			audio_manager_ref.fade_bgm(-30.0, 1.0)
+	else:
+		game_manager_ref.state = "stage_clear"
+		if audio_manager_ref:
+			audio_manager_ref.fade_bgm(-12.0, 0.6)
+
+func _stage2_fail_closed(message: String) -> void:
+	stage_controller["stage2_hard_error"] = message
+	boss_alive = false
+	game_manager_ref.state = "game_over"
+
 func _update_boss(delta: float):
+	if _active_stage() == 2 and stage2_encounter_controller != null and stage2_encounter_controller.is_configured():
+		_update_stage2_main_flow(delta)
+		return
 	if bool(current_tick_input.get("pause", false)):
 		pause_menu_cursor = 0
 		_pause_gameplay(game_manager_ref.STATE_BOSS)
@@ -2703,6 +2999,13 @@ func _update_enemies(delta: float):
 		if e.move_timer > 1200: e.alive = false; continue
 		match e.move:
 			"straight": e.x += e.vx * delta * 60.0; e.y += e.vy * delta * 60.0
+			"stage2_authored":
+				var duration_ticks := maxf(1.0, float(e.move_data.get("duration_ticks", 1.0)))
+				var travel_ratio := clampf(float(e.move_timer) / duration_ticks, 0.0, 1.0)
+				var authored_origin: Vector2 = e.move_data.get("origin", Vector2(float(e.x), float(e.y)))
+				var authored_destination: Vector2 = e.move_data.get("to", authored_origin)
+				e.x = lerpf(authored_origin.x, authored_destination.x, travel_ratio)
+				e.y = lerpf(authored_origin.y, authored_destination.y, travel_ratio)
 			"sine": e.x += e.vx * delta * 60.0 + sin(e.move_timer*0.08)*e.move_data.get("amplitude",0)*0.05*delta*60.0; e.y += e.vy * delta * 60.0
 			"circle":
 				if e.move_data.has("center_x"):

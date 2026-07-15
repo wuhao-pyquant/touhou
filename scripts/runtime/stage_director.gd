@@ -3,6 +3,7 @@ class_name StageDirector
 
 var _content: Object = null
 var _m1_contract_catalog: Object = null
+var _stage2_content_adapter: Object = null
 
 func _content_db() -> Object:
 	if _content == null:
@@ -81,6 +82,22 @@ func m1_phase_definition(phase_id: String):
 
 func m1_phase_local_seed(run_seed: int, phase_id: String) -> int:
 	return m1_content_catalog().phase_local_seed(run_seed, phase_id)
+
+# Additive M2 golden-slice access. Legacy stage_controller(), wave, boss, and
+# alias queries remain untouched for stages that still use the original route.
+func stage2_package() -> Dictionary:
+	if _stage2_content_adapter == null:
+		var adapter_script = load("res://scripts/content/stage2_content_adapter.gd")
+		_stage2_content_adapter = adapter_script.new()
+		if not _stage2_content_adapter.load_artifact():
+			return {}
+	if not _stage2_content_adapter.is_valid():
+		return {}
+	return {
+		"stage_spec": _stage2_content_adapter.stage_spec(),
+		"phase_specs": _stage2_content_adapter.phase_specs(),
+		"metadata": _stage2_content_adapter.content_metadata(),
+	}
 
 func _event_key(stage_index: int, event_index: int, event_time: int) -> String:
 	return "%d:%d:%d" % [stage_index, event_index, event_time]
