@@ -22,6 +22,9 @@ param(
     [Parameter(ParameterSetName = 'Resume')]
     [string]$ReviewFailureRun,
 
+    [Parameter(ParameterSetName = 'Resume')]
+    [switch]$ValidationRetry,
+
     [switch]$DryRun,
     [switch]$KeepWorktree
 )
@@ -51,6 +54,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Resume') {
     }
     if ($ReviewFailureRun) {
         $pythonArgs += @('--review-failure-run', $ReviewFailureRun)
+    }
+    if ($ValidationRetry) {
+        $pythonArgs += '--validation-retry'
     }
 }
 else {

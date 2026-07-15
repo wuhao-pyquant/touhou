@@ -255,6 +255,162 @@ model_reasoning_effort = "high"
             {"model": "gpt-5.6-sol", "model_reasoning_effort": "xhigh"},
         )
 
+    def test_validation_retry_options_are_one_time_directed_continuation(self) -> None:
+        BRIDGE._validate_continuation_options(
+            is_resume=True,
+            escalation_level=None,
+            transport_retry=False,
+            validation_retry=True,
+            repair_instruction="Type the one proven parse boundary.",
+            review_failure_run=None,
+        )
+        with self.assertRaisesRegex(BRIDGE.BridgeError, "repair-instruction"):
+            BRIDGE._validate_continuation_options(
+                is_resume=True,
+                escalation_level=None,
+                transport_retry=False,
+                validation_retry=True,
+                repair_instruction="  ",
+                review_failure_run=None,
+            )
+        with self.assertRaisesRegex(BRIDGE.BridgeError, "exactly one"):
+            BRIDGE._validate_continuation_options(
+                is_resume=True,
+                escalation_level=2,
+                transport_retry=False,
+                validation_retry=True,
+                repair_instruction="bounded",
+                review_failure_run=None,
+            )
+
+    def test_root_continuations_ignore_dry_runs_and_cap_real_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            runs = repo / ".agent-runs"
+            for run_id, dry_run, kind in (
+                ("dry", True, "validation_retry"),
+                ("real", False, "validation_retry"),
+                ("repair", False, "repair"),
+            ):
+                run_dir = runs / run_id
+                run_dir.mkdir(parents=True)
+                BRIDGE._write_json(
+                    run_dir / "invocation.json",
+                    {
+                        "root_run_id": "root",
+                        "continuation_kind": kind,
+                        "dry_run": dry_run,
+                    },
+                )
+            self.assertEqual(
+                BRIDGE._root_continuations(repo, "root", "validation_retry"),
+                ["real"],
+            )
+
+    def test_validation_retry_reuses_round_two_identity_without_profile_drift(
+        self,
+    ) -> None:
+        repo_root = Path(__file__).parents[3]
+        profile = BRIDGE._load_profile(
+            repo_root / ".codex" / "agents" / "core_simulation.toml"
+        )
+        default_before = BRIDGE._profile_identity(profile, 0)
+        invocation = {
+            "continuation_kind": "deep_review_repair",
+            "repair_round": 2,
+            "review_failure_run_id": "deep-review",
+            "resume_head_commit": "a" * 40,
+            "requested_model": "gpt-5.6-sol",
+            "requested_model_reasoning_effort": "xhigh",
+        }
+        summary = {
+            "status": "completed",
+            "runtime": {
+                "verified": True,
+                "model": "gpt-5.6-sol",
+                "model_reasoning_effort": "xhigh",
+            },
+            "policy_violations": [],
+            "report_problems": [],
+            "identity_problems": [],
+        }
+        with (
+            mock.patch.object(
+                BRIDGE,
+                "_load_review_failure_context",
+                return_value={
+                    "authorization_kind": "deep_review_repair",
+                    "candidate_commit": "a" * 40,
+                    "run_id": "deep-review",
+                    "run_dir": Path("deep-review"),
+                    "summary": {},
+                },
+            ),
+            mock.patch.object(BRIDGE, "_root_continuations", return_value=[]),
+        ):
+            authorization = BRIDGE._load_validation_retry_authorization(
+                repo_root,
+                implementation_agent="core_simulation",
+                resume_run="round-two",
+                invocation=invocation,
+                summary=summary,
+                base_commit="b" * 40,
+                profile=profile,
+                root_run_id="root",
+            )
+        self.assertEqual(authorization["repair_round"], 2)
+        self.assertEqual(authorization["requested_identity"], default_before)
+        self.assertEqual(BRIDGE._profile_identity(profile, 0), default_before)
+
+    def test_validation_retry_rejects_a_second_real_lineage_retry(self) -> None:
+        repo_root = Path(__file__).parents[3]
+        profile = BRIDGE._load_profile(
+            repo_root / ".codex" / "agents" / "core_simulation.toml"
+        )
+        invocation = {
+            "continuation_kind": "deep_review_repair",
+            "repair_round": 2,
+            "review_failure_run_id": "deep-review",
+            "resume_head_commit": "a" * 40,
+            "requested_model": "gpt-5.6-sol",
+            "requested_model_reasoning_effort": "xhigh",
+        }
+        summary = {
+            "status": "completed",
+            "runtime": {
+                "verified": True,
+                "model": "gpt-5.6-sol",
+                "model_reasoning_effort": "xhigh",
+            },
+            "policy_violations": [],
+            "report_problems": [],
+            "identity_problems": [],
+        }
+        with (
+            mock.patch.object(
+                BRIDGE,
+                "_load_review_failure_context",
+                return_value={
+                    "authorization_kind": "deep_review_repair",
+                    "candidate_commit": "a" * 40,
+                },
+            ),
+            mock.patch.object(
+                BRIDGE, "_root_continuations", return_value=["already-used"]
+            ),
+            self.assertRaisesRegex(BRIDGE.BridgeError, "already used"),
+        ):
+            BRIDGE._load_validation_retry_authorization(
+                repo_root,
+                implementation_agent="core_simulation",
+                resume_run="round-two",
+                invocation=invocation,
+                summary=summary,
+                base_commit="b" * 40,
+                profile=profile,
+                root_run_id="root",
+            )
+
     def test_review_repair_resume_accepts_release_lead_candidate_head(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)

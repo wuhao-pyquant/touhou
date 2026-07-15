@@ -697,6 +697,45 @@ Your final response must be one JSON object matching report.schema.json.
 """
 
 
+def _build_validation_retry_prompt(
+    profile: dict[str, Any],
+    ticket: dict[str, Any],
+    *,
+    parent_run_id: str,
+    repair_round: int,
+    candidate_commit: str,
+    repair_instruction: str,
+) -> str:
+    continuation = {
+        "agent": profile["name"],
+        "ticket_id": ticket["id"],
+        "repair_round": repair_round,
+        "parent_run_id": parent_run_id,
+        "candidate_commit": candidate_commit,
+        "objective": ticket["objective"],
+        "allowed_paths": ticket["allowed_paths"],
+        "forbidden_paths": ticket["forbidden_paths"],
+        "directed_validation_fix": repair_instruction.strip()[:4000],
+    }
+    continuation_json = json.dumps(
+        continuation, ensure_ascii=False, indent=2, sort_keys=True
+    )
+    return f"""<validation_retry_continuation>
+Continue the same ticket in the same Codex session, worktree, branch, and
+repair round. A release-lead validation performed after your completed repair
+found the single bounded issue described below. This is the lineage's one-time
+validation follow-up, not a new repair round or a new model escalation.
+
+Make only the directed fix. Do not restart or re-plan the task, run Godot,
+change any other line or file, create a worktree or branch, or broaden the
+ticket. The release lead owns the one authorized validation rerun. Your final
+response must be one JSON object matching report.schema.json.
+
+{continuation_json}
+</validation_retry_continuation>
+"""
+
+
 def _canonical_json_sha256(value: dict[str, Any]) -> str:
     rendered = json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -769,6 +808,146 @@ def _non_dry_run_children(repo: Path, parent_run_id: str) -> list[str]:
             continue
         children.append(invocation_path.parent.name)
     return sorted(children)
+
+
+def _root_continuations(
+    repo: Path, root_run_id: str, continuation_kind: str
+) -> list[str]:
+    matches: list[str] = []
+    runs_root = repo / ".agent-runs"
+    if not runs_root.exists():
+        return matches
+    for invocation_path in runs_root.glob("*/invocation.json"):
+        try:
+            invocation = _load_json(invocation_path)
+        except BridgeError:
+            continue
+        if invocation.get("dry_run") is True:
+            continue
+        if invocation.get("root_run_id") != root_run_id:
+            continue
+        if invocation.get("continuation_kind") != continuation_kind:
+            continue
+        matches.append(invocation_path.parent.name)
+    return sorted(matches)
+
+
+def _load_validation_retry_authorization(
+    repo: Path,
+    *,
+    implementation_agent: str,
+    resume_run: str,
+    invocation: dict[str, Any],
+    summary: dict[str, Any],
+    base_commit: str,
+    profile: dict[str, Any],
+    root_run_id: str,
+) -> dict[str, Any]:
+    if summary.get("status") != "completed":
+        raise BridgeError("Validation retry requires a completed parent run")
+    if invocation.get("continuation_kind") != "deep_review_repair":
+        raise BridgeError(
+            "Validation retry is only allowed after a completed deep-review repair"
+        )
+    prior_round = invocation.get("repair_round")
+    if prior_round != 2 or isinstance(prior_round, bool):
+        raise BridgeError(
+            "Validation retry requires the completed deep-review repair round 2"
+        )
+    prior_review_run = invocation.get("review_failure_run_id")
+    if not isinstance(prior_review_run, str) or not prior_review_run:
+        raise BridgeError(
+            "Validation retry parent has no persisted deep-review authorization"
+        )
+    deep_review = _load_review_failure_context(
+        repo,
+        implementation_agent=implementation_agent,
+        review_run=prior_review_run,
+        implementation_base=base_commit,
+    )
+    if deep_review["authorization_kind"] != "deep_review_repair":
+        raise BridgeError(
+            "Validation retry requires GATE: REPAIR_AUTHORIZED from deep_reviewer"
+        )
+    prior_candidate = invocation.get("resume_head_commit")
+    if (
+        not isinstance(prior_candidate, str)
+        or not prior_candidate
+        or deep_review["candidate_commit"] != prior_candidate
+    ):
+        raise BridgeError(
+            "Validation retry parent does not match its reviewed candidate commit"
+        )
+    previous_identity = _profile_identity(profile, prior_round)
+    prior_requested = {
+        "model": invocation.get("requested_model"),
+        "model_reasoning_effort": invocation.get(
+            "requested_model_reasoning_effort"
+        ),
+    }
+    if prior_requested != previous_identity:
+        raise BridgeError(
+            "Validation retry parent identity no longer matches profile repair round 2"
+        )
+    runtime = summary.get("runtime")
+    if not isinstance(runtime, dict) or runtime.get("verified") is not True:
+        raise BridgeError("Validation retry parent runtime identity is not verified")
+    runtime_identity = {
+        "model": runtime.get("model"),
+        "model_reasoning_effort": runtime.get("model_reasoning_effort"),
+    }
+    if runtime_identity != previous_identity:
+        raise BridgeError(
+            "Validation retry parent runtime does not match profile repair round 2"
+        )
+    for key in ("policy_violations", "report_problems", "identity_problems"):
+        if summary.get(key):
+            raise BridgeError(f"Validation retry parent has non-empty {key}")
+    existing = _root_continuations(repo, root_run_id, "validation_retry")
+    if existing:
+        raise BridgeError(
+            f"Run lineage already used validation retry {existing[0]!r}; "
+            "another retry is forbidden"
+        )
+    return {
+        "review_failure": deep_review,
+        "review_failure_run_id": prior_review_run,
+        "prior_candidate": prior_candidate,
+        "requested_identity": previous_identity,
+        "repair_round": prior_round,
+        "resume_run": resume_run,
+    }
+
+
+def _validation_retry_candidate_head(
+    repo: Path, worktree: Path, *, prior_candidate: str
+) -> str:
+    dirty = _git(worktree, "status", "--porcelain", "--untracked-files=all")
+    if dirty:
+        raise BridgeError(
+            "Validation retry requires a clean release-lead candidate worktree"
+        )
+    current_head = _git(worktree, "rev-parse", "HEAD")
+    verified_head = _git(
+        worktree, "rev-parse", "--verify", f"{current_head}^{{commit}}"
+    )
+    if verified_head != current_head:
+        raise BridgeError("Validation retry candidate HEAD does not resolve exactly")
+    if current_head == prior_candidate:
+        raise BridgeError(
+            "Validation retry requires the completed repair to be committed by "
+            "the release lead first"
+        )
+    ancestry = _run(
+        ["git", "merge-base", "--is-ancestor", prior_candidate, current_head],
+        cwd=repo,
+        check=False,
+    )
+    if ancestry.returncode != 0:
+        raise BridgeError(
+            "Validation retry candidate is not descended from the reviewed repair base"
+        )
+    return current_head
 
 
 def _normalized_path(path: Path) -> str:
@@ -935,6 +1114,7 @@ def _load_resume_context(
     resume_run: str,
     escalation_level: int | None,
     transport_retry: bool,
+    validation_retry: bool,
     review_failure_run: str | None,
     profile: dict[str, Any],
 ) -> dict[str, Any]:
@@ -942,7 +1122,21 @@ def _load_resume_context(
     invocation = _load_json(parent_dir / "invocation.json")
     summary = _load_json(parent_dir / "run-summary.json")
     parent_status = summary.get("status")
-    if parent_status == "completed":
+    if validation_retry:
+        if parent_status != "completed":
+            raise BridgeError(
+                "Validation retry requires a completed deep-review repair parent"
+            )
+        if (
+            transport_retry
+            or escalation_level is not None
+            or review_failure_run is not None
+        ):
+            raise BridgeError(
+                "Validation retry cannot be combined with transport retry, "
+                "escalation, or new review evidence"
+            )
+    elif parent_status == "completed":
         if not review_failure_run:
             raise BridgeError(
                 f"Run {resume_run!r} is completed; a verified "
@@ -989,9 +1183,42 @@ def _load_resume_context(
         raise BridgeError(
             f"Prior base commit no longer resolves exactly: {base_commit!r}"
         )
+    root_run_id = invocation.get("root_run_id")
+    if not isinstance(root_run_id, str) or not root_run_id:
+        root_run_id = resume_run
+    worktree_value = invocation.get("worktree") or summary.get("worktree")
+    if not isinstance(worktree_value, str) or not worktree_value:
+        raise BridgeError("Prior invocation has no worktree")
+    branch = invocation.get("branch")
+    if branch is not None and not isinstance(branch, str):
+        raise BridgeError("Prior invocation has an invalid branch")
+    worktree = Path(worktree_value)
+
     review_failure: dict[str, Any] | None = None
+    effective_review_failure_run = review_failure_run
     expected_head = base_commit
-    if review_failure_run:
+    validation_authorization: dict[str, Any] | None = None
+    if validation_retry:
+        validation_authorization = _load_validation_retry_authorization(
+            repo,
+            implementation_agent=agent,
+            resume_run=resume_run,
+            invocation=invocation,
+            summary=summary,
+            base_commit=base_commit,
+            profile=profile,
+            root_run_id=root_run_id,
+        )
+        review_failure = validation_authorization["review_failure"]
+        effective_review_failure_run = validation_authorization[
+            "review_failure_run_id"
+        ]
+        expected_head = _validation_retry_candidate_head(
+            repo,
+            worktree,
+            prior_candidate=validation_authorization["prior_candidate"],
+        )
+    elif review_failure_run:
         review_failure = _load_review_failure_context(
             repo,
             implementation_agent=agent,
@@ -999,7 +1226,11 @@ def _load_resume_context(
             implementation_base=base_commit,
         )
         expected_head = review_failure["candidate_commit"]
-    if transport_retry:
+    if validation_retry:
+        assert validation_authorization is not None
+        requested_identity = validation_authorization["requested_identity"]
+        repair_round = validation_authorization["repair_round"]
+    elif transport_retry:
         if _load_optional_report(parent_dir) is not None:
             raise BridgeError(
                 "Transport retry is only allowed when the prior run wrote no report"
@@ -1046,13 +1277,6 @@ def _load_resume_context(
         raise BridgeError(
             "Prior run has no persisted Codex thread_id; the same session cannot resume"
         )
-    worktree_value = invocation.get("worktree") or summary.get("worktree")
-    if not isinstance(worktree_value, str) or not worktree_value:
-        raise BridgeError("Prior invocation has no worktree")
-    branch = invocation.get("branch")
-    if branch is not None and not isinstance(branch, str):
-        raise BridgeError("Prior invocation has an invalid branch")
-    worktree = Path(worktree_value)
     preexisting_changed_paths = _validate_resume_worktree(
         repo,
         worktree,
@@ -1075,9 +1299,6 @@ def _load_resume_context(
             f"override in this CLI version: prior {prior_sandbox!r}, current {sandbox!r}"
         )
 
-    root_run_id = invocation.get("root_run_id")
-    if not isinstance(root_run_id, str) or not root_run_id:
-        root_run_id = resume_run
     return {
         "parent_run_id": resume_run,
         "root_run_id": root_run_id,
@@ -1086,7 +1307,9 @@ def _load_resume_context(
         "parent_summary": summary,
         "repair_round": repair_round,
         "continuation_kind": (
-            "transport_retry"
+            "validation_retry"
+            if validation_retry
+            else "transport_retry"
             if transport_retry
             else review_failure["authorization_kind"]
             if review_failure is not None
@@ -1109,8 +1332,63 @@ def _load_resume_context(
         "failure_summary": (
             review_failure["summary"] if review_failure is not None else summary
         ),
-        "review_failure_run_id": review_failure_run,
+        "review_failure_run_id": effective_review_failure_run,
     }
+
+
+def _validate_continuation_options(
+    *,
+    is_resume: bool,
+    escalation_level: int | None,
+    transport_retry: bool,
+    validation_retry: bool,
+    repair_instruction: str | None,
+    review_failure_run: str | None,
+) -> None:
+    if not is_resume:
+        if (
+            escalation_level is not None
+            or transport_retry
+            or validation_retry
+            or repair_instruction
+            or review_failure_run
+        ):
+            raise BridgeError("continuation options require --resume-run")
+        return
+
+    selected = sum(
+        (
+            escalation_level is not None,
+            transport_retry,
+            validation_retry,
+        )
+    )
+    if selected != 1:
+        raise BridgeError(
+            "--resume-run requires exactly one of --escalation-level, "
+            "--transport-retry, or --validation-retry"
+        )
+    if transport_retry:
+        if repair_instruction or review_failure_run:
+            raise BridgeError(
+                "--transport-retry cannot be combined with repair input or "
+                "review-failure evidence"
+            )
+        return
+    if validation_retry:
+        if review_failure_run:
+            raise BridgeError(
+                "--validation-retry reuses the parent's verified deep review; "
+                "new review evidence is forbidden"
+            )
+        if not isinstance(repair_instruction, str) or not repair_instruction.strip():
+            raise BridgeError(
+                "--validation-retry requires a non-empty --repair-instruction"
+            )
+        return
+    assert escalation_level is not None
+    if escalation_level < 1:
+        raise BridgeError("--escalation-level must be at least 1")
 
 
 def main() -> int:
@@ -1121,6 +1399,7 @@ def main() -> int:
     parser.add_argument("--resume-run")
     parser.add_argument("--escalation-level", type=int)
     parser.add_argument("--transport-retry", action="store_true")
+    parser.add_argument("--validation-retry", action="store_true")
     parser.add_argument("--repair-instruction")
     parser.add_argument("--review-failure-run")
     parser.add_argument("--dry-run", action="store_true")
@@ -1130,33 +1409,14 @@ def main() -> int:
     is_resume = bool(args.resume_run)
     if is_resume == bool(args.ticket):
         raise BridgeError("Specify exactly one of --ticket or --resume-run")
-    if is_resume:
-        if args.transport_retry:
-            if (
-                args.escalation_level is not None
-                or args.repair_instruction
-                or args.review_failure_run
-            ):
-                raise BridgeError(
-                    "--transport-retry cannot be combined with escalation, repair "
-                    "input, or review-failure evidence"
-                )
-        else:
-            if args.escalation_level is None:
-                raise BridgeError(
-                    "--resume-run requires --escalation-level or --transport-retry"
-                )
-            if args.escalation_level < 1:
-                raise BridgeError("--escalation-level must be at least 1")
-    elif (
-        args.escalation_level is not None
-        or args.transport_retry
-        or args.repair_instruction
-        or args.review_failure_run
-    ):
-        raise BridgeError(
-            "continuation options require --resume-run"
-        )
+    _validate_continuation_options(
+        is_resume=is_resume,
+        escalation_level=args.escalation_level,
+        transport_retry=args.transport_retry,
+        validation_retry=args.validation_retry,
+        repair_instruction=args.repair_instruction,
+        review_failure_run=args.review_failure_run,
+    )
 
     repo = (
         args.repo_root.resolve()
@@ -1179,6 +1439,7 @@ def main() -> int:
             resume_run=args.resume_run,
             escalation_level=args.escalation_level,
             transport_retry=args.transport_retry,
+            validation_retry=args.validation_retry,
             review_failure_run=args.review_failure_run,
             profile=profile,
         )
@@ -1239,6 +1500,16 @@ def main() -> int:
                     profile,
                     ticket,
                     parent_run_id=parent_run_id,
+                )
+            elif resume_context["continuation_kind"] == "validation_retry":
+                assert args.repair_instruction is not None
+                prompt = _build_validation_retry_prompt(
+                    profile,
+                    ticket,
+                    parent_run_id=parent_run_id,
+                    repair_round=repair_round,
+                    candidate_commit=resume_context["expected_head"],
+                    repair_instruction=args.repair_instruction,
                 )
             else:
                 prompt = _build_repair_prompt(
