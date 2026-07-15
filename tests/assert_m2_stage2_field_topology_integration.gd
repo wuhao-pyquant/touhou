@@ -3,6 +3,8 @@ extends SceneTree
 const StageDirector := preload("res://scripts/runtime/stage_director.gd")
 const GameplayInputBuffer := preload("res://scripts/runtime/gameplay_input_buffer.gd")
 const MainScript := preload("res://scripts/main.gd")
+const BulletWorld := preload("res://scripts/runtime/bullet_world.gd")
+const Stage2FieldTopologyRuntime := preload("res://scripts/runtime/stage2_field_topology_runtime.gd")
 
 const EVENT_IDS := [
 	"s2_b01", "s2_b02", "s2_b03", "s2_b04", "s2_b05", "s2_b06",
@@ -110,6 +112,128 @@ func _remove_sources(main: Node, spawn_ids: Array, tick: int) -> bool:
 		if not _check(main._stage2_field_callback("remove_source", tick, {"spawn_id": String(spawn_value), "reason": "focused_fixture"}), "Could not stop fixture source %s." % spawn_value):
 			return false
 	return true
+
+func _field_transaction_state(main: Node) -> Dictionary:
+	return {
+		"runtime": main.stage2_field_topology_runtime.capture_snapshot(),
+		"world": main.capture_bullet_world_state(),
+		"tick": int(main.stage_controller.get("stage2_field_tick", -1)),
+		"sequence": int(main.stage_controller.get("stage2_field_event_sequence", -1)),
+		"bindings": (main.stage_controller.get("stage2_field_uid_to_slot", {}) as Dictionary).duplicate(true),
+		"live_runtime_id": main.stage2_field_topology_runtime.get_instance_id(),
+		"scratch_runtime_id": main.stage2_field_topology_scratch_runtime.get_instance_id(),
+		"live_world_id": main.bullet_world.get_instance_id(),
+		"scratch_world_id": main.stage2_field_scratch_bullet_world.get_instance_id(),
+	}
+
+func _assert_clock_rejection(main: Node, output: Dictionary, label: String) -> void:
+	var before := _field_transaction_state(main)
+	_check(not main._consume_stage2_controller_output(output), "%s clock evidence was accepted." % label)
+	var after := _field_transaction_state(main)
+	_check_equal(after, before, "%s clock rejection changed runtime/world/cursor/sequence/bindings or owner identity." % label)
+	_check(String(main.stage_controller.get("stage2_field_hard_error", "")) != "", "%s clock rejection did not latch a stable error." % label)
+
+func _assert_clock_discriminator_and_scratch_performance() -> void:
+	var frozen: Node = _new_main("normal", 73021)
+	var frozen_before := _field_transaction_state(frozen)
+	_check(frozen._consume_stage2_controller_output({"stage_events": []}), "Absent no-event stage_tick evidence did not leave the field frozen.")
+	_check_equal(_field_transaction_state(frozen), frozen_before, "Absent no-event stage_tick evidence changed the frozen field aggregate.")
+	_free_main(frozen)
+
+	var missing: Node = _new_main("normal", 73022)
+	var missing_output: Dictionary = missing.stage2_encounter_controller.advance(Vector2(missing.player_x, missing.player_y))
+	missing_output.erase("stage_tick")
+	_assert_clock_rejection(missing, missing_output, "Missing event")
+	_free_main(missing)
+
+	var malformed: Node = _new_main("normal", 73023)
+	var malformed_output: Dictionary = malformed.stage2_encounter_controller.advance(Vector2(malformed.player_x, malformed.player_y))
+	malformed_output.stage_tick = "0"
+	_assert_clock_rejection(malformed, malformed_output, "Malformed")
+	_free_main(malformed)
+
+	var duplicate_event: Node = _new_main("normal", 73024)
+	var duplicate_event_output: Dictionary = duplicate_event.stage2_encounter_controller.advance(Vector2(duplicate_event.player_x, duplicate_event.player_y))
+	duplicate_event_output.stage_events.append((duplicate_event_output.stage_events[0] as Dictionary).duplicate(true))
+	_assert_clock_rejection(duplicate_event, duplicate_event_output, "Duplicate authored event")
+	_free_main(duplicate_event)
+
+	var contradictory: Node = _new_main("normal", 73025)
+	var contradictory_output: Dictionary = contradictory.stage2_encounter_controller.advance(Vector2(contradictory.player_x, contradictory.player_y))
+	contradictory_output.stage_tick = int(contradictory_output.stage_tick) + 1
+	_assert_clock_rejection(contradictory, contradictory_output, "Contradictory")
+	_free_main(contradictory)
+
+	for case_value in [{"label": "Duplicate", "delta": 0}, {"label": "Skipped", "delta": 2}]:
+		var rejected: Node = _new_main("normal", 73026 + int(case_value.delta))
+		var entry_output: Dictionary = rejected.stage2_encounter_controller.advance(Vector2(rejected.player_x, rejected.player_y))
+		_check(rejected._consume_stage2_controller_output(entry_output), "%s fixture rejected its first authored event." % case_value.label)
+		var ordinary_output: Dictionary = rejected.stage2_encounter_controller.advance(Vector2(rejected.player_x, rejected.player_y))
+		ordinary_output.stage_tick = int(rejected.stage_controller.stage2_field_tick) + int(case_value.delta)
+		_assert_clock_rejection(rejected, ordinary_output, String(case_value.label))
+		_free_main(rejected)
+
+	var timed: Node = _new_main("normal", 73029)
+	var initial_output: Dictionary = timed.stage2_encounter_controller.advance(Vector2(timed.player_x, timed.player_y))
+	_check(timed._consume_stage2_controller_output(initial_output), "Timing fixture rejected its first authored event.")
+	_check(timed.stage2_field_topology_runtime != timed.stage2_field_topology_scratch_runtime, "Runtime live/scratch owners alias after event entry.")
+	_check(timed.bullet_world != timed.stage2_field_scratch_bullet_world, "BulletWorld live/scratch owners alias after event entry.")
+	_check(not timed.stage2_field_topology_scratch_runtime.trusted_copy_mutable_state_from(timed.bullet_world), "Runtime trusted copy accepted a different script identity.")
+	var incompatible_runtime := Stage2FieldTopologyRuntime.new()
+	_check(incompatible_runtime.configure(timed.stage_director.stage2_field_topology_contract(), "normal", "incompatible_run"), "Incompatible runtime identity fixture did not configure.")
+	_check(not timed.stage2_field_topology_scratch_runtime.trusted_copy_mutable_state_from(incompatible_runtime), "Runtime trusted copy accepted a different run UID.")
+	var incompatible_world := BulletWorld.new()
+	_check(incompatible_world.configure(1, 1, 1), "Incompatible BulletWorld identity fixture did not configure.")
+	_check(not timed.stage2_field_scratch_bullet_world.trusted_copy_mutable_state_from(incompatible_world), "BulletWorld trusted copy accepted different cap/growth identity.")
+	var live_world_before_busy_copy := timed.capture_bullet_world_state()
+	timed.stage2_field_scratch_bullet_world.begin_update()
+	_check(not timed.bullet_world.trusted_copy_mutable_state_from(timed.stage2_field_scratch_bullet_world), "BulletWorld trusted copy accepted an update-in-progress owner.")
+	timed.stage2_field_scratch_bullet_world.end_update()
+	_check_equal(timed.capture_bullet_world_state(), live_world_before_busy_copy, "Rejected update-in-progress copy changed the live BulletWorld.")
+	var live_runtime_before_alias := timed.stage2_field_topology_runtime.capture_snapshot()
+	var scratch_sequence := int(timed.stage_controller.stage2_field_event_sequence) + 1
+	var scratch_output: Dictionary = timed.stage2_field_topology_scratch_runtime.advance(1, scratch_sequence)
+	_check(bool(scratch_output.get("ok", false)), "Scratch runtime alias probe could not mutate its isolated owner.")
+	_check_equal(timed.stage2_field_topology_runtime.capture_snapshot(), live_runtime_before_alias, "Scratch runtime mutation aliased the live runtime.")
+	_check(timed.stage2_field_topology_scratch_runtime.trusted_copy_mutable_state_from(timed.stage2_field_topology_runtime), "Scratch runtime could not be reset by trusted copy after alias probe.")
+	_check(timed.stage2_field_scratch_bullet_world.trusted_copy_mutable_state_from(timed.bullet_world), "Scratch BulletWorld could not be reset before alias probe.")
+	(timed.stage2_field_scratch_bullet_world.pool[0].motion as Dictionary)["alias_probe"] = true
+	_check(not bool((timed.bullet_world.pool[0].motion as Dictionary).get("alias_probe", false)), "Scratch BulletWorld nested Dictionary aliased the live pool.")
+	_check(timed.stage2_field_scratch_bullet_world.trusted_copy_mutable_state_from(timed.bullet_world), "Scratch BulletWorld could not be reset after alias probe.")
+	var runtime_generations := {}
+	for runtime in [timed.stage2_field_topology_runtime, timed.stage2_field_topology_scratch_runtime]:
+		runtime_generations[runtime.get_instance_id()] = int(runtime.telemetry_snapshot().get("configure_generation", -1))
+	var runtime_owner_ids: Array = runtime_generations.keys()
+	var world_owner_ids := {
+		timed.bullet_world.get_instance_id(): true,
+		timed.stage2_field_scratch_bullet_world.get_instance_id(): true,
+	}
+	var timings_us: Array[int] = []
+	var first_ordinary_tick := int(timed.stage_controller.stage2_field_tick) + 1
+	while timings_us.size() < 120:
+		var output: Dictionary = timed.stage2_encounter_controller.advance(Vector2(timed.player_x, timed.player_y))
+		if not _check((output.get("stage_events", []) as Array).is_empty(), "Timing sample unexpectedly crossed an authored event boundary."):
+			break
+		var started_us := Time.get_ticks_usec()
+		if not _check(timed._consume_stage2_controller_output(output), "Ordinary Main clock consumption failed during timing sample %d." % timings_us.size()):
+			break
+		timings_us.append(Time.get_ticks_usec() - started_us)
+		_check_equal(int(timed.stage_controller.stage2_field_tick), int(output.stage_tick), "Ordinary no-event output did not advance to the exact controller tick.")
+		_check(timed.stage2_field_topology_runtime != timed.stage2_field_topology_scratch_runtime and timed.bullet_world != timed.stage2_field_scratch_bullet_world, "Ordinary swap aliased live and scratch owners.")
+		for runtime in [timed.stage2_field_topology_runtime, timed.stage2_field_topology_scratch_runtime]:
+			var owner_id := runtime.get_instance_id()
+			_check(owner_id in runtime_owner_ids, "Ordinary callback created an unbounded runtime owner.")
+			_check_equal(int(runtime.telemetry_snapshot().get("configure_generation", -1)), int(runtime_generations.get(owner_id, -2)), "Ordinary callback increased runtime configure generation.")
+		_check(world_owner_ids.has(timed.bullet_world.get_instance_id()) and world_owner_ids.has(timed.stage2_field_scratch_bullet_world.get_instance_id()), "Ordinary callback created an unbounded BulletWorld owner.")
+	_check_equal(int(timed.stage_controller.stage2_field_tick), first_ordinary_tick + timings_us.size() - 1, "Ordinary no-event outputs did not advance exactly once each.")
+	if not timings_us.is_empty():
+		timings_us.sort()
+		var p50_us := timings_us[int(floor(float(timings_us.size() - 1) * 0.50))]
+		var p95_us := timings_us[maxi(0, int(ceil(float(timings_us.size()) * 0.95)) - 1)]
+		var max_us := timings_us[timings_us.size() - 1]
+		print("STAGE2_FIELD_CALLBACK_TIMING count=%d p50_us=%d p95_us=%d max_us=%d" % [timings_us.size(), p50_us, p95_us, max_us])
+		_check(max_us < 16667, "Ordinary Main callback exceeded the 16.667 ms ceiling: %d us." % max_us)
+	_free_main(timed)
 
 func _assert_contract_loading_and_first_construction() -> void:
 	var director := StageDirector.new()
@@ -298,10 +422,17 @@ func _assert_source_callbacks_and_gate_catchup() -> void:
 	_check_equal(int(gate.stage_controller.get("stage2_field_tick", -1)), 750, "Field clock did not freeze at the midboss gate.")
 	_check_equal(gate.stage_controller.get("stage2_field_uid_to_slot", {}).size(), 0, "Midboss gate did not clear field bullets.")
 	_check(not (gate.stage_controller.get("stage2_field_source_removals", []) as Array).is_empty(), "Midboss gate did not clear field sources.")
+	var first_phase_advance: Dictionary = gate.stage2_encounter_controller.advance(Vector2(gate.player_x, gate.player_y))
+	_check(not first_phase_advance.has("stage_tick") and gate._consume_stage2_controller_output(first_phase_advance), "First active midboss phase advance carried stage_tick or failed consumption.")
+	_check_equal(int(gate.stage_controller.get("stage2_field_tick", -1)), 750, "First active midboss phase advance moved the frozen field clock.")
 	var first_resolution: Dictionary = gate.stage2_encounter_controller.resolve_active_phase("clear")
-	_check(gate._consume_stage2_controller_output(first_resolution), "First midboss phase resolution failed.")
+	_check(not first_resolution.has("stage_tick") and gate._consume_stage2_controller_output(first_resolution), "First midboss phase resolution carried stage_tick or failed.")
+	_check_equal(int(gate.stage_controller.get("stage2_field_tick", -1)), 750, "First midboss phase resolution moved the frozen field clock.")
+	var second_phase_advance: Dictionary = gate.stage2_encounter_controller.advance(Vector2(gate.player_x, gate.player_y))
+	_check(not second_phase_advance.has("stage_tick") and gate._consume_stage2_controller_output(second_phase_advance), "Second active midboss phase advance carried stage_tick or failed consumption.")
+	_check_equal(int(gate.stage_controller.get("stage2_field_tick", -1)), 750, "Second active midboss phase advance moved the frozen field clock.")
 	var second_resolution: Dictionary = gate.stage2_encounter_controller.resolve_active_phase("clear")
-	_check(gate._consume_stage2_controller_output(second_resolution), "Second midboss phase resolution failed.")
+	_check(String(second_resolution.get("encounter_kind", "")) == "stage" and not second_resolution.has("stage_tick") and gate._consume_stage2_controller_output(second_resolution), "Final midboss resolution did not return to stage while withholding stage_tick.")
 	_check_equal(int(gate.stage_controller.get("stage2_field_tick", -1)), 750, "Active midboss advanced the frozen field clock.")
 	var resume: Dictionary = gate.stage2_encounter_controller.advance(Vector2(gate.player_x, gate.player_y))
 	_check(gate._consume_stage2_controller_output(resume), "Compressed post-midboss authored catch-up failed.")
@@ -458,6 +589,10 @@ func _assert_event_entry_rollback() -> void:
 	var controller_before: Dictionary = rollback.stage_controller.duplicate(true)
 	var sequence_before := int(rollback.stage_controller.stage2_field_event_sequence)
 	var tick_before := int(rollback.stage_controller.stage2_field_tick)
+	var live_runtime_id_before := rollback.stage2_field_topology_runtime.get_instance_id()
+	var scratch_runtime_id_before := rollback.stage2_field_topology_scratch_runtime.get_instance_id()
+	var live_world_id_before := rollback.bullet_world.get_instance_id()
+	var scratch_world_id_before := rollback.stage2_field_scratch_bullet_world.get_instance_id()
 	var rejected_event: Dictionary = _stage_event(rollback, "s2_b02")
 	rejected_event.payload.authored_tick = 151
 	_check(not rollback._stage2_begin_field_event(rejected_event), "Event entry accepted an activation with the wrong canonical tick.")
@@ -468,6 +603,11 @@ func _assert_event_entry_rollback() -> void:
 	_check_equal(rollback.enemies, enemies_before, "Rejected whole entry exposed candidate Main enemy flag changes.")
 	_check_equal(int(rollback.stage_controller.stage2_field_event_sequence), sequence_before, "Rejected whole entry consumed live callback sequences.")
 	_check_equal(int(rollback.stage_controller.stage2_field_tick), tick_before, "Rejected whole entry advanced the live field tick.")
+	_check_equal(rollback.stage2_field_topology_runtime.get_instance_id(), live_runtime_id_before, "Rejected whole entry replaced the live runtime owner.")
+	_check_equal(rollback.stage2_field_topology_scratch_runtime.get_instance_id(), scratch_runtime_id_before, "Rejected whole entry replaced the scratch runtime owner.")
+	_check_equal(rollback.bullet_world.get_instance_id(), live_world_id_before, "Rejected whole entry replaced the live BulletWorld owner.")
+	_check_equal(rollback.stage2_field_scratch_bullet_world.get_instance_id(), scratch_world_id_before, "Rejected whole entry replaced the scratch BulletWorld owner.")
+	_check(live_runtime_id_before != scratch_runtime_id_before and live_world_id_before != scratch_world_id_before, "Rollback fixture began with aliased live/scratch owners.")
 	var controller_without_latched_error: Dictionary = rollback.stage_controller.duplicate(true)
 	for key in ["stage2_hard_error", "stage2_field_hard_error"]:
 		if controller_before.has(key):
@@ -526,6 +666,7 @@ func _assert_aggregate_snapshot_and_legacy_shape() -> void:
 	var snapshot: Dictionary = main.capture_simulation_state()
 	_check_equal(int(snapshot.get("version", -1)), 4, "Stage 2 aggregate snapshot version did not advance.")
 	_check(snapshot.get("stage2_field_runtime") is Dictionary and main.validate_simulation_state(snapshot), "Main rejected its own field aggregate snapshot.")
+	_check(not snapshot.has("stage2_field_topology_scratch_runtime") and not snapshot.has("stage2_field_scratch_bullet_world"), "Ephemeral scratch owners leaked into the persistence schema.")
 	var before_rejection: String = main.simulation_state_hash()
 	var forged_binding: Dictionary = snapshot.duplicate(true)
 	var binding_uids: Array = forged_binding.stage_controller.stage2_field_uid_to_slot.keys()
@@ -544,6 +685,7 @@ func _assert_aggregate_snapshot_and_legacy_shape() -> void:
 	var reference: Node = _new_main("normal", 73051)
 	_check(main.restore_simulation_state(snapshot), "Source Main rejected the valid aggregate snapshot.")
 	_check(reference.restore_simulation_state(snapshot), "Disposable field/controller owners rejected valid aggregate restore.")
+	_check(main.stage2_field_topology_runtime != main.stage2_field_topology_scratch_runtime and main.bullet_world != main.stage2_field_scratch_bullet_world, "Aggregate restore did not rebuild distinct scratch owners.")
 	_check(_advance_real_ticks(main, 1) and _advance_real_ticks(reference, 1), "Post-restore next output failed.")
 	_check_equal(main.simulation_state_hash(), reference.simulation_state_hash(), "Post-restore next-output/state-hash equivalence diverged.")
 	_free_main(reference)
@@ -561,6 +703,7 @@ func _assert_aggregate_snapshot_and_legacy_shape() -> void:
 
 func _run() -> void:
 	_assert_contract_loading_and_first_construction()
+	_assert_clock_discriminator_and_scratch_performance()
 	_assert_delayed_seed_rebound_removal_and_projection()
 	_assert_source_callbacks_and_gate_catchup()
 	_assert_event_entry_source_reconciliation()

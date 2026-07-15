@@ -21,6 +21,8 @@ var boss_state_machine: RefCounted = BossStateMachine.new()
 var gameplay_input_buffer: RefCounted = GameplayInputBuffer.new()
 var stage2_encounter_controller: RefCounted = Stage2EncounterController.new()
 var stage2_field_topology_runtime: RefCounted = Stage2FieldTopologyRuntime.new()
+var stage2_field_topology_scratch_runtime: RefCounted = null
+var stage2_field_scratch_bullet_world: RefCounted = null
 var replay_data: RefCounted = ReplayData.new()
 var gameplay_seed: int = 1
 var gameplay_difficulty: String = "normal"
@@ -320,6 +322,8 @@ func shutdown_runtime() -> void:
 	stage_director = null
 	stage2_encounter_controller = null
 	stage2_field_topology_runtime = null
+	stage2_field_topology_scratch_runtime = null
+	stage2_field_scratch_bullet_world = null
 	fixed_tick_clock = null
 	gameplay_rng = null
 	simulation_state_hasher = null
@@ -1130,9 +1134,19 @@ func capture_bullet_world_state() -> Dictionary:
 	return bullet_world.capture_state()
 
 func restore_bullet_world_state(snapshot: Dictionary) -> bool:
-	var restored: Dictionary = bullet_world.restore_state(snapshot)
+	var candidate_world: RefCounted = BulletWorld.new()
+	var restored: Dictionary = candidate_world.restore_state(snapshot)
 	if not bool(restored.get("ok", false)):
 		return false
+	var candidate_pair := {}
+	if _active_stage() == 2 and stage2_field_topology_runtime != null and stage2_field_topology_runtime.is_configured():
+		candidate_pair = _stage2_create_field_owner_pair_from(stage2_field_topology_runtime, candidate_world)
+		if candidate_pair.is_empty():
+			return false
+	bullet_world = candidate_world
+	if not candidate_pair.is_empty():
+		stage2_field_topology_scratch_runtime = candidate_pair.scratch_runtime
+		stage2_field_scratch_bullet_world = candidate_pair.scratch_world
 	_sync_bullet_world_compatibility_views()
 	return true
 
@@ -1630,6 +1644,11 @@ func restore_simulation_state(snapshot: Dictionary) -> bool:
 		return false
 	var restored_stage2_controller := Stage2EncounterController.new()
 	var restored_stage2_field_runtime := Stage2FieldTopologyRuntime.new()
+	var restored_stage2_scratch_runtime: RefCounted = null
+	var restored_stage2_scratch_world: RefCounted = null
+	var restored_bullet_world := BulletWorld.new()
+	if not bool(restored_bullet_world.restore_state(snapshot.bullets).get("ok", false)):
+		return false
 	if int(snapshot.current_stage_local) == 2:
 		if not restored_stage2_controller.configure(stage_director.stage2_package(), String(snapshot.gameplay_difficulty), int(snapshot.gameplay_seed)):
 			return false
@@ -1640,6 +1659,16 @@ func restore_simulation_state(snapshot: Dictionary) -> bool:
 			return false
 		if not restored_stage2_field_runtime.restore_snapshot(snapshot.stage2_field_runtime):
 			return false
+		restored_stage2_scratch_runtime = Stage2FieldTopologyRuntime.new()
+		if not restored_stage2_scratch_runtime.configure(field_contract, String(snapshot.gameplay_difficulty), _stage2_field_run_uid(int(snapshot.gameplay_seed), String(snapshot.gameplay_difficulty))):
+			return false
+		if not restored_stage2_scratch_runtime.trusted_copy_mutable_state_from(restored_stage2_field_runtime):
+			return false
+		restored_stage2_scratch_world = BulletWorld.new()
+		if not restored_stage2_scratch_world.configure(restored_bullet_world.pool.size(), restored_bullet_world.hard_capacity, restored_bullet_world.growth_size):
+			return false
+		if not restored_stage2_scratch_world.trusted_copy_mutable_state_from(restored_bullet_world):
+			return false
 	# Every component has been validated against a disposable owner above; the
 	# assignments below therefore form an all-or-nothing aggregate commit.
 	fixed_tick_clock.restore(snapshot.clock)
@@ -1647,7 +1676,8 @@ func restore_simulation_state(snapshot: Dictionary) -> bool:
 	gameplay_seed = int(snapshot.gameplay_seed)
 	gameplay_difficulty = String(snapshot.gameplay_difficulty)
 	gameplay_input_buffer.restore(snapshot.input)
-	restore_bullet_world_state(snapshot.bullets)
+	bullet_world = restored_bullet_world
+	_sync_bullet_world_compatibility_views()
 	for property_name in GAME_MANAGER_STATE_FIELDS:
 		var value = snapshot.manager[property_name]
 		game_manager_ref.set(property_name, value.duplicate(true) if value is Array or value is Dictionary else value)
@@ -1673,6 +1703,8 @@ func restore_simulation_state(snapshot: Dictionary) -> bool:
 	stage_controller = snapshot.stage_controller.duplicate(true)
 	stage2_encounter_controller = restored_stage2_controller
 	stage2_field_topology_runtime = restored_stage2_field_runtime
+	stage2_field_topology_scratch_runtime = restored_stage2_scratch_runtime
+	stage2_field_scratch_bullet_world = restored_stage2_scratch_world
 	var player_state: Dictionary = snapshot.player
 	player_x = float(player_state.position.x)
 	player_y = float(player_state.position.y)
@@ -1848,6 +1880,8 @@ func _load_stage(stage: int):
 	stage_controller = stage_director.stage_controller(stage)
 	stage2_encounter_controller = Stage2EncounterController.new()
 	stage2_field_topology_runtime = Stage2FieldTopologyRuntime.new()
+	stage2_field_topology_scratch_runtime = null
+	stage2_field_scratch_bullet_world = null
 	if stage_controller.is_empty():
 		return
 	stage_controller["triggered_waves"] = {}
@@ -1884,10 +1918,63 @@ func _load_stage(stage: int):
 		if field_contract.is_empty() or not stage2_field_topology_runtime.configure(field_contract, gameplay_difficulty, String(stage_controller.stage2_field_run_uid)):
 			stage_controller["stage2_hard_error"] = stage2_field_topology_runtime.last_error() if stage2_field_topology_runtime != null else "Stage 2 field topology runtime is unavailable"
 			return
+		if not _stage2_rebuild_field_scratch_owners():
+			stage_controller["stage2_hard_error"] = "Stage 2 field topology scratch owners could not be initialized"
+			return
 		stage_controller["stage2_bound"] = true
 
 func _stage2_field_run_uid(seed_value: int, difficulty: String) -> String:
 	return "stage2_%s_%d" % [difficulty, seed_value]
+
+func _stage2_create_field_owner_pair_from(source_runtime: RefCounted, source_world: RefCounted) -> Dictionary:
+	if source_runtime == null or source_world == null or not is_instance_valid(source_runtime) or not is_instance_valid(source_world):
+		return {}
+	if stage_director == null or not stage_director.has_method("stage2_field_topology_contract"):
+		return {}
+	var field_contract: Dictionary = stage_director.stage2_field_topology_contract()
+	if field_contract.is_empty():
+		return {}
+	var runtimes: Array[RefCounted] = []
+	var worlds: Array[RefCounted] = []
+	for _owner_index in range(2):
+		var candidate_runtime: RefCounted = Stage2FieldTopologyRuntime.new()
+		if not candidate_runtime.configure(field_contract, gameplay_difficulty, String(stage_controller.get("stage2_field_run_uid", ""))):
+			return {}
+		if not candidate_runtime.trusted_copy_mutable_state_from(source_runtime):
+			return {}
+		var candidate_world: RefCounted = BulletWorld.new()
+		if not candidate_world.configure(source_world.pool.size(), source_world.hard_capacity, source_world.growth_size):
+			return {}
+		if not candidate_world.trusted_copy_mutable_state_from(source_world):
+			return {}
+		runtimes.append(candidate_runtime)
+		worlds.append(candidate_world)
+	return {
+		"live_runtime": runtimes[0],
+		"scratch_runtime": runtimes[1],
+		"live_world": worlds[0],
+		"scratch_world": worlds[1],
+	}
+
+func _stage2_rebuild_field_scratch_owners() -> bool:
+	var pair := _stage2_create_field_owner_pair_from(stage2_field_topology_runtime, bullet_world)
+	if pair.is_empty():
+		return false
+	stage2_field_topology_scratch_runtime = pair.scratch_runtime
+	stage2_field_scratch_bullet_world = pair.scratch_world
+	return true
+
+func _stage2_ensure_field_scratch_owners() -> bool:
+	if (
+		stage2_field_topology_scratch_runtime != null
+		and stage2_field_scratch_bullet_world != null
+		and is_instance_valid(stage2_field_topology_scratch_runtime)
+		and is_instance_valid(stage2_field_scratch_bullet_world)
+		and stage2_field_topology_scratch_runtime.is_trusted_copy_compatible_with(stage2_field_topology_runtime)
+		and stage2_field_scratch_bullet_world.is_trusted_copy_compatible_with(bullet_world)
+	):
+		return true
+	return _stage2_rebuild_field_scratch_owners()
 
 func _clear_bullets():
 	bullet_world.reset()
@@ -2290,12 +2377,91 @@ func _update_stage2_main_flow(delta: float) -> void:
 			_finish_stage2_after_boss()
 	_resolve_stage2_player_hit()
 
-func _consume_stage2_controller_output(output: Dictionary) -> bool:
-	var stage_events: Array = output.get("stage_events", [])
-	for event_value in output.get("stage_events", []):
+func _stage2_controller_clock_evidence(output: Dictionary) -> Dictionary:
+	var stage_events_value = output.get("stage_events", [])
+	if not (stage_events_value is Array):
+		return {"ok": false, "error": "Stage 2 controller stage-events evidence is malformed"}
+	var stage_events: Array = stage_events_value
+	var has_tick := output.has("stage_tick")
+	if has_tick and typeof(output.stage_tick) != TYPE_INT:
+		return {"ok": false, "error": "Stage 2 controller stage-tick evidence is malformed"}
+	if not has_tick:
+		if not stage_events.is_empty():
+			return {"ok": false, "error": "Stage 2 controller emitted authored events without stage-tick evidence"}
+		return {"ok": true, "mode": "frozen"}
+	var controller_tick := int(output.stage_tick)
+	if controller_tick < 0 or controller_tick > Stage2FieldTopologyRuntime.MAX_STAGE_TICK:
+		return {"ok": false, "error": "Stage 2 controller stage-tick evidence is outside the supported range"}
+	var telemetry: Dictionary = stage2_encounter_controller.telemetry_snapshot() if stage2_encounter_controller != null else {}
+	var runtime_tick_value = (telemetry.get("stage_runtime", {}) as Dictionary).get("stage_tick")
+	var live_tick_value = stage_controller.get("stage2_field_tick")
+	if typeof(live_tick_value) != TYPE_INT:
+		return {"ok": false, "error": "Stage 2 live field tick is malformed"}
+	var live_tick := int(live_tick_value)
+	if stage_events.is_empty():
+		if controller_tick <= live_tick:
+			return {"ok": false, "error": "Stage 2 controller duplicated stage-tick evidence"}
+		if controller_tick != live_tick + 1:
+			return {"ok": false, "error": "Stage 2 controller skipped ordinary stage-tick evidence"}
+		if typeof(runtime_tick_value) != TYPE_INT or int(runtime_tick_value) != controller_tick:
+			return {"ok": false, "error": "Stage 2 controller stage-tick evidence contradicts its live runtime"}
+		return {"ok": true, "mode": "advance", "stage_tick": controller_tick}
+	var canonical_ticks := {}
+	var canonical_event_ids: Array = []
+	var package: Dictionary = stage_director.stage2_package() if stage_director != null and stage_director.has_method("stage2_package") else {}
+	var stage_spec: Dictionary = package.get("stage_spec", {})
+	for canonical_value in stage_spec.get("events", []):
+		if not (canonical_value is Dictionary):
+			continue
+		var canonical: Dictionary = canonical_value
+		var payload_value = canonical.get("payload")
+		if not (payload_value is Dictionary) or typeof((payload_value as Dictionary).get("authored_tick")) != TYPE_INT:
+			continue
+		var canonical_event_id := String(canonical.get("id", ""))
+		canonical_event_ids.append(canonical_event_id)
+		canonical_ticks[canonical_event_id] = int((payload_value as Dictionary).authored_tick)
+	var previous_tick := live_tick
+	var seen_event_ids := {}
+	var activated_value = stage_controller.get("stage2_field_activated_event_ids", [])
+	if not (activated_value is Array):
+		return {"ok": false, "error": "Stage 2 live authored-event cursor is malformed"}
+	var activated_ids: Array = activated_value
+	if activated_ids != canonical_event_ids.slice(0, activated_ids.size()):
+		return {"ok": false, "error": "Stage 2 live authored-event cursor is not a canonical prefix"}
+	for event_index in range(stage_events.size()):
+		var event_value = stage_events[event_index]
 		if not (event_value is Dictionary):
-			_stage2_fail_closed("Stage 2 controller emitted a malformed stage event")
-			return false
+			return {"ok": false, "error": "Stage 2 controller emitted a malformed stage event"}
+		var event: Dictionary = event_value
+		var event_id := String(event.get("id", ""))
+		var payload_value = event.get("payload")
+		if event_id == "" or not (payload_value is Dictionary) or typeof((payload_value as Dictionary).get("authored_tick")) != TYPE_INT:
+			return {"ok": false, "error": "Stage 2 controller event clock evidence is malformed"}
+		var authored_tick := int((payload_value as Dictionary).authored_tick)
+		if not canonical_ticks.has(event_id) or int(canonical_ticks[event_id]) != authored_tick:
+			return {"ok": false, "error": "Stage 2 controller event clock evidence contradicts the authored schedule"}
+		if seen_event_ids.has(event_id) or event_id in activated_ids:
+			return {"ok": false, "error": "Stage 2 controller duplicated authored event clock evidence"}
+		var canonical_index := activated_ids.size() + event_index
+		if canonical_index >= canonical_event_ids.size() or event_id != String(canonical_event_ids[canonical_index]):
+			return {"ok": false, "error": "Stage 2 controller skipped or reordered authored event clock evidence"}
+		if authored_tick <= previous_tick:
+			return {"ok": false, "error": "Stage 2 controller authored event ticks are duplicated or unordered"}
+		seen_event_ids[event_id] = true
+		previous_tick = authored_tick
+	if previous_tick != controller_tick:
+		return {"ok": false, "error": "Stage 2 controller stage tick contradicts its final authored event tick"}
+	if typeof(runtime_tick_value) != TYPE_INT or int(runtime_tick_value) != controller_tick:
+		return {"ok": false, "error": "Stage 2 controller stage-tick evidence contradicts its live runtime"}
+	return {"ok": true, "mode": "events", "stage_tick": controller_tick}
+
+func _consume_stage2_controller_output(output: Dictionary) -> bool:
+	var clock_evidence := _stage2_controller_clock_evidence(output)
+	if not bool(clock_evidence.get("ok", false)):
+		_stage2_reject_field_callback(String(clock_evidence.get("error", "Stage 2 controller clock evidence was rejected")))
+		return false
+	var stage_events: Array = output.get("stage_events", [])
+	for event_value in stage_events:
 		var event: Dictionary = event_value
 		if not _stage2_begin_field_event(event):
 			return false
@@ -2312,9 +2478,14 @@ func _consume_stage2_controller_output(output: Dictionary) -> bool:
 					return false
 		if not _stage2_finish_field_event(event):
 			return false
-	if output.has("stage_tick") and stage_events.is_empty():
-		var next_field_tick := int(stage_controller.get("stage2_field_tick", -1)) + 1
-		if not _stage2_field_callback("advance", next_field_tick):
+		if int(stage_controller.get("stage2_field_tick", -1)) != int((event.payload as Dictionary).authored_tick):
+			_stage2_reject_field_callback("Stage 2 authored event callback did not exclusively own its field-tick advance")
+			return false
+	if String(clock_evidence.mode) == "events" and int(stage_controller.get("stage2_field_tick", -1)) != int(clock_evidence.stage_tick):
+		_stage2_reject_field_callback("Stage 2 field tick does not equal the controller tick after authored events")
+		return false
+	if String(clock_evidence.mode) == "advance":
+		if not _stage2_field_callback("advance", int(clock_evidence.stage_tick)):
 			return false
 	for warning_value in output.get("warnings", []):
 		var warning_records: Array = stage_controller.get("stage2_warning_records", [])
@@ -2378,47 +2549,51 @@ func _stage2_begin_field_event(event: Dictionary) -> bool:
 	if stage2_field_topology_runtime == null or not stage2_field_topology_runtime.is_configured() or not _stage2_validate_live_field_bindings():
 		_stage2_reject_field_callback("Stage 2 field event entry aggregate is unavailable or divergent")
 		return false
-	var live_runtime_snapshot: Dictionary = stage2_field_topology_runtime.capture_snapshot()
-	var live_world_snapshot: Dictionary = bullet_world.capture_state()
-	if live_runtime_snapshot.is_empty() or live_world_snapshot.is_empty():
-		_stage2_reject_field_callback("Stage 2 field event entry snapshot is unavailable")
-		return false
-	var candidate_runtime: RefCounted = Stage2FieldTopologyRuntime.new()
-	var field_contract: Dictionary = stage_director.stage2_field_topology_contract() if stage_director != null and stage_director.has_method("stage2_field_topology_contract") else {}
-	if field_contract.is_empty() or not candidate_runtime.configure(field_contract, gameplay_difficulty, String(stage_controller.get("stage2_field_run_uid", ""))) or not candidate_runtime.restore_snapshot(live_runtime_snapshot):
-		_stage2_reject_field_callback("Stage 2 field event entry could not restore a disposable runtime")
-		return false
-	var candidate_world: RefCounted = BulletWorld.new()
-	var world_restore: Dictionary = candidate_world.restore_state(live_world_snapshot)
-	if not bool(world_restore.get("ok", false)):
-		_stage2_reject_field_callback("Stage 2 field event entry could not restore a disposable BulletWorld")
+	var candidate_pair := _stage2_create_field_owner_pair_from(stage2_field_topology_runtime, bullet_world)
+	if candidate_pair.is_empty():
+		_stage2_reject_field_callback("Stage 2 field event entry could not build distinct disposable owners")
 		return false
 	var live_stage_controller := stage_controller
 	var live_bullet_world := bullet_world
 	var live_field_runtime := stage2_field_topology_runtime
+	var live_scratch_world := stage2_field_scratch_bullet_world
+	var live_scratch_runtime := stage2_field_topology_scratch_runtime
 	var live_enemies := enemies
+	var live_boss := boss
 	var live_game_state: Variant = game_manager_ref.state if game_manager_ref else null
 	var live_boss_alive := boss_alive
 	stage_controller = stage_controller.duplicate(true)
-	bullet_world = candidate_world
-	stage2_field_topology_runtime = candidate_runtime
+	bullet_world = candidate_pair.live_world
+	stage2_field_topology_runtime = candidate_pair.live_runtime
+	stage2_field_scratch_bullet_world = candidate_pair.scratch_world
+	stage2_field_topology_scratch_runtime = candidate_pair.scratch_runtime
 	enemies = enemies.duplicate(true)
+	boss = boss.duplicate(true)
 	_sync_bullet_world_compatibility_views()
 	var candidate_valid := _stage2_apply_field_event_entry(event_id, authored_tick)
+	candidate_valid = candidate_valid and stage2_field_topology_runtime != stage2_field_topology_scratch_runtime and bullet_world != stage2_field_scratch_bullet_world
 	var candidate_error := String(stage_controller.get("stage2_field_hard_error", ""))
 	var candidate_stage_controller := stage_controller
-	candidate_world = bullet_world
-	candidate_runtime = stage2_field_topology_runtime
+	var candidate_world := bullet_world
+	var candidate_runtime := stage2_field_topology_runtime
+	var candidate_scratch_world := stage2_field_scratch_bullet_world
+	var candidate_scratch_runtime := stage2_field_topology_scratch_runtime
 	var candidate_enemies := enemies
+	var candidate_boss := boss
+	var candidate_boss_alive := boss_alive
+	var candidate_game_state: Variant = game_manager_ref.state if game_manager_ref else null
 	stage_controller = live_stage_controller
 	bullet_world = live_bullet_world
 	stage2_field_topology_runtime = live_field_runtime
+	stage2_field_scratch_bullet_world = live_scratch_world
+	stage2_field_topology_scratch_runtime = live_scratch_runtime
 	enemies = live_enemies
+	boss = live_boss
+	boss_alive = live_boss_alive
+	if game_manager_ref:
+		game_manager_ref.state = live_game_state
 	_sync_bullet_world_compatibility_views()
 	if not candidate_valid:
-		boss_alive = live_boss_alive
-		if game_manager_ref:
-			game_manager_ref.state = live_game_state
 		_stage2_reject_field_callback(candidate_error if candidate_error != "" else "Stage 2 field event entry rejected its disposable aggregate")
 		return false
 	# Reconciliation callbacks, activation, Main source flags, UID bindings, and
@@ -2426,7 +2601,13 @@ func _stage2_begin_field_event(event: Dictionary) -> bool:
 	stage_controller = candidate_stage_controller
 	bullet_world = candidate_world
 	stage2_field_topology_runtime = candidate_runtime
+	stage2_field_scratch_bullet_world = candidate_scratch_world
+	stage2_field_topology_scratch_runtime = candidate_scratch_runtime
 	enemies = candidate_enemies
+	boss = candidate_boss
+	boss_alive = candidate_boss_alive
+	if game_manager_ref:
+		game_manager_ref.state = candidate_game_state
 	_sync_bullet_world_compatibility_views()
 	return true
 
@@ -2594,19 +2775,16 @@ func _stage2_field_callback(kind: String, stage_tick: int, payload: Dictionary =
 	if not _stage2_validate_live_field_bindings():
 		_stage2_reject_field_callback("Stage 2 field runtime, UID binding, and BulletWorld diverged before callback")
 		return false
-	var live_runtime_snapshot: Dictionary = stage2_field_topology_runtime.capture_snapshot()
-	if live_runtime_snapshot.is_empty():
-		_stage2_reject_field_callback("Stage 2 field topology runtime snapshot is unavailable")
+	if not _stage2_ensure_field_scratch_owners():
+		_stage2_reject_field_callback("Stage 2 field callback scratch owners are unavailable or incompatible")
 		return false
-	var candidate_runtime: RefCounted = Stage2FieldTopologyRuntime.new()
-	var field_contract: Dictionary = stage_director.stage2_field_topology_contract() if stage_director != null and stage_director.has_method("stage2_field_topology_contract") else {}
-	if field_contract.is_empty() or not candidate_runtime.configure(field_contract, gameplay_difficulty, String(stage_controller.get("stage2_field_run_uid", ""))) or not candidate_runtime.restore_snapshot(live_runtime_snapshot):
-		_stage2_reject_field_callback("Stage 2 field callback could not restore a disposable runtime")
+	var candidate_runtime: RefCounted = stage2_field_topology_scratch_runtime
+	var candidate_world: RefCounted = stage2_field_scratch_bullet_world
+	if not candidate_runtime.trusted_copy_mutable_state_from(stage2_field_topology_runtime):
+		_stage2_reject_field_callback("Stage 2 field callback could not copy live mutable runtime state into scratch")
 		return false
-	var candidate_world: RefCounted = BulletWorld.new()
-	var world_restore: Dictionary = candidate_world.restore_state(bullet_world.capture_state())
-	if not bool(world_restore.get("ok", false)):
-		_stage2_reject_field_callback("Stage 2 field callback could not restore a disposable BulletWorld")
+	if not candidate_world.trusted_copy_mutable_state_from(bullet_world):
+		_stage2_reject_field_callback("Stage 2 field callback could not copy live mutable BulletWorld state into scratch")
 		return false
 	var candidate_stage_controller: Dictionary = stage_controller.duplicate(true)
 	var sequence := int(stage_controller.get("stage2_field_event_sequence", -1)) + 1
@@ -2637,35 +2815,30 @@ func _stage2_field_callback(kind: String, stage_tick: int, payload: Dictionary =
 	if not _stage2_preflight_field_output(output, stage_tick, sequence, candidate_runtime, candidate_world, candidate_stage_controller):
 		_stage2_reject_field_callback("Stage 2 field callback output failed transactional preflight: %s" % kind)
 		return false
-	# Apply only to disposable owners. The live runtime, cursor, UID ledger,
-	# bindings, and slots remain untouched until every output has been consumed.
+	# Apply only to the copied scratch owners. The previous live pair becomes the
+	# next scratch pair only after the candidate aggregate is proven coherent.
 	var live_stage_controller := stage_controller
 	var live_bullet_world := bullet_world
 	var live_field_runtime := stage2_field_topology_runtime
 	stage_controller = candidate_stage_controller
 	bullet_world = candidate_world
 	stage2_field_topology_runtime = candidate_runtime
+	stage2_field_scratch_bullet_world = live_bullet_world
+	stage2_field_topology_scratch_runtime = live_field_runtime
 	_sync_bullet_world_compatibility_views()
 	var consumed := _consume_stage2_field_output(output)
 	if kind == "advance":
 		stage_controller["stage2_field_tick"] = stage_tick
 	var candidate_valid := consumed and _stage2_validate_live_field_bindings()
-	candidate_stage_controller = stage_controller
-	candidate_world = bullet_world
-	candidate_runtime = stage2_field_topology_runtime
-	stage_controller = live_stage_controller
-	bullet_world = live_bullet_world
-	stage2_field_topology_runtime = live_field_runtime
-	_sync_bullet_world_compatibility_views()
 	if not candidate_valid:
+		stage_controller = live_stage_controller
+		bullet_world = live_bullet_world
+		stage2_field_topology_runtime = live_field_runtime
+		stage2_field_scratch_bullet_world = candidate_world
+		stage2_field_topology_scratch_runtime = candidate_runtime
+		_sync_bullet_world_compatibility_views()
 		_stage2_reject_field_callback("Stage 2 field callback could not commit its isolated output: %s" % kind)
 		return false
-	# No user callback can observe the assignment sequence, so these three
-	# validated owners become the live aggregate as one synchronous commit.
-	stage_controller = candidate_stage_controller
-	bullet_world = candidate_world
-	stage2_field_topology_runtime = candidate_runtime
-	_sync_bullet_world_compatibility_views()
 	return true
 
 func _stage2_preflight_field_output(output: Dictionary, expected_stage_tick: int, expected_sequence: int, candidate_runtime: RefCounted, candidate_world: RefCounted, candidate_stage_controller: Dictionary) -> bool:

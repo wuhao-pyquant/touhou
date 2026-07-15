@@ -106,6 +106,7 @@ var _budget_by_event: Dictionary = {}
 var _difficulty := ""
 var _stage_run_uid := ""
 var _stage_cap := 0
+var _configured_contract_digest := ""
 var _configured := false
 var _validation_errors: Array[String] = []
 var _hard_error_code := ""
@@ -125,6 +126,8 @@ var _defeated_sources: Dictionary = {}
 var _grazed_uids: Dictionary = {}
 var _hard_state: Dictionary = {}
 var _telemetry_counts: Dictionary = {}
+var _configure_generation := 0
+var _update_in_progress := false
 
 func configure(contract: Dictionary, difficulty: String, stage_run_uid: String) -> bool:
 	_clear_configuration()
@@ -152,7 +155,9 @@ func configure(contract: Dictionary, difficulty: String, stage_run_uid: String) 
 		var budget: Dictionary = budget_value
 		_budget_by_event[String(budget.event_id)] = budget
 	_stage_cap = _maximum_stage_cap()
+	_configured_contract_digest = CONTRACT_DIGEST
 	_configured = true
+	_configure_generation += 1
 	return reset()
 
 func is_configured() -> bool:
@@ -176,9 +181,49 @@ func hard_error_snapshot() -> Dictionary:
 func validation_errors() -> Array[String]:
 	return _validation_errors.duplicate()
 
+func is_trusted_copy_compatible_with(source) -> bool:
+	return (
+		source is RefCounted
+		and is_instance_valid(source)
+		and source != self
+		and source.get_script() == get_script()
+		and _configured
+		and bool(source._configured)
+		and _configured_contract_digest == CONTRACT_DIGEST
+		and _configured_contract_digest == String(source._configured_contract_digest)
+		and _difficulty == String(source._difficulty)
+		and _stage_run_uid == String(source._stage_run_uid)
+		and _stage_cap == int(source._stage_cap)
+	)
+
+func trusted_copy_mutable_state_from(source) -> bool:
+	# This is an internal owner-to-owner transfer. Configuration was already
+	# validated when each owner was built; persistence must continue to use the
+	# public validate_snapshot/restore_snapshot path below.
+	if not is_trusted_copy_compatible_with(source) or _update_in_progress or bool(source._update_in_progress):
+		return false
+	_hard_error_code = String(source._hard_error_code)
+	_hard_error_path = String(source._hard_error_path)
+	_hard_error_message = String(source._hard_error_message)
+	_schedule_cursor_tick = int(source._schedule_cursor_tick)
+	_last_stage_tick = int(source._last_stage_tick)
+	_last_event_sequence = int(source._last_event_sequence)
+	_current_event_id = String(source._current_event_id)
+	_source_states = (source._source_states as Dictionary).duplicate(true)
+	_active_bullets = (source._active_bullets as Dictionary).duplicate(true)
+	_used_uids = (source._used_uids as Dictionary).duplicate(true)
+	_processed_callbacks = (source._processed_callbacks as Dictionary).duplicate(true)
+	_activated_events = (source._activated_events as Dictionary).duplicate(true)
+	_defeated_sources = (source._defeated_sources as Dictionary).duplicate(true)
+	_grazed_uids = (source._grazed_uids as Dictionary).duplicate(true)
+	_hard_state = (source._hard_state as Dictionary).duplicate(true)
+	_telemetry_counts = (source._telemetry_counts as Dictionary).duplicate(true)
+	return true
+
 func reset() -> bool:
 	if not _configured:
 		return false
+	_update_in_progress = false
 	_schedule_cursor_tick = -1
 	_last_stage_tick = -1
 	_last_event_sequence = -1
@@ -472,6 +517,7 @@ func telemetry_snapshot() -> Dictionary:
 	grazed_uids.sort()
 	return {
 		"configured": _configured,
+		"configure_generation": _configure_generation,
 		"hard_error": hard_error_snapshot(),
 		"difficulty": _difficulty,
 		"stage_run_uid": _stage_run_uid,
@@ -1039,6 +1085,10 @@ func _begin_callback(kind: String, stage_tick: int, event_sequence: int, payload
 	if has_hard_error():
 		output.error = last_error()
 		return {"ok": false, "duplicate": false}
+	if _update_in_progress:
+		output.error = "runtime_update_in_progress"
+		return {"ok": false, "duplicate": false}
+	_update_in_progress = true
 	if stage_tick < 0 or stage_tick > MAX_STAGE_TICK or event_sequence < 0:
 		_runtime_fail("callback_key_invalid", "callback.%s" % kind, "tick or event sequence is outside the supported range", output)
 		return {"ok": false, "duplicate": false}
@@ -1603,6 +1653,7 @@ func _finalize_output(output: Dictionary) -> Dictionary:
 		output.ok = false
 		output.error = last_error()
 	output["telemetry_snapshot"] = telemetry_snapshot()
+	_update_in_progress = false
 	return output
 
 func _note_duplicate(output: Dictionary, kind: String, identity: String) -> void:
@@ -2348,8 +2399,10 @@ func _clear_configuration() -> void:
 	_difficulty = ""
 	_stage_run_uid = ""
 	_stage_cap = 0
+	_configured_contract_digest = ""
 	_configured = false
 	_validation_errors.clear()
 	_hard_error_code = ""
 	_hard_error_path = ""
 	_hard_error_message = ""
+	_update_in_progress = false

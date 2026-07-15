@@ -68,6 +68,50 @@ func reset() -> void:
 	spawn_cursor = 0
 	_update_in_progress = false
 
+func is_trusted_copy_compatible_with(source) -> bool:
+	return (
+		source is RefCounted
+		and is_instance_valid(source)
+		and source != self
+		and source.get_script() == get_script()
+		and hard_capacity == int(source.hard_capacity)
+		and growth_size == int(source.growth_size)
+	)
+
+func trusted_copy_mutable_state_from(source) -> bool:
+	# Trusted copies are only for preconfigured internal owners. Snapshot restore
+	# remains the validating persistence boundary.
+	if not is_trusted_copy_compatible_with(source) or _update_in_progress or bool(source._update_in_progress):
+		return false
+	var source_size: int = source.pool.size()
+	for source_bullet in source.pool:
+		if not (source_bullet is Dictionary):
+			return false
+	if pool.size() < source_size:
+		for _index in range(pool.size(), source_size):
+			pool.append(make_bullet_state())
+	elif pool.size() > source_size:
+		pool.resize(source_size)
+	for bullet_index in range(source_size):
+		var destination_bullet: Dictionary = pool[bullet_index]
+		var source_bullet: Dictionary = source.pool[bullet_index]
+		if is_same(destination_bullet, source_bullet):
+			destination_bullet = make_bullet_state()
+		destination_bullet.clear()
+		for key in source_bullet.keys():
+			var value = source_bullet[key]
+			destination_bullet[key] = value.duplicate(true) if value is Array or value is Dictionary else value
+		pool[bullet_index] = destination_bullet
+	active_indices.clear()
+	for bullet_index in source.active_indices:
+		active_indices.append(int(bullet_index))
+	_next_active_indices.clear()
+	for bullet_index in source._next_active_indices:
+		_next_active_indices.append(int(bullet_index))
+	_membership = source._membership.duplicate()
+	spawn_cursor = int(source.spawn_cursor)
+	return true
+
 func rebuild_active_order() -> void:
 	active_indices.clear()
 	_membership.resize(pool.size())

@@ -541,7 +541,6 @@ func _is_positive_integral_number(value: Variant) -> bool:
 func _empty_output() -> Dictionary:
 	return {
 		"ok": true,
-		"stage_tick": int(_stage_runtime.telemetry_snapshot().get("stage_tick", 0)) if _stage_runtime != null else 0,
 		"phase_tick": active_phase_tick(),
 		"encounter_kind": _encounter_kind,
 		"active_phase_id": active_phase_id(),
