@@ -2030,7 +2030,7 @@ func _validate_bullet_snapshot(uid: String, bullet: Dictionary, payload: Diction
 		return false
 	if bullet.first_reflection_tick != expected_first or bullet.stage2_first_reflection_tick != expected_first or bullet.last_reflection_surface_id != expected_last or bullet.stage2_last_reflection_surface_id != expected_last:
 		return false
-	var was_grazed := uid in payload.grazed_uids
+	var was_grazed: bool = uid in payload.grazed_uids
 	if was_grazed:
 		if typeof(bullet.graze_tick) != TYPE_INT or expected_reflections < 1 or int(bullet.graze_tick) < int(expected_first) or int(bullet.graze_tick) > int(payload.last_stage_tick):
 			return false
@@ -2093,9 +2093,9 @@ func _historical_binding_reachable(binding: Dictionary, payload: Dictionary, spa
 	var current_selected := String(current_state.selected_mirror_spawn_id)
 	if not historical_selected.is_empty() and historical_selected != current_selected:
 		return false
-	var red_defeated := "s2_b13_red_booth_master" in payload.defeated_sources
+	var red_defeated: bool = "s2_b13_red_booth_master" in payload.defeated_sources
 	var red_tick := int((payload.source_states["s2_b13_red_booth_master"] as Dictionary).removed_tick)
-	var blue_defeated := "s2_b13_blue_booth_master" in payload.defeated_sources
+	var blue_defeated: bool = "s2_b13_blue_booth_master" in payload.defeated_sources
 	var blue_tick := int((payload.source_states["s2_b13_blue_booth_master"] as Dictionary).removed_tick)
 	if String(binding.blue_emission_state_id) == "post_red":
 		if _difficulty != "hard" or not red_defeated or red_tick > spawn_tick:
