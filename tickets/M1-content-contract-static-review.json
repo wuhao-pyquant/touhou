@@ -1,0 +1,37 @@
+{
+  "id": "M1-content-contract-static-review",
+  "objective": "Perform an independent strictly read-only static gate for candidate f96c6faa6b3a718dea234fdacbc51da430b05ffc against base f787f8fdee06a72024db0712a17e9f96ca814b57. Determine whether this candidate actually completes only the M1 content-contract slice without pretending that M2-M5 playable phase implementation is done. Verify all six stages and all 40 phases are loaded in frozen encounter order; the 26/14 split, 108 beats, three segments, six fought midboss declarations, six boss-front climaxes, warning minima, movement/timeline data, failure/capture fields, deterministic streams, and per-phase non-numeric Hard topology are structurally real. Audit the additive M0 compatibility of StageTimeline, PatternDefinition, BossPhaseDefinition, DifficultyProfile, and StageDirector. In particular, decide whether every M1 BossPhaseDefinition still satisfies the frozen interface requirement for a usable pattern ID plus positive HP and time rather than bypassing those checks; whether PatternDefinition exposes enough authored fields for later content implementation without silently omitting required motion/color/warning/difficulty semantics; and whether the catalog's canonical seven-part fingerprint plus retained legacy six-part source fingerprint truthfully resolves or improperly masks drift in the frozen design artifact. Verify canonical serialization is unambiguous and stable, all 40 fingerprints are structurally distinct, stream seed derivation is stable/nonzero/side-effect-free, invalid or malformed JSON/data cannot be accepted partially as a valid catalog, and additive StageDirector queries cannot alter current playable stage data. Review the focused assertion for real behavioral coverage and likely Godot 4.7 parse/runtime correctness, including type inference and API signatures. Do not edit files, run tests, launch Godot, or treat the implementation report's claims as executed evidence. Return GATE: APPROVE only if exactly one guarded execution of tests/assert_m1_content_contracts.gd is safe and sufficient before integration; otherwise return GATE: REPAIR with exact file/line blockers and the smallest correction, authorizing zero Godot launches.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": [
+    "**"
+  ],
+  "dependency_commit": "f96c6faa6b3a718dea234fdacbc51da430b05ffc",
+  "acceptance_commands": [
+    "if((git rev-parse HEAD).Trim() -ne 'f96c6faa6b3a718dea234fdacbc51da430b05ffc'){throw 'Wrong candidate HEAD'}; Write-Host 'STATIC_REVIEW_HEAD=pass'",
+    "$changed=@(git diff --name-only f787f8fdee06a72024db0712a17e9f96ca814b57..HEAD); $expected=@('scripts/content/boss_phase_definition.gd','scripts/content/difficulty_profile.gd','scripts/content/m1_content_catalog.gd','scripts/content/pattern_definition.gd','scripts/content/stage_timeline.gd','scripts/runtime/stage_director.gd','tests/assert_m1_content_contracts.gd'); if(Compare-Object $expected $changed){throw \"Unexpected candidate paths: $($changed -join ',')\"}; Write-Host 'STATIC_REVIEW_SCOPE=pass'",
+    "git diff f787f8fdee06a72024db0712a17e9f96ca814b57..HEAD --check",
+    "if(git status --porcelain){throw 'Reviewer worktree is not clean'}; Write-Host 'STATIC_REVIEW_CLEAN=pass'",
+    "if(@(Get-Process -ErrorAction SilentlyContinue | Where-Object ProcessName -Like 'Godot*').Count-ne 0){throw 'Godot process exists during read-only review'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Begin the summary with GATE: APPROVE or GATE: REPAIR and explicitly state that no Godot command or test was run",
+    "Map every required M1 content field to exact source and test lines, separating loaded design declarations from future playable implementation",
+    "Give a specific verdict on positive HP/time/pattern identity, motion/color/warning/difficulty coverage, and whether any M1 validation branch incorrectly weakens the existing BossPhaseDefinition contract",
+    "Give a specific verdict on the seven-part runtime fingerprint versus the six-part frozen source fingerprint, including whether source drift is rejected or merely normalized away",
+    "Audit malformed input handling, partial catalog states, deterministic seed derivation, M0 compatibility, StageDirector isolation, and focused-test parse/runtime risks",
+    "For every blocker cite exact file/line, severity, mechanism, and smallest bounded remediation; do not request playable phase implementation or a plan rewrite",
+    "On APPROVE authorize exactly one serial guarded run of tests/assert_m1_content_contracts.gd and no broader suite; on REPAIR authorize zero Godot launches",
+    "Report actual runtime identity, all acceptance exit codes, zero changed files, and Godot process count zero"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "Implementation run 20260715T035745Z-M1-content-contract-runtime-core_simulation-40b31417 reports core_simulation / gpt-5.6-sol / xhigh, seven in-scope paths, no Godot launch, and no policy violation. Treat it only as supplied evidence.",
+    "The frozen v3 interface says PatternDefinition covers emitter composition, phase timeline, bullet kind/motion/color/warning/deterministic stream and Normal/Hard parameters; BossPhaseDefinition covers unique pattern ID, Boss movement, HP/time, capture condition, dialogue/performance hooks; M1 completion specifically requires all 40 phases to have unique ID, warning, movement, failure condition, and difficulty variant.",
+    "The immutable JSON structure_fingerprint strings currently serialize grammar, events, movement, Normal topology, Hard transformation and warning, while structure_fingerprint_input also contains role-qualified emitter composition. The candidate introduces a seven-part runtime fingerprint and retains the source string as legacy evidence. Decide whether that is an honest compatibility seam or a contract defect that must be repaired.",
+    "M1 does not require the 40 patterns to be playable yet. M2 is the Stage 2 golden slice and M3-M5 implement the rest. Do not fail this candidate merely because it leaves projectile execution for those milestones.",
+    "Windows read-only agents must never launch Godot. Read code/data/diffs only. Current main-worktree audio/**/*.import modifications are user state outside this detached review and must not be inspected, reset, staged, or described as candidate changes."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
