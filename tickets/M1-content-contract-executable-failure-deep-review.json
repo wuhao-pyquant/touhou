@@ -1,0 +1,35 @@
+{
+  "id": "M1-content-contract-executable-failure-deep-review",
+  "objective": "Perform the required deep, strictly read-only adjudication after the repaired M1 content-contract candidate 720ae9848a8690c94320d4fe4668c1b481971802 passed static review but its single guarded Godot assertion failed at parse time. Inspect the exact evidence C:/Users/e/AppData/Local/Temp/godot-m1-720ae98-content-contracts-actual.log.stderr and tests/assert_m1_content_contracts.gd. The observed failure is four Godot 4.7 type-inference Parse Errors at lines 299-302 for seed_a, seed_a_repeat, seed_other_stream, and seed_other_run, all returned by an untyped catalog call. Determine whether this is a bounded test-only typing defect or evidence of a broader architecture/runtime flaw. Statistically inspect the full focused assertion and directly preloaded M1 content scripts for adjacent untyped inference sites that Godot 4.7 would reject after these four lines are fixed; do not invent speculative rewrites. Confirm the guard recorded processExitCode 1, FatalOutput, zero pre/post project Godot processes, and no C++ backtrace, signal 11, access violation, CrashHandlerException, leak warning, or Windows application-error popup evidence. Do not edit files, run tests, or launch Godot. Return GATE: REPAIR_AUTHORIZED only if one second repair by the original core_simulation Agent in its original session/worktree should be permitted, naming the exact smallest annotations and authorizing exactly one subsequent guarded rerun of tests/assert_m1_content_contracts.gd. Otherwise return GATE: BLOCK with the concrete reason and authorize zero Godot launches.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": [
+    "**"
+  ],
+  "dependency_commit": "720ae9848a8690c94320d4fe4668c1b481971802",
+  "acceptance_commands": [
+    "if((git rev-parse HEAD).Trim() -ne '720ae9848a8690c94320d4fe4668c1b481971802'){throw 'Wrong candidate HEAD'}; Write-Host 'DEEP_REVIEW_HEAD=pass'",
+    "if(-not (Test-Path 'C:\\Users\\e\\AppData\\Local\\Temp\\godot-m1-720ae98-content-contracts-actual.log.stderr')){throw 'Missing executable failure evidence'}; $text=Get-Content 'C:\\Users\\e\\AppData\\Local\\Temp\\godot-m1-720ae98-content-contracts-actual.log.stderr' -Raw; foreach($line in 299..302){if($text -notmatch \"assert_m1_content_contracts.gd:$line\"){throw \"Missing parse evidence line $line\"}}; if($text -match 'CrashHandlerException|C\\+\\+ backtrace|signal 11|access violation|0xC0000005|ObjectDB instances leaked|resources still in use'){throw 'Evidence contains a native crash/leak marker'}; Write-Host 'EXECUTABLE_EVIDENCE=pass'",
+    "git diff f787f8fdee06a72024db0712a17e9f96ca814b57..HEAD --check",
+    "if(git status --porcelain){throw 'Reviewer worktree is not clean'}; Write-Host 'DEEP_REVIEW_CLEAN=pass'",
+    "if(@(Get-Process -ErrorAction SilentlyContinue | Where-Object ProcessName -Like 'Godot*').Count-ne 0){throw 'Godot process exists during deep review'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Begin the summary with GATE: REPAIR_AUTHORIZED or GATE: BLOCK and explicitly state that no Godot command or test was run",
+    "Classify the failure as test-only, production-contract, or architectural, citing exact evidence and file/line locations",
+    "List every exact annotation or adjacent correction authorized; prohibit all other production/content/plan changes unless a concrete blocker requires them",
+    "State whether one subsequent guarded rerun of tests/assert_m1_content_contracts.gd is authorized, and authorize no broader test suite",
+    "Confirm native-crash markers, popup evidence, and residual project Godot process count",
+    "Report actual runtime identity, all acceptance exit codes, zero changed files, and residual risk"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "Prior static approval is .agent-runs/20260715T050707Z-M1-content-contract-r1-static-review-danmaku_director-467281de/final.json. It authorized exactly one guarded assertion and found B1-B4 closed.",
+    "The first guard invocation with duplicated reserved --headless/--path options failed InvalidInput before launching Godot: processExitCode null, before/after process count zero, stderr zero. It does not consume the authorized engine run.",
+    "The actual guarded run used only --script res://tests/assert_m1_content_contracts.gd and failed FatalOutput with processExitCode 1 after 4.2 seconds. It left zero project Godot processes and produced only the four parse errors plus the expected failed-script-load line.",
+    "If a second repair is authorized, repository policy requires the original core_simulation identity, session, worktree, branch and ticket to continue; no replacement Agent or worktree may be created. The release lead will separately enforce the profile/ticket continuation authorization.",
+    "Windows read-only agents must never launch Godot. Current main-worktree audio/**/*.import modifications are user state outside this detached review and must not be inspected, reset, staged, or described as candidate changes."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
