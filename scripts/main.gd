@@ -62,7 +62,8 @@ const HUD_HEIGHT := 78.0
 const GAMEPLAY_TOP := 82.0
 const BULLET_POOL_GROWTH := 2048
 const MAX_COMBAT_EFFECTS := 96
-const SIMULATION_SNAPSHOT_VERSION := 3
+const SIMULATION_SNAPSHOT_VERSION := 2
+const STAGE2_SIMULATION_SNAPSHOT_VERSION := 3
 const REPLAY_RUNTIME_MODES := ["none", "recording", "playback"]
 const GAME_MANAGER_STATE_FIELDS := [
 	"score", "graze", "shared_power", "bullet_type", "lives", "bombs",
@@ -1138,7 +1139,6 @@ func capture_simulation_state() -> Dictionary:
 		"current_stage_local": current_stage_local,
 		"stage_timer": stage_timer,
 		"stage_controller": stage_controller.duplicate(true),
-		"stage2_controller": stage2_encounter_controller.capture_snapshot() if stage2_encounter_controller != null and stage2_encounter_controller.is_configured() else {},
 		"player": {
 			"position": Vector2(player_x, player_y),
 			"last_move_dir": player_last_move_dir,
@@ -1164,6 +1164,9 @@ func capture_simulation_state() -> Dictionary:
 		"combat_effects": combat_effects.duplicate(true),
 		"replay": _capture_replay_runtime_state(),
 	}
+	if current_stage_local == 2:
+		snapshot["version"] = STAGE2_SIMULATION_SNAPSHOT_VERSION
+		snapshot["stage2_controller"] = stage2_encounter_controller.capture_snapshot() if stage2_encounter_controller != null and stage2_encounter_controller.is_configured() else {}
 	if _gameplay_ledger_is_nondefault():
 		snapshot["gameplay_ledger"] = _capture_gameplay_ledger_state()
 	return snapshot
@@ -1331,12 +1334,10 @@ func _validate_replay_runtime_snapshot(replay_state: Dictionary) -> bool:
 	return probe.validate_runtime_state(data)
 
 func validate_simulation_state(snapshot: Dictionary) -> bool:
-	if int(snapshot.get("version", -1)) != SIMULATION_SNAPSHOT_VERSION:
-		return false
 	for section in ["clock", "rng", "input", "manager", "player", "boss", "bullets", "replay"]:
 		if not (snapshot.get(section) is Dictionary):
 			return false
-	for section in ["stage_controller", "stage2_controller"]:
+	for section in ["stage_controller"]:
 		if not (snapshot.get(section) is Dictionary):
 			return false
 	for section in ["enemies", "items", "combat_effects"]:
@@ -1350,8 +1351,13 @@ func validate_simulation_state(snapshot: Dictionary) -> bool:
 		return false
 	if typeof(snapshot.get("current_stage_local")) != TYPE_INT or int(snapshot.current_stage_local) < 1:
 		return false
-	if int(snapshot.manager.get("current_stage", -1)) != int(snapshot.current_stage_local):
-		return false
+	var is_stage2_snapshot := int(snapshot.current_stage_local) == 2
+	if is_stage2_snapshot:
+		if int(snapshot.get("version", -1)) != STAGE2_SIMULATION_SNAPSHOT_VERSION or not (snapshot.get("stage2_controller") is Dictionary):
+			return false
+	else:
+		if int(snapshot.get("version", -1)) != SIMULATION_SNAPSHOT_VERSION or snapshot.has("stage2_controller"):
+			return false
 	if not _is_valid_snapshot_number(snapshot.get("stage_timer"), 0.0):
 		return false
 	var clock_probe := FixedTickClock.new()
@@ -1368,8 +1374,10 @@ func validate_simulation_state(snapshot: Dictionary) -> bool:
 		return false
 	if not _validate_manager_snapshot(snapshot.manager) or not _validate_replay_runtime_snapshot(snapshot.replay):
 		return false
-	var stage2_snapshot: Dictionary = snapshot.stage2_controller
-	if int(snapshot.current_stage_local) == 2:
+	if is_stage2_snapshot:
+		if int(snapshot.manager.get("current_stage", -1)) != 2:
+			return false
+		var stage2_snapshot: Dictionary = snapshot.stage2_controller
 		if stage2_snapshot.is_empty() or not stage_director.has_method("stage2_package"):
 			return false
 		var stage2_probe := Stage2EncounterController.new()
@@ -1385,9 +1393,6 @@ func validate_simulation_state(snapshot: Dictionary) -> bool:
 			var boss_snapshot_state: Dictionary = snapshot.boss.get("state", {})
 			if String(boss_snapshot_state.get("stage2_phase_id", "")) != String(active_definition.get("id", "")):
 				return false
-	else:
-		if not stage2_snapshot.is_empty():
-			return false
 	if snapshot.has("gameplay_ledger") and (not (snapshot.gameplay_ledger is Dictionary) or not _validate_gameplay_ledger_snapshot(snapshot.gameplay_ledger)):
 		return false
 	var player_state: Dictionary = snapshot.player
@@ -1429,7 +1434,7 @@ func restore_simulation_state(snapshot: Dictionary) -> bool:
 	if not validate_simulation_state(snapshot):
 		return false
 	var restored_stage2_controller := Stage2EncounterController.new()
-	if not snapshot.stage2_controller.is_empty():
+	if int(snapshot.current_stage_local) == 2:
 		if not restored_stage2_controller.configure(stage_director.stage2_package(), String(snapshot.gameplay_difficulty), int(snapshot.gameplay_seed)):
 			return false
 		if not restored_stage2_controller.restore_snapshot(snapshot.stage2_controller):

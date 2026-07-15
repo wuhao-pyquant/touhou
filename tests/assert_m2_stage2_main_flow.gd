@@ -16,6 +16,29 @@ const PHASE_IDS := [
 	"stage_2_boss_nonspell_1", "stage_2_boss_spell_1", "stage_2_boss_spell_2", "stage_2_boss_spell_3",
 ]
 const FIXED_PLAYER_POSITION := Vector2(360.0, 720.0)
+const LEGACY_SNAPSHOT_KEYS := [
+	"version", "tick", "gameplay_seed", "gameplay_difficulty", "clock", "rng", "input", "manager",
+	"current_stage_local", "stage_timer", "stage_controller", "player", "boss_alive", "boss", "bullets",
+	"enemies", "items", "combat_effects", "replay",
+]
+
+class LegacyReplayStageDirector:
+	extends RefCounted
+
+	func stage_controller(_stage_index: int) -> Dictionary:
+		return {"boss_time": 999999.0, "boss_spawned": false, "triggered_waves": {}}
+
+	func due_wave_events(_stage_index: int, _timer: int, _triggered: Dictionary) -> Array:
+		return []
+
+	func boss_cards(_stage_index: int) -> Array:
+		return [{"id": "fixture_phase", "name": "Fixture Phase", "hp": 500.0, "time": 30.0, "kind": "spell", "pattern": "moonlight"}]
+
+	func boss_definition(_stage_index: int) -> Dictionary:
+		return {"id": "fixture_boss"}
+
+	func pattern_aliases() -> Dictionary:
+		return {}
 
 var failed := false
 
@@ -223,6 +246,87 @@ func _free_main(main: Node) -> void:
 	if is_instance_valid(manager):
 		manager.free()
 
+func _sorted_snapshot_keys(snapshot: Dictionary) -> Array:
+	var keys: Array = snapshot.keys()
+	keys.sort()
+	return keys
+
+func _expected_legacy_snapshot_keys() -> Array:
+	var keys: Array = LEGACY_SNAPSHOT_KEYS.duplicate()
+	keys.sort()
+	return keys
+
+func _new_legacy_replay_main() -> Node:
+	var main = MainScript.new()
+	main.stage_director = LegacyReplayStageDirector.new()
+	main.audio_manager_ref = null
+	main.bullet_world.configure(64, 128, 16)
+	main._sync_bullet_world_compatibility_views()
+	return main
+
+func _configure_legacy_replay_interaction(main: Node) -> void:
+	main.stage_controller = {"boss_time": 999999.0, "boss_spawned": false, "triggered_waves": {}}
+	main._spawn_enemy(360.0, 450.0, 2.0, "aimed", "straight", 0.0, 0.0)
+	main.enemies[0].shoot_timer = 99999.0
+
+func _assert_legacy_snapshot_and_replay_hash() -> void:
+	var main := _new_main("normal", 7001)
+	main._set_active_stage(1)
+	main._load_stage(1)
+	main.game_manager_ref.state = "stage"
+	var snapshot: Dictionary = main.capture_simulation_state()
+	_check_equal(int(snapshot.get("version", -1)), 2, "Legacy stage snapshot version drifted from v2.")
+	_check(not snapshot.has("stage2_controller"), "Legacy stage snapshot gained a Stage 2 field.")
+	_check_equal(_sorted_snapshot_keys(snapshot), _expected_legacy_snapshot_keys(), "Legacy stage snapshot field shape changed.")
+	_check(main.validate_simulation_state(snapshot), "Legacy v2 snapshot no longer validates.")
+	var legacy_hash := main.simulation_state_hash()
+	var before_rejection := legacy_hash
+	var forged_extension := snapshot.duplicate(true)
+	forged_extension["stage2_controller"] = {}
+	_check(not main.restore_simulation_state(forged_extension), "Legacy v2 restore accepted a forged Stage 2 extension.")
+	_check_equal(main.simulation_state_hash(), before_rejection, "Rejected legacy extension partially mutated Main.")
+	var forged_version := snapshot.duplicate(true)
+	forged_version.version = 3
+	_check(not main.restore_simulation_state(forged_version), "Legacy stage accepted the Stage 2 aggregate version.")
+	_check_equal(main.simulation_state_hash(), before_rejection, "Rejected legacy version partially mutated Main.")
+	_check(main.restore_simulation_state(snapshot), "Existing legacy v2 snapshot failed to restore.")
+	_check_equal(main.simulation_state_hash(), legacy_hash, "Legacy v2 hash changed across restore.")
+	var reference := _new_main("normal", 7001)
+	_check(reference.restore_simulation_state(snapshot), "Fresh Main rejected an existing legacy v2 snapshot.")
+	var input := {"move_x": 0.0, "move_y": 0.0, "shoot": false, "focus": false, "bomb": false, "pause": false}
+	main._advance_gameplay_clock(1.0 / 60.0, input)
+	reference._advance_gameplay_clock(1.0 / 60.0, input)
+	_check_equal(main.simulation_state_hash(), reference.simulation_state_hash(), "Legacy v2 continuation hash diverged after restore.")
+	_free_main(reference)
+	_free_main(main)
+
+	var fixture_file := FileAccess.open("res://tests/fixtures/m0/baseline_replay.json", FileAccess.READ)
+	_check(fixture_file != null, "Could not open the committed M0 replay hash fixture.")
+	if fixture_file == null:
+		return
+	var fixture_value = JSON.parse_string(fixture_file.get_as_text())
+	_check(fixture_value is Dictionary, "Committed M0 replay hash fixture is malformed.")
+	if not (fixture_value is Dictionary):
+		return
+	var fixture: Dictionary = fixture_value
+	var replay_main := _new_legacy_replay_main()
+	var expected_identity := {"build_version": "1.0.0-m0", "content_hash": "m0-baseline-content-v1"}
+	_check(replay_main.start_replay_playback(fixture, expected_identity), "Focused assertion could not play the committed legacy replay.")
+	_configure_legacy_replay_interaction(replay_main)
+	var render_frames := 0
+	while replay_main.replay_data.has_next_frame() and render_frames < 1000:
+		replay_main._advance_gameplay_clock(1.0 / 60.0)
+		render_frames += 1
+	_check(render_frames < 1000, "Committed legacy replay did not finish in the bounded smoke trace.")
+	var replay_snapshot: Dictionary = replay_main.capture_simulation_state()
+	_check_equal(int(replay_snapshot.get("version", -1)), 2, "Committed legacy replay no longer captures v2.")
+	_check(not replay_snapshot.has("stage2_controller"), "Committed legacy replay hash input gained Stage 2 fields.")
+	_check_equal(_sorted_snapshot_keys(replay_snapshot), _expected_legacy_snapshot_keys(), "Committed replay snapshot field shape changed.")
+	var committed_hash := String(fixture.get("expected_runtime_hash", ""))
+	_check(not committed_hash.is_empty() and committed_hash != "PENDING", "Committed legacy replay hash evidence is unavailable.")
+	_check_equal(replay_main.simulation_state_hash(), committed_hash, "Committed production replay hash changed.")
+	_free_main(replay_main)
+
 func _assert_main_binding() -> void:
 	var main := _new_main("hard", 5150)
 	_check(bool(main.stage_controller.get("stage2_bound", false)), "Main did not bind Stage 2 to the deterministic controller.")
@@ -293,6 +397,10 @@ func _assert_legacy_main_routes() -> void:
 		_check(not main.stage2_encounter_controller.is_configured(), "Legacy stage %d was routed through the Stage 2 controller." % stage_index)
 		_check_equal(int(main.stage_controller.get("stage_index", -1)), stage_index, "Legacy stage %d controller route drifted." % stage_index)
 		_check(not (main.stage_controller.get("waves", []) as Array).is_empty(), "Legacy stage %d lost its wave schedule." % stage_index)
+		var snapshot: Dictionary = main.capture_simulation_state()
+		_check_equal(int(snapshot.get("version", -1)), 2, "Legacy stage %d snapshot version drifted." % stage_index)
+		_check(not snapshot.has("stage2_controller"), "Legacy stage %d snapshot gained Stage 2 state." % stage_index)
+		_check_equal(_sorted_snapshot_keys(snapshot), _expected_legacy_snapshot_keys(), "Legacy stage %d snapshot field shape drifted." % stage_index)
 	_free_main(main)
 
 func _prepare_main_snapshot_context(kind: String, difficulty: String, seed: int) -> Node:
@@ -317,9 +425,18 @@ func _prepare_main_snapshot_context(kind: String, difficulty: String, seed: int)
 func _assert_aggregate_snapshot_context(kind: String, difficulty: String, seed: int) -> void:
 	var main := _prepare_main_snapshot_context(kind, difficulty, seed)
 	var snapshot: Dictionary = main.capture_simulation_state()
+	_check_equal(int(snapshot.get("version", -1)), 3, "%s Stage 2 aggregate snapshot did not use the extended version." % kind)
 	_check(not snapshot.stage2_controller.is_empty(), "%s aggregate snapshot omitted the Stage 2 controller." % kind)
 	_check(main.validate_simulation_state(snapshot), "%s aggregate snapshot rejected its own Stage 2 state." % kind)
 	var before_rejection := main.simulation_state_hash()
+	var missing_controller := snapshot.duplicate(true)
+	missing_controller.erase("stage2_controller")
+	_check(not main.restore_simulation_state(missing_controller), "%s aggregate restore accepted a missing Stage 2 controller." % kind)
+	_check_equal(main.simulation_state_hash(), before_rejection, "%s missing-controller snapshot partially mutated Main." % kind)
+	var legacy_version := snapshot.duplicate(true)
+	legacy_version.version = 2
+	_check(not main.restore_simulation_state(legacy_version), "%s Stage 2 aggregate restore accepted legacy v2." % kind)
+	_check_equal(main.simulation_state_hash(), before_rejection, "%s wrong-version Stage 2 snapshot partially mutated Main." % kind)
 	var malformed := snapshot.duplicate(true)
 	malformed.stage2_controller.version = 999
 	_check(not main.restore_simulation_state(malformed), "%s aggregate restore accepted a malformed nested controller snapshot." % kind)
@@ -356,6 +473,7 @@ func _run() -> void:
 	_assert_controller_snapshots()
 	_assert_main_binding()
 	_assert_legacy_main_routes()
+	_assert_legacy_snapshot_and_replay_hash()
 	_assert_aggregate_snapshots()
 	if failed:
 		quit(1)
