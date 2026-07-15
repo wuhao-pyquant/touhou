@@ -1315,6 +1315,57 @@ func _validate_gameplay_bullet_snapshot(bullets_snapshot: Dictionary) -> bool:
 			return false
 	return true
 
+func _validate_stage2_bullet_observability_snapshot(stage_state: Dictionary, bullets_snapshot: Dictionary) -> bool:
+	var next_uid_value = stage_state.get("stage2_next_bullet_uid")
+	if typeof(next_uid_value) != TYPE_INT or int(next_uid_value) <= 0:
+		return false
+	var next_uid := int(next_uid_value)
+	var seen_uids := {}
+	var stage_source_fields := ["stage2_source_event_id", "stage2_source_spawn_id", "stage2_source_enemy_id", "stage2_primitive", "stage2_routing"]
+	var phase_source_fields := ["stage2_source_phase_id", "stage2_source_owner_id"]
+	for entry_value in bullets_snapshot.get("active_bullets", []):
+		var entry: Dictionary = entry_value
+		var bullet: Dictionary = entry.get("state", {})
+		var uid_value = bullet.get("stage2_bullet_uid")
+		if typeof(uid_value) != TYPE_INT:
+			return false
+		var uid := int(uid_value)
+		if uid <= 0 or uid >= next_uid or seen_uids.has(uid):
+			return false
+		seen_uids[uid] = true
+		var bullet_type := String(bullet.get("type", ""))
+		var stage_source_count := 0
+		for field in stage_source_fields:
+			if bullet.has(field):
+				stage_source_count += 1
+				if typeof(bullet[field]) != TYPE_STRING or String(bullet[field]) == "":
+					return false
+		var phase_source_count := 0
+		for field in phase_source_fields:
+			if bullet.has(field):
+				phase_source_count += 1
+				if typeof(bullet[field]) != TYPE_STRING or String(bullet[field]) == "":
+					return false
+		if stage_source_count not in [0, stage_source_fields.size()] or phase_source_count not in [0, phase_source_fields.size()]:
+			return false
+		if bullet_type in ["player", "bomb"]:
+			if bullet.has("stage2_reflection_count") or stage_source_count > 0 or phase_source_count > 0:
+				return false
+		else:
+			if typeof(bullet.get("stage2_reflection_count")) != TYPE_INT or int(bullet.stage2_reflection_count) < 0:
+				return false
+	return true
+
+func _validate_legacy_bullet_observability_shape(stage_state: Dictionary, bullets_snapshot: Dictionary) -> bool:
+	if stage_state.has("stage2_next_bullet_uid"):
+		return false
+	for entry_value in bullets_snapshot.get("active_bullets", []):
+		var bullet: Dictionary = (entry_value as Dictionary).get("state", {})
+		for field in bullet:
+			if String(field).begins_with("stage2_"):
+				return false
+	return true
+
 func _is_valid_snapshot_number(value: Variant, minimum: float = -INF) -> bool:
 	if typeof(value) not in [TYPE_FLOAT, TYPE_INT]:
 		return false
@@ -1373,6 +1424,11 @@ func validate_simulation_state(snapshot: Dictionary) -> bool:
 	if not bullet_probe.validate_snapshot(snapshot.bullets):
 		return false
 	if not _validate_gameplay_bullet_snapshot(snapshot.bullets):
+		return false
+	if is_stage2_snapshot:
+		if not _validate_stage2_bullet_observability_snapshot(snapshot.stage_controller, snapshot.bullets):
+			return false
+	elif not _validate_legacy_bullet_observability_shape(snapshot.stage_controller, snapshot.bullets):
 		return false
 	if not _validate_manager_snapshot(snapshot.manager) or not _validate_replay_runtime_snapshot(snapshot.replay):
 		return false
@@ -1650,6 +1706,7 @@ func _load_stage(stage: int):
 	stage_controller["boss_spawned"] = false
 	if stage == 2:
 		stage_controller["stage2_bound"] = false
+		stage_controller["stage2_next_bullet_uid"] = 1
 		stage_controller["stage2_event_ids"] = []
 		stage_controller["stage2_stage_event_records"] = []
 		stage_controller["stage2_spawn_ids"] = []
@@ -1676,6 +1733,19 @@ func _ensure_active_bullet_indices() -> void:
 func _claim_free_bullet_slot() -> int:
 	return bullet_world.claim_free_slot()
 
+func _spawn_bullet_values(bullet_values: Dictionary) -> int:
+	if _active_stage() != 2:
+		return int(bullet_world.spawn_bullet(bullet_values))
+	var next_uid_value = stage_controller.get("stage2_next_bullet_uid")
+	if typeof(next_uid_value) != TYPE_INT or int(next_uid_value) <= 0:
+		return -1
+	var next_uid := int(next_uid_value)
+	bullet_values["stage2_bullet_uid"] = next_uid
+	var bullet_index := int(bullet_world.spawn_bullet(bullet_values))
+	if bullet_index >= 0:
+		stage_controller["stage2_next_bullet_uid"] = next_uid + 1
+	return bullet_index
+
 func _spawn_bullet_player(x: float, y: float, vx: float, vy: float, radius: float = 5.0, color: Color = Color(0,0.7,1), damage: float = 1.0, homing: bool = false, btype: int = -1, persist: bool = false, lifetime: float = 100.0, behavior: Dictionary = {}):
 	var bullet_values := {
 		"x": x, "y": y, "vx": vx, "vy": vy,
@@ -1690,12 +1760,12 @@ func _spawn_bullet_player(x: float, y: float, vx: float, vy: float, radius: floa
 		bullet_values["behavior"] = behavior.duplicate(true)
 		bullet_values["hit_ledger"] = {}
 		bullet_values["hit_count"] = 0
-	var bullet_index: int = int(bullet_world.spawn_bullet(bullet_values))
+	var bullet_index: int = _spawn_bullet_values(bullet_values)
 	_sync_bullet_world_compatibility_views()
 	return bullet_index >= 0
 
-func _spawn_bullet_enemy(x: float, y: float, vx: float, vy: float, radius: float = 6.0, color: Color = Color.RED, btype: String = "circle", lifetime: float = 350.0, motion: Dictionary = {}):
-	var bullet_index: int = int(bullet_world.spawn_bullet({
+func _spawn_bullet_enemy(x: float, y: float, vx: float, vy: float, radius: float = 6.0, color: Color = Color.RED, btype: String = "circle", lifetime: float = 350.0, motion: Dictionary = {}, stage2_source: Dictionary = {}):
+	var bullet_values := {
 		"x": x, "y": y, "vx": vx, "vy": vy,
 		"radius": maxf(0.001, radius), "color": color, "type": btype,
 		"lifetime": lifetime, "age": 0.0, "damage": 1.0,
@@ -1704,7 +1774,14 @@ func _spawn_bullet_enemy(x: float, y: float, vx: float, vy: float, radius: float
 		"motion_triggered": false,
 		"laser_warning_remaining": maxf(float(motion.get("warning_frames", 0.0)), 0.0),
 		"laser_active_remaining": float(motion.get("active_frames", -1.0)),
-	}))
+	}
+	if _active_stage() == 2:
+		bullet_values["stage2_reflection_count"] = 0
+		for field in ["stage2_source_event_id", "stage2_source_spawn_id", "stage2_source_enemy_id", "stage2_primitive", "stage2_routing", "stage2_source_phase_id", "stage2_source_owner_id"]:
+			if stage2_source.has(field):
+				var source_value = stage2_source[field]
+				bullet_values[field] = source_value.duplicate(true) if source_value is Array or source_value is Dictionary else source_value
+	var bullet_index: int = _spawn_bullet_values(bullet_values)
 	_sync_bullet_world_compatibility_views()
 	if bullet_index < 0:
 		return false
@@ -1718,7 +1795,7 @@ func _stage_enemy_hp_mult() -> float:
 		return float(game_manager_ref.STAGE_MULTS[game_manager_ref.current_stage - 1].enemy_hp)
 	return 1.0
 
-func _spawn_enemy_bullet_spec(spec: Dictionary) -> void:
+func _spawn_enemy_bullet_spec(spec: Dictionary, stage2_source: Dictionary = {}) -> void:
 	_spawn_bullet_enemy(
 		float(spec.position.x),
 		float(spec.position.y),
@@ -1728,7 +1805,8 @@ func _spawn_enemy_bullet_spec(spec: Dictionary) -> void:
 		spec.get("color", Color.RED),
 		String(spec.family_id),
 		float(spec.get("lifetime", 350.0)),
-		spec.get("motion", {})
+		spec.get("motion", {}),
+		stage2_source
 	)
 
 func _spawn_item(x: float, y: float, item_type: String = "power"):
@@ -2041,7 +2119,11 @@ func _consume_stage2_controller_output(output: Dictionary) -> void:
 		stage_controller["stage2_boss_movement_records"] = movement_records
 		_apply_stage2_boss_movement(movement)
 	for bullet_spec_value in output.get("bullet_specs", []):
-		_spawn_enemy_bullet_spec(bullet_spec_value)
+		var active_definition: Dictionary = stage2_encounter_controller.active_phase_definition()
+		_spawn_enemy_bullet_spec(bullet_spec_value, {
+			"stage2_source_phase_id": String(active_definition.get("id", "")),
+			"stage2_source_owner_id": String(active_definition.get("owner_id", "")),
+		})
 	for resolution_value in output.get("phase_resolutions", []):
 		var resolution_records: Array = stage_controller.get("stage2_phase_resolutions", [])
 		resolution_records.append(resolution_value.duplicate(true))
@@ -2917,6 +2999,8 @@ func _apply_enemy_bullet_bounce(b: Dictionary) -> void:
 	if bounced:
 		motion["bounce_count"] = remaining - 1
 		b.motion = motion
+		if b.has("stage2_reflection_count"):
+			b.stage2_reflection_count = int(b.stage2_reflection_count) + 1
 
 func _update_bullets(delta: float, target: Vector2):
 	var dt := delta * 60.0
@@ -3043,7 +3127,17 @@ func _update_enemies(delta: float):
 			e.shoot_phase += 1
 			var mult: float = game_manager_ref.STAGE_MULTS[game_manager_ref.current_stage - 1].bullet_speed
 			for spec in enemy_pattern_executor.bullet_specs(e, Vector2(player_x, player_y), mult):
-				_spawn_enemy_bullet_spec(spec)
+				var stage2_source := {}
+				if _active_stage() == 2 and e.has("stage2_event_id"):
+					var authored_pattern: Dictionary = e.get("authored_pattern", {})
+					stage2_source = {
+						"stage2_source_event_id": String(e.get("stage2_event_id", "")),
+						"stage2_source_spawn_id": String(e.get("stage2_spawn_id", "")),
+						"stage2_source_enemy_id": String(e.get("source_enemy_id", "")),
+						"stage2_primitive": String(authored_pattern.get("primitive", "")),
+						"stage2_routing": String(authored_pattern.get("routing", "")),
+					}
+				_spawn_enemy_bullet_spec(spec, stage2_source)
 
 func _update_items(delta: float):
 	for it in items:
