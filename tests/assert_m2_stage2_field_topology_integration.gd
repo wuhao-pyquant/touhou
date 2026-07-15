@@ -245,7 +245,7 @@ func _assert_delayed_seed_rebound_removal_and_projection() -> void:
 	var graze_before := int(rebound.game_manager_ref.graze)
 	var multiplier_before := float(rebound.game_manager_ref.night_festival_multiplier)
 	var seals_before := int(rebound.game_manager_ref.night_festival_seals)
-	var items_before := rebound.items.duplicate(true)
+	var items_before: Array = rebound.items.duplicate(true)
 	rebound.player_x = float(rebound_bullet.x)
 	rebound.player_y = float(rebound_bullet.y)
 	rebound.player_invincible = true
@@ -347,7 +347,7 @@ func _assert_aggregate_snapshot_and_legacy_shape() -> void:
 	var snapshot: Dictionary = main.capture_simulation_state()
 	_check_equal(int(snapshot.get("version", -1)), 4, "Stage 2 aggregate snapshot version did not advance.")
 	_check(snapshot.get("stage2_field_runtime") is Dictionary and main.validate_simulation_state(snapshot), "Main rejected its own field aggregate snapshot.")
-	var before_rejection := main.simulation_state_hash()
+	var before_rejection: String = main.simulation_state_hash()
 	var forged_binding: Dictionary = snapshot.duplicate(true)
 	var binding_uids: Array = forged_binding.stage_controller.stage2_field_uid_to_slot.keys()
 	var forged_uid := String(binding_uids[0])
