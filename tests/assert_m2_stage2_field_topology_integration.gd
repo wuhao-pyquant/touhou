@@ -291,7 +291,8 @@ func _assert_source_callbacks_and_gate_catchup() -> void:
 	while gate.stage2_encounter_controller.encounter_kind() == "stage" and guard < 800:
 		var output: Dictionary = gate.stage2_encounter_controller.advance(Vector2(gate.player_x, gate.player_y))
 		if not _check(gate._consume_stage2_controller_output(output), "Main rejected pre-midboss field output at step %d." % guard):
-			break
+			_free_main(gate)
+			return
 		guard += 1
 	_check(guard < 800 and gate.stage2_encounter_controller.encounter_kind() == "midboss", "Real Main path did not reach the midboss gate.")
 	_check_equal(int(gate.stage_controller.get("stage2_field_tick", -1)), 750, "Field clock did not freeze at the midboss gate.")
@@ -322,6 +323,8 @@ func _assert_event_entry_source_reconciliation() -> void:
 	var production: Node = _new_main("normal", 73033)
 	var guard := 0
 	var b01_bullets_before: Array = []
+	var b01_used_uids_before: Array = []
+	var b01_burst_indices_before: Dictionary = {}
 	while "s2_b02" not in (production.stage_controller.get("stage2_field_activated_event_ids", []) as Array) and guard < 200:
 		var current_b01_bullets: Array = []
 		for uid_value in production.stage2_field_topology_runtime.telemetry_snapshot().get("active_bullet_uids", []):
@@ -331,11 +334,26 @@ func _assert_event_entry_source_reconciliation() -> void:
 				current_b01_bullets.append(uid)
 		if not current_b01_bullets.is_empty():
 			b01_bullets_before = current_b01_bullets
+		if "s2_b01" in (production.stage_controller.get("stage2_field_activated_event_ids", []) as Array):
+			var pre_entry_snapshot: Dictionary = production.stage2_field_topology_runtime.capture_snapshot()
+			var pre_entry_payload: Dictionary = pre_entry_snapshot.get("payload", {})
+			b01_used_uids_before = []
+			for uid_value in pre_entry_payload.get("used_uids", []):
+				var uid_parts := String(uid_value).split(":", false)
+				if uid_parts.size() == 6 and uid_parts[1] == "s2_b01":
+					b01_used_uids_before.append(String(uid_value))
+			b01_burst_indices_before = {}
+			var source_states: Dictionary = pre_entry_payload.get("source_states", {})
+			for source_id in ["s2_b01_abacus_left", "s2_b01_abacus_center", "s2_b01_abacus_right"]:
+				b01_burst_indices_before[source_id] = int((source_states.get(source_id, {}) as Dictionary).get("next_burst_index", -1))
 		var output: Dictionary = production.stage2_encounter_controller.advance(Vector2(production.player_x, production.player_y))
 		if not _check(bool(output.get("ok", false)) and production._consume_stage2_controller_output(output), "Production no-shot path rejected before s2_b02 entry at step %d." % guard):
-			break
+			_free_main(production)
+			return
 		guard += 1
-	_check(guard < 200 and "s2_b02" in (production.stage_controller.get("stage2_field_activated_event_ids", []) as Array), "Production no-shot path did not reach s2_b02 entry.")
+	if not _check(guard < 200 and "s2_b02" in (production.stage_controller.get("stage2_field_activated_event_ids", []) as Array), "Production no-shot path did not reach s2_b02 entry."):
+		_free_main(production)
+		return
 	var expected_b02 := ["s2_b02_left_clerk", "s2_b02_center_clerk", "s2_b02_right_clerk"]
 	_check_equal(production.stage2_field_topology_runtime.telemetry_snapshot().get("active_source_ids", []), expected_b02, "s2_b02 entry did not reconcile runtime sources to the exact data-declared set.")
 	_check_equal(_genuinely_live_main_sources(production), expected_b02, "s2_b02 entry left Main source flags out of sync with runtime sources.")
@@ -357,6 +375,57 @@ func _assert_event_entry_source_reconciliation() -> void:
 	for uid_value in b01_bullets_before:
 		var uid := String(uid_value)
 		_check(not production.stage2_field_topology_runtime.bullet_state(uid).is_empty() and production.stage_controller.stage2_field_uid_to_slot.has(uid), "Source reconciliation cleared a previously emitted b01 bullet: %s" % uid)
+	var continuation_guard := 0
+	while int(production.stage_controller.get("stage2_field_tick", -1)) < 288 and continuation_guard < 200:
+		var output: Dictionary = production.stage2_encounter_controller.advance(Vector2(production.player_x, production.player_y))
+		if not _check(bool(output.get("ok", false)) and production._consume_stage2_controller_output(output), "Production s2_b02 continuation rejected before authored tick 288 at step %d." % continuation_guard):
+			_free_main(production)
+			return
+		continuation_guard += 1
+	if not _check_equal(int(production.stage_controller.get("stage2_field_tick", -1)), 288, "Production s2_b02 continuation did not reach the historical cap tick."):
+		_free_main(production)
+		return
+	_check_equal(String(production.stage_controller.get("stage2_field_hard_error", "")), "", "Production s2_b02 continuation latched a field hard error by tick 288.")
+	var tick_288_telemetry: Dictionary = production.stage2_field_topology_runtime.telemetry_snapshot()
+	var active_b01_at_288: Array = []
+	var active_b02_at_288: Array = []
+	for uid_value in tick_288_telemetry.get("active_bullet_uids", []):
+		var uid := String(uid_value)
+		var bullet: Dictionary = production.stage2_field_topology_runtime.bullet_state(uid)
+		var source_event_id := String(bullet.get("stage2_source_event_id", ""))
+		if source_event_id == "s2_b01":
+			active_b01_at_288.append(uid)
+			_check(uid in b01_bullets_before, "Tick 288 exposed a post-entry b01 UID instead of a preserved bullet: %s" % uid)
+		elif source_event_id == "s2_b02":
+			active_b02_at_288.append(uid)
+	_check(not active_b01_at_288.is_empty(), "Tick 288 no longer retained any pre-entry b01 bullet evidence.")
+	_check(not active_b02_at_288.is_empty(), "Tick 288 did not contain an authored b02 bullet.")
+	var tick_288_snapshot: Dictionary = production.stage2_field_topology_runtime.capture_snapshot()
+	var tick_288_payload: Dictionary = tick_288_snapshot.get("payload", {})
+	var b01_used_uids_at_288: Array = []
+	for uid_value in tick_288_payload.get("used_uids", []):
+		var uid_parts := String(uid_value).split(":", false)
+		if uid_parts.size() == 6 and uid_parts[1] == "s2_b01":
+			b01_used_uids_at_288.append(String(uid_value))
+	_check_equal(b01_used_uids_at_288, b01_used_uids_before, "s2_b01 created a new UID after s2_b02 entry.")
+	var b01_burst_indices_at_288: Dictionary = {}
+	var tick_288_source_states: Dictionary = tick_288_payload.get("source_states", {})
+	for source_id in ["s2_b01_abacus_left", "s2_b01_abacus_center", "s2_b01_abacus_right"]:
+		b01_burst_indices_at_288[source_id] = int((tick_288_source_states.get(source_id, {}) as Dictionary).get("next_burst_index", -1))
+	_check_equal(b01_burst_indices_at_288, b01_burst_indices_before, "s2_b01 advanced a burst index after s2_b02 entry.")
+	var field_contract: Dictionary = production.stage_director.stage2_field_topology_contract()
+	var b02_budget: Dictionary = {}
+	for budget_value in field_contract.get("event_budgets", []):
+		var budget: Dictionary = budget_value
+		if String(budget.get("event_id", "")) == "s2_b02":
+			b02_budget = budget
+			break
+	var normal_b02_cap := int((b02_budget.get("peak_active_bullets", {}) as Dictionary).get("normal", -1))
+	if not _check_equal(normal_b02_cap, 60, "Frozen contract Normal s2_b02 cap drifted."):
+		_free_main(production)
+		return
+	var active_bullet_count_at_288 := int(tick_288_telemetry.get("active_bullet_count", -1))
+	_check(active_bullet_count_at_288 >= 0 and active_bullet_count_at_288 <= normal_b02_cap, "Tick 288 exceeded the frozen Normal s2_b02 active-bullet cap: %d > %d" % [active_bullet_count_at_288, normal_b02_cap])
 	_free_main(production)
 
 	var carryover: Node = _new_main("normal", 73034)
