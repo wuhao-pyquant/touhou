@@ -50,7 +50,7 @@
     "Report the idempotent shutdown ownership graph and why it releases the M0 baseline owners plus the M1 score-system owner; do not claim the leak is gone until guarded executable verification",
     "Report exact changed files, diff/scope/process gates, Godot launch count zero, and leave independent static review plus minimal guarded verification as the only residual gates"
   ],
-  "max_repair_rounds": 1,
+  "max_repair_rounds": 2,
   "context": [
     "Authoritative semantic findings are in .agent-runs/20260714T171459Z-M1-gameplay-systems-static-review-core_simulation-5bc8ac02/final.json. Preserve every item that review approved.",
     "Guarded smoke evidence is C:/Users/e/AppData/Local/Temp/godot-m1-one-authorized-guarded-smoke.log.stderr: engine exit 0, 10 ObjectDB instances leaked, 4 resources still in use, runner category FatalOutput, and zero Godot processes before/after. The one authorization is consumed; do not launch Godot in this ticket.",
