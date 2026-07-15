@@ -1,11 +1,11 @@
 {
   "plan": "Hyakki Night Festival Incident Windows 1.0 Maturation v3",
   "plan_status": "frozen",
-  "current_milestone": "M1",
+  "current_milestone": "M2",
   "milestones": {
     "B0": "completed",
     "M0": "completed",
-    "M1": "pending",
+    "M1": "completed",
     "M2": "pending",
     "M3": "pending",
     "M4": "pending",
@@ -19,6 +19,8 @@
     "Existing audio import changes belong to the user and are outside B0 scope.",
     "B0 verified actual Sol/high, Terra/medium, and Luna/medium runtime identities on Codex CLI 0.144.4.",
     "The bridge now resumes failed work in the same Codex session/worktree with profile-defined temporary model escalation and restores the profile default for each new ticket.",
-    "M0 merged as 6f43bbcd181abbaf1480d0f4779808e357ed4323 after deep architecture review, bounded fixture migration, and focused deterministic replay/runtime verification."
+    "M0 merged as 6f43bbcd181abbaf1480d0f4779808e357ed4323 after deep architecture review, bounded fixture migration, and focused deterministic replay/runtime verification.",
+    "M1 completed with the approved six-stage/108-beat/40-phase design freeze, six distinct shot behaviors and deterministic score/drop contracts, additive content runtime contracts, and trace-driven sandbox/seek/heatmap/fingerprint tooling.",
+    "M1 executable evidence includes guarded content-contract Success at candidate 5477a67 with exit 0, zero residual Godot processes and zero native/leak markers; tooling implementation run 20260715T080753Z-M1-content-evidence-tooling-test_performance-a9a219e2 used Terra/high, independent review run 20260715T082030Z-M1-content-evidence-tooling-static-review-mechanical_auditor-c083c75a used Luna/medium and returned GATE: APPROVE, and the merged 4-test tooling regression passed."
   ]
 }
