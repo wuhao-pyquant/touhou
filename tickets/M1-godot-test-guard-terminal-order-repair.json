@@ -1,0 +1,52 @@
+{
+  "id": "M1-godot-test-guard-terminal-order-repair",
+  "objective": "Repair exactly the two remaining release blockers from deep_reviewer run 20260715T015036Z-M1-godot-test-guard-final-terminal-review-deep_reviewer-b8b40bc4 on candidate d6f670abfe65a3300c063969f124b1c8e319e16e. First, centralize authenticated optional CLEANUP_BEGIN parsing so it runs immediately after every protocol-pump update and before pump-error, exit, incomplete, frame-count, or FINAL classification, including terminal draining; preserve CleanupFailure precedence without adding any second wait or grace. Second, make test_36 prove the required real sequence: obtain and validate the first supervisor's single CleanupFailure JSON and nonzero exit; prove that supervisor has exited while its worker PID is still alive and retains actual mutex exclusion; then start the sequential contender and require LockContention; only afterward terminate the worker. Add one deterministic valid CLEANUP_BEGIN quick-exit or trailing-pump-failure test for the terminal race. Preserve every already-approved guard invariant and launch real Godot zero times.",
+  "mode": "write",
+  "allowed_paths": [
+    "tools/testing/invoke_godot_test.ps1",
+    "tools/testing/tests/test_invoke_godot_test.py"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "tools/agents/**",
+    "tools/testing/tests/fake_engine.py",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "content/**",
+    "docs/**",
+    "tests/**",
+    ".godot/**"
+  ],
+  "dependency_commit": "d6f670abfe65a3300c063969f124b1c8e319e16e",
+  "acceptance_commands": [
+    "python -m unittest tools.testing.tests.test_invoke_godot_test -v",
+    "$ErrorActionPreference='Stop'; $tokens=$null; $errors=$null; $null=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/testing/invoke_godot_test.ps1'),[ref]$tokens,[ref]$errors); if($errors.Count -ne 0){throw ($errors|Out-String)}; Write-Host 'POWERSHELL_PARSE=pass'",
+    "$changed=@(git status --porcelain -uall|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $allowed=@('tools/testing/invoke_godot_test.ps1','tools/testing/tests/test_invoke_godot_test.py'); $outside=@($changed|Where-Object{$_-notin $allowed}); if($outside.Count -ne 0){throw \"Outside changes: $($outside -join ',')\"}; $temps=@(Get-ChildItem tools/testing/tests -Force -Directory -ErrorAction SilentlyContinue|Where-Object Name -Match '^(?:_test_work|\\.invoke_godot_test_|debug_)'); if($temps.Count -ne 0){throw \"Temporary test artifacts remain: $($temps.Name -join ',')\"}; Write-Host 'PATH_SCOPE=pass'",
+    "git diff --check d6f670abfe65a3300c063969f124b1c8e319e16e -- tools/testing/invoke_godot_test.ps1 tools/testing/tests/test_invoke_godot_test.py"
+  ],
+  "output_requirements": [
+    "Map blocker B1 and B2 from run 20260715T015036Z-M1-godot-test-guard-final-terminal-review-deep_reviewer-b8b40bc4 to exact repaired code and deterministic ordering evidence",
+    "For corrected test 36, report the first supervisor exit/JSON proof, worker-alive proof after that exit, contender LockContention proof, and worker termination ordering",
+    "Report the centralized cleanup-frame parser call sites and prove terminal buffered cleanup cannot lose CleanupFailure precedence",
+    "Report the focused suite, parser/scope/diff exits, exact two changed files, zero temporary artifacts, and real Godot launch count zero; leave independent review as the only residual gate"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "The authoritative final review is .agent-runs/20260715T015036Z-M1-godot-test-guard-final-terminal-review-deep_reviewer-b8b40bc4/final.json in the main repository. It statically approved all prior items except B1 and B2 and authorized no real smoke.",
+    "B1 lines test_invoke_godot_test.py:575-581 currently start the contender before supervisor.communicate and kill the worker before proving supervisor exit. Reverse that evidence order exactly; do not weaken LockContention, worker liveness, single JSON, or nonzero exit assertions.",
+    "B2 lines invoke_godot_test.ps1:381-396 currently parse CLEANUP_BEGIN only while HasExited is false and after pump failure checks. Use one helper that examines only newly buffered authenticated frames, updates cleanup state once, rejects duplicate/malformed phase transitions, and is called after every Update-ProtocolPump pair plus terminal drain before any failure or FINAL decision.",
+    "Any valid cleanup frame buffered together with a trailing pump failure must still cause CleanupFailure. Do not introduce another wait, drain beyond the existing absolute deadline/single grace, or change approved protocol caps.",
+    "Run corrected test 36 alone and the new cleanup terminal-race test while repairing. After the final code change run the focused guard suite once, then parser/scope/diff gates. Do not run a full repository suite or launch Godot.",
+    "This is a new review-directed ticket for the same test_performance Agent identity after a successful closed lineage. Start at restored default gpt-5.6-terra/high; if this ticket fails, resume its same session/worktree at escalation level 1."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
