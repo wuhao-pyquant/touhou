@@ -1,0 +1,858 @@
+{
+  "schema_version": 1,
+  "artifact_id": "m2_stage2_score_route_contract_v1",
+  "source_artifact_id": "m2_stage2_yokai_market_choreography_v1",
+  "source_path": "content/runtime/m2_stage2_choreography.json",
+  "dependency_commit": "db6b0808f7c5d322d22b22143a6dd0ec2080485a",
+  "stage_id": "youkai_market",
+  "tick_rate": 60,
+  "difficulty_scope": [
+    "normal",
+    "hard"
+  ],
+  "contract_scope": {
+    "teaching_event_ids": [
+      "s2_b01",
+      "s2_b02",
+      "s2_b03",
+      "s2_b04",
+      "s2_b05"
+    ],
+    "publication_event_id": "s2_b12",
+    "settlement_event_ids": [
+      "s2_b13",
+      "s2_b14",
+      "s2_b15",
+      "s2_b16",
+      "s2_b17",
+      "s2_b18"
+    ],
+    "adds_runtime_content": false,
+    "adds_enemies": false,
+    "adds_waves": false,
+    "adds_controls": false
+  },
+  "drop_aliases": {
+    "mirror_token_left": {
+      "behavior": "route_token",
+      "emits_resource_item": false,
+      "metadata": {
+        "token_kind": "mirror_choice",
+        "mirror_axis": "left",
+        "route_local": true,
+        "persistent_inventory": false
+      }
+    },
+    "mirror_token_right": {
+      "behavior": "route_token",
+      "emits_resource_item": false,
+      "metadata": {
+        "token_kind": "mirror_choice",
+        "mirror_axis": "right",
+        "route_local": true,
+        "persistent_inventory": false
+      }
+    },
+    "point_large": {
+      "behavior": "canonical_item_batch",
+      "canonical_item_id": "point",
+      "count": 4
+    },
+    "point_small": {
+      "behavior": "canonical_item_batch",
+      "canonical_item_id": "point",
+      "count": 1
+    },
+    "power_large": {
+      "behavior": "canonical_item_batch",
+      "canonical_item_id": "power",
+      "count": 4
+    },
+    "power_small": {
+      "behavior": "canonical_item_batch",
+      "canonical_item_id": "power",
+      "count": 1
+    },
+    "price_token_1": {
+      "behavior": "route_token",
+      "emits_resource_item": false,
+      "metadata": {
+        "token_kind": "posted_price",
+        "posted_price": 1,
+        "route_local": true,
+        "persistent_inventory": false
+      }
+    },
+    "price_token_2": {
+      "behavior": "route_token",
+      "emits_resource_item": false,
+      "metadata": {
+        "token_kind": "posted_price",
+        "posted_price": 2,
+        "route_local": true,
+        "persistent_inventory": false
+      }
+    },
+    "price_token_3": {
+      "behavior": "route_token",
+      "emits_resource_item": false,
+      "metadata": {
+        "token_kind": "posted_price",
+        "posted_price": 3,
+        "route_local": true,
+        "persistent_inventory": false
+      }
+    }
+  },
+  "published_order": {
+    "publication_event_id": "s2_b12",
+    "publication_completion_condition": "three_flags_visible_and_midboss_exit_clear_complete",
+    "arm_no_later_than_tick": 1794,
+    "strict_price_direction": "high_to_low",
+    "entries": [
+      {
+        "order_index": 1,
+        "color": "red",
+        "posted_price": 3,
+        "publication_spawn_id": "s2_b12_red_flag_runner",
+        "price_alias": "price_token_3",
+        "target_event_id": "s2_b13",
+        "target_spawn_id": "s2_b13_red_booth_master",
+        "target_enemy_id": "booth_master_red"
+      },
+      {
+        "order_index": 2,
+        "color": "blue",
+        "posted_price": 2,
+        "publication_spawn_id": "s2_b12_blue_flag_runner",
+        "price_alias": "price_token_2",
+        "target_event_id": "s2_b13",
+        "target_spawn_id": "s2_b13_blue_booth_master",
+        "target_enemy_id": "booth_master_blue"
+      },
+      {
+        "order_index": 3,
+        "color": "yellow",
+        "posted_price": 1,
+        "publication_spawn_id": "s2_b12_yellow_flag_runner",
+        "price_alias": "price_token_1",
+        "target_event_id": "s2_b13",
+        "target_spawn_id": "s2_b13_yellow_booth_master",
+        "target_enemy_id": "booth_master_yellow"
+      }
+    ]
+  },
+  "teaching_sequence": {
+    "classification": "instruction_only",
+    "entry_event_id": "s2_b01",
+    "exit_event_id": "s2_b06",
+    "route_state": "teaching_only",
+    "resolved_hooks": [
+      {
+        "event_id": "s2_b01",
+        "spawn_ids": [
+          "s2_b01_abacus_left",
+          "s2_b01_abacus_center",
+          "s2_b01_abacus_right"
+        ],
+        "hooks": [
+          "rebound_graze_uid",
+          "price_chain_group_1"
+        ],
+        "resolution": "Record rebound UID deduplication and teaching marker 1 only."
+      },
+      {
+        "event_id": "s2_b02",
+        "spawn_ids": [
+          "s2_b02_left_clerk",
+          "s2_b02_center_clerk",
+          "s2_b02_right_clerk"
+        ],
+        "hooks": [
+          "rebound_graze_uid",
+          "m_route_cross"
+        ],
+        "resolution": "Record a non-scoring rebound-and-cross rehearsal only."
+      },
+      {
+        "event_id": "s2_b03",
+        "spawn_ids": [
+          "s2_b03_red_ledger",
+          "s2_b03_blue_ledger"
+        ],
+        "hooks": [
+          "kill_order",
+          "price_chain_group_2"
+        ],
+        "resolution": "Record the red-before-blue teaching marker only."
+      },
+      {
+        "event_id": "s2_b04",
+        "spawn_ids": [
+          "s2_b04_left_booth_edge",
+          "s2_b04_right_booth_edge"
+        ],
+        "hooks": [
+          "booth_lane_state",
+          "center_lane_entry"
+        ],
+        "resolution": "Record lane-state recognition only."
+      },
+      {
+        "event_id": "s2_b05",
+        "spawn_ids": [
+          "s2_b05_left_bead_seller",
+          "s2_b05_right_bead_seller"
+        ],
+        "hooks": [
+          "rebound_graze_uid",
+          "price_chain_group_3"
+        ],
+        "resolution": "Record teaching marker 3 only, then discard all teaching markers at s2_b06."
+      }
+    ],
+    "post_midboss_effect": {
+      "settled_group_count_delta": 0,
+      "point_value_multiplier_delta": 0.0,
+      "seal_spawn_count": 0,
+      "carry_graze_uids_forward": false
+    },
+    "isolation_reason": "The teaching events never publish a complete three-price red-blue-yellow target set: s2_b03 contains only red and blue ledgers, while s2_b05 contains bead sellers. Therefore their group-numbered hooks cannot satisfy the final post-midboss predicate."
+  },
+  "route_states": [
+    {
+      "state_id": "inactive",
+      "meaning": "No Stage 2 score route state has been allocated for this stage run.",
+      "allowed_next_states": [
+        "teaching_only"
+      ]
+    },
+    {
+      "state_id": "teaching_only",
+      "meaning": "s2_b01 through s2_b05 may emit rehearsal telemetry but cannot settle rewards.",
+      "allowed_next_states": [
+        "awaiting_publication"
+      ]
+    },
+    {
+      "state_id": "awaiting_publication",
+      "meaning": "Teaching state has been cleared at s2_b06; wait for the exact s2_b12 price mapping.",
+      "allowed_next_states": [
+        "group_1_armed",
+        "expired"
+      ]
+    },
+    {
+      "state_id": "group_1_armed",
+      "meaning": "Only the red price-3 booth target may settle next.",
+      "allowed_next_states": [
+        "group_2_armed",
+        "invalidated",
+        "expired"
+      ]
+    },
+    {
+      "state_id": "group_2_armed",
+      "meaning": "Only the blue price-2 booth target may settle next after the neighbor-lane state commits.",
+      "allowed_next_states": [
+        "group_3_armed",
+        "invalidated",
+        "expired"
+      ]
+    },
+    {
+      "state_id": "group_3_armed",
+      "meaning": "The mirror-before-abacus recovery, yellow price-1 target, rebound graze, and topology predicates must all latch by the price countdown deadline.",
+      "allowed_next_states": [
+        "group_3_pending_final_cross",
+        "invalidated",
+        "expired"
+      ]
+    },
+    {
+      "state_id": "group_3_pending_final_cross",
+      "meaning": "All group-3 preconditions are frozen; only the s2_b18 final open-lane crossing may commit the route.",
+      "allowed_next_states": [
+        "complete",
+        "invalidated",
+        "expired"
+      ]
+    },
+    {
+      "state_id": "complete",
+      "meaning": "All three groups are settled and the single seal settlement is closed for this stage run.",
+      "terminal": true
+    },
+    {
+      "state_id": "invalidated",
+      "meaning": "An explicit wrong action broke the chain. Earned earlier group multipliers remain, but no later group or seal may settle.",
+      "terminal": true
+    },
+    {
+      "state_id": "expired",
+      "meaning": "A required predicate missed its finite deadline. Earned earlier group multipliers remain, but no later group or seal may settle.",
+      "terminal": true
+    }
+  ],
+  "state_transitions": [
+    {
+      "from": "inactive",
+      "to": "teaching_only",
+      "event_id": "s2_b01",
+      "tick": 0,
+      "condition": "stage_run_uid is allocated"
+    },
+    {
+      "from": "teaching_only",
+      "to": "awaiting_publication",
+      "event_id": "s2_b06",
+      "condition": "midboss gate entry clears all teaching markers and teaching graze UIDs"
+    },
+    {
+      "from": "awaiting_publication",
+      "to": "group_1_armed",
+      "event_id": "s2_b12",
+      "condition": "publication completion is observed by tick 1794 and the exact 3-2-1 mapping matches published_order"
+    },
+    {
+      "from": "group_1_armed",
+      "to": "group_2_armed",
+      "event_id": "s2_b13",
+      "condition": "group 1 settles"
+    },
+    {
+      "from": "group_2_armed",
+      "to": "group_3_armed",
+      "event_id": "s2_b14",
+      "condition": "group 2 settles"
+    },
+    {
+      "from": "group_3_armed",
+      "to": "group_3_pending_final_cross",
+      "event_id": "s2_b17",
+      "condition": "all group-3 preconditions latch no later than tick 2544"
+    },
+    {
+      "from": "group_3_pending_final_cross",
+      "to": "complete",
+      "event_id": "s2_b18",
+      "condition": "the final open lane is crossed during ticks 2550 through 2700 and group 3 settles atomically"
+    }
+  ],
+  "event_ordering": {
+    "total_order": [
+      "stage_tick ascending",
+      "event_sequence ascending"
+    ],
+    "same_tick_rule": "Process defeat, graze, topology, and crossing callbacks one at a time in event_sequence order, applying each state transition before the next callback.",
+    "simultaneous_booth_defeats": "Do not coalesce. A booth defeat that is not the currently expected target invalidates the chain even when another booth was defeated on the same tick.",
+    "idempotency_key": "stage_run_uid plus group_index plus transition name"
+  },
+  "rebound_graze_contract": {
+    "required_beads_per_group": 1,
+    "selection_rule": "For each group, select the first bullet emitted by required_source_spawn_id at or after the group start tick, ordered by bullet_spawn_tick, event_sequence, then bullet_uid. The selected bullet_uid is immutable for that group.",
+    "qualification_rule": "The selected bullet counts only when reflection_count_before_graze is at least 1 and the first accepted graze occurs inside the group's predicate window.",
+    "uid_scope": "bullet_uid is stable and unique within stage_run_uid from bullet spawn through destruction.",
+    "deduplication_rule": "The first qualifying graze for a bullet_uid is accepted. Repeated callbacks for the same bullet_uid are telemetry-only duplicate_graze_ignored events and never add progress or invalidate the route.",
+    "cross_group_rule": "A bullet_uid accepted by one group cannot be selected by or satisfy another group.",
+    "unselected_bullet_rule": "Grazes on non-selected bullets retain ordinary gameplay graze behavior but do not satisfy this score route."
+  },
+  "groups": [
+    {
+      "group_index": 1,
+      "group_id": "posted_price_3_red",
+      "armed_state": "group_1_armed",
+      "published_price": 3,
+      "window": {
+        "start_event_id": "s2_b13",
+        "start_tick": 1800,
+        "predicate_deadline_event_id": "s2_b13",
+        "predicate_deadline_tick": 1944
+      },
+      "expected_target": {
+        "event_id": "s2_b13",
+        "spawn_id": "s2_b13_red_booth_master",
+        "enemy_id": "booth_master_red"
+      },
+      "required_rebound": {
+        "source_event_id": "s2_b13",
+        "required_source_spawn_id": "s2_b13_blue_booth_master",
+        "source_enemy_id": "booth_master_blue",
+        "source_primitive": "rebound_bead",
+        "minimum_accepted_unique_uids": 1,
+        "maximum_accepted_unique_uids": 1
+      },
+      "order_predicate": "settled_group_count equals 0 and the first defeated booth master after arming is s2_b13_red_booth_master",
+      "shared_topology_predicate": "lane_state_before_kill reports that the price-3 target is reachable before its defeat",
+      "difficulty_topology_predicates": {
+        "normal": {
+          "predicate_id": "normal_red_lane_reachable",
+          "required_state": "red_target_lane_open"
+        },
+        "hard": {
+          "predicate_id": "hard_current_lane_to_red_booth_edge_exists",
+          "required_state": "hard_red_target_edge_open",
+          "non_numeric_topology_test": "lane_state_before_kill contains a directed reachable edge from the current lane state to the red booth node"
+        }
+      },
+      "success_rule": "Latch the expected target defeat, one qualifying required bullet_uid, and the topology predicate in any callback order within the window; settle on the callback tick that completes the set.",
+      "settlement": {
+        "settlement_tick_rule": "earliest tick at which all group-1 predicates are latched, no later than 1944",
+        "point_value_additive_delta": 0.25,
+        "point_value_multiplier_after": 1.25,
+        "seal_item_id": "night_festival_seal",
+        "seal_spawn_count": 0,
+        "next_state": "group_2_armed"
+      },
+      "expiry_rule": "At tick 1944 after all callbacks, transition to expired if any required predicate is absent."
+    },
+    {
+      "group_index": 2,
+      "group_id": "posted_price_2_blue",
+      "armed_state": "group_2_armed",
+      "published_price": 2,
+      "window": {
+        "start_event_id": "s2_b14",
+        "start_tick": 1950,
+        "predicate_deadline_event_id": "s2_b14",
+        "predicate_deadline_tick": 2094
+      },
+      "expected_target": {
+        "owner_event_id": "s2_b13",
+        "active_event_id": "s2_b14",
+        "spawn_id": "s2_b13_blue_booth_master",
+        "enemy_id": "booth_master_blue"
+      },
+      "required_rebound": {
+        "source_event_id": "s2_b13",
+        "active_event_id": "s2_b14",
+        "required_source_spawn_id": "s2_b13_blue_booth_master",
+        "source_enemy_id": "booth_master_blue",
+        "source_primitive": "rebound_bead",
+        "minimum_accepted_unique_uids": 1,
+        "maximum_accepted_unique_uids": 1
+      },
+      "order_predicate": "settled_group_count equals 1, red is already settled, and the next defeated booth master is s2_b13_blue_booth_master",
+      "shared_topology_predicate": "The s2_b14 neighbor flag effect is committed before blue settlement and its reachable_lane_graph still reaches the price-2 target.",
+      "difficulty_topology_predicates": {
+        "normal": {
+          "predicate_id": "normal_neighbor_state_reaches_blue_lane",
+          "required_state": "blue_target_lane_open_after_red"
+        },
+        "hard": {
+          "predicate_id": "hard_neighbor_flag_edge_reachable",
+          "required_state": "neighbor_flip_graph_reaches_blue_booth",
+          "non_numeric_topology_test": "Apply killed_flag red to affected_lane_ids, then require reachable_lane_graph to contain a directed edge to the blue booth node"
+        }
+      },
+      "success_rule": "Latch the blue defeat, one new qualifying required bullet_uid emitted at or after tick 1950, and the committed neighbor topology by tick 2094; settle on the callback tick that completes the set.",
+      "settlement": {
+        "settlement_tick_rule": "earliest tick at which all group-2 predicates are latched, no later than 2094",
+        "point_value_additive_delta": 0.25,
+        "point_value_multiplier_after": 1.5,
+        "seal_item_id": "night_festival_seal",
+        "seal_spawn_count": 0,
+        "next_state": "group_3_armed"
+      },
+      "expiry_rule": "At tick 2094 after all callbacks, transition to expired if any required predicate is absent."
+    },
+    {
+      "group_index": 3,
+      "group_id": "posted_price_1_yellow_final",
+      "armed_state": "group_3_armed",
+      "published_price": 1,
+      "window": {
+        "start_event_id": "s2_b15",
+        "start_tick": 2100,
+        "mirror_choice_deadline_event_id": "s2_b15",
+        "mirror_choice_deadline_tick": 2244,
+        "recovery_deadline_event_id": "s2_b16",
+        "recovery_deadline_tick": 2394,
+        "predicate_deadline_event_id": "s2_b17",
+        "predicate_deadline_tick": 2544,
+        "final_cross_event_id": "s2_b18",
+        "final_cross_start_tick": 2550,
+        "final_cross_deadline_tick": 2700
+      },
+      "expected_target": {
+        "owner_event_id": "s2_b13",
+        "settlement_event_id": "s2_b18",
+        "spawn_id": "s2_b13_yellow_booth_master",
+        "enemy_id": "booth_master_yellow"
+      },
+      "mirror_choice": {
+        "event_id": "s2_b15",
+        "allowed_spawn_ids": [
+          "s2_b15_left_mirror",
+          "s2_b15_right_mirror"
+        ],
+        "enemy_id": "water_mirror_yokai",
+        "predicate": "Exactly one allowed mirror is defeated by tick 2244 and its mirror_axis, source_lane, mapped_lane, and activation_tick are frozen as the selected route."
+      },
+      "mirror_before_abacus_recovery": {
+        "event_id": "s2_b16",
+        "abacus_spawn_id": "s2_b16_abacus_keeper",
+        "abacus_enemy_id": "closing_abacus_keeper",
+        "predicate": "The selected mirror defeat precedes the abacus keeper defeat in total event order; first_kill_role is mirror and center_lane_preserved is true by tick 2394.",
+        "gameplay_fallback_is_not_score_success": "The choreography's recoverable outer route remains playable when the abacus is defeated first, but that path invalidates this score chain."
+      },
+      "required_rebound": {
+        "source_event_id": "s2_b16",
+        "required_source_spawn_id": "s2_b16_abacus_keeper",
+        "source_enemy_id": "closing_abacus_keeper",
+        "source_primitive": "rebound_bead",
+        "minimum_accepted_unique_uids": 1,
+        "maximum_accepted_unique_uids": 1
+      },
+      "order_predicate": "settled_group_count equals 2, red and blue are settled, and the next defeated booth master is s2_b13_yellow_booth_master by tick 2544",
+      "shared_topology_predicate": "The selected mirror mapping and committed booth lane state identify one final_open_lane_id, and that lane remains reachable after the yellow target defeat.",
+      "difficulty_topology_predicates": {
+        "normal": {
+          "predicate_id": "normal_selected_mirror_maps_to_open_lane",
+          "required_state": "mapped_lane_matches_final_open_lane"
+        },
+        "hard": {
+          "predicate_id": "hard_mirror_axis_to_survivor_edge_reachable",
+          "required_state": "mirror_neighbor_graph_reaches_final_open_lane",
+          "non_numeric_topology_test": "Apply the selected mirror_axis to the neighbor-flipped reachable_lane_graph and require a directed edge from mapped_lane to the lane determined by the last surviving yellow booth"
+        }
+      },
+      "precommit_rule": "By tick 2544, latch exactly one mirror choice, mirror-before-abacus recovery, one qualifying abacus bullet_uid, yellow as the third booth defeat, and the applicable topology predicate; then freeze the result in group_3_pending_final_cross.",
+      "success_rule": "While group_3_pending_final_cross, accept exactly one crossing of final_open_lane_id during s2_b18 ticks 2550 through 2700. The crossing callback is the group-3 settlement tick.",
+      "settlement": {
+        "settlement_tick_rule": "final_lane_cross_tick in the inclusive range 2550 through 2700 after all preconditions were frozen by tick 2544",
+        "point_value_additive_delta": 0.25,
+        "point_value_multiplier_after": 1.75,
+        "seal_item_id": "night_festival_seal",
+        "seal_spawn_count": 1,
+        "atomic_effects": [
+          "increment settled_group_count from 2 to 3",
+          "set point_value_multiplier from 1.50 to 1.75",
+          "spawn exactly one canonical night_festival_seal",
+          "transition to complete"
+        ],
+        "next_state": "complete"
+      },
+      "expiry_rule": "Expire at tick 2544 if preconditions are incomplete, or at tick 2700 if the preconditions are frozen but no valid final open-lane crossing occurred."
+    }
+  ],
+  "invalidation_reasons": [
+    {
+      "reason_id": "publication_mismatch",
+      "terminal_state": "expired",
+      "condition": "s2_b12 is incomplete at tick 1794 or does not publish red=3, blue=2, yellow=1",
+      "reward_behavior": "no group reward and no seal"
+    },
+    {
+      "reason_id": "wrong_booth_order",
+      "terminal_state": "invalidated",
+      "condition": "a booth master other than the currently expected red, blue, or yellow target is defeated while a group is armed",
+      "reward_behavior": "retain already-settled multipliers; block all later settlements and the seal"
+    },
+    {
+      "reason_id": "required_rebound_graze_missing",
+      "terminal_state": "expired",
+      "condition": "the selected required bullet_uid has no qualifying post-reflection graze by its group predicate deadline",
+      "reward_behavior": "retain already-settled multipliers; block all later settlements and the seal"
+    },
+    {
+      "reason_id": "topology_predicate_failed",
+      "terminal_state": "invalidated",
+      "condition": "the applicable Normal or Hard lane/graph state is false when its target settlement is evaluated",
+      "reward_behavior": "retain already-settled multipliers; block all later settlements and the seal"
+    },
+    {
+      "reason_id": "mirror_choice_ambiguous",
+      "terminal_state": "invalidated",
+      "condition": "both s2_b15 mirrors are selected as the score route, or the selected mapping changes after it is frozen",
+      "reward_behavior": "block group 3 and the seal"
+    },
+    {
+      "reason_id": "mirror_choice_expired",
+      "terminal_state": "expired",
+      "condition": "no s2_b15 mirror is selected by tick 2244",
+      "reward_behavior": "block group 3 and the seal"
+    },
+    {
+      "reason_id": "abacus_before_mirror",
+      "terminal_state": "invalidated",
+      "condition": "s2_b16_abacus_keeper is defeated before the selected s2_b15 mirror in total event order",
+      "reward_behavior": "allow the choreography's gameplay fallback, but block group 3 and the seal"
+    },
+    {
+      "reason_id": "price_countdown_expired",
+      "terminal_state": "expired",
+      "condition": "all group-3 preconditions are not frozen by tick 2544",
+      "reward_behavior": "retain group-1 and group-2 multipliers; block group 3 and the seal"
+    },
+    {
+      "reason_id": "final_lane_cross_expired",
+      "terminal_state": "expired",
+      "condition": "no qualifying final_open_lane_id crossing occurs by tick 2700",
+      "reward_behavior": "retain group-1 and group-2 multipliers; block group 3 and the seal"
+    },
+    {
+      "reason_id": "wrong_final_lane_cross",
+      "terminal_state": "invalidated",
+      "condition": "a lane other than final_open_lane_id is used as the s2_b18 settlement crossing while group_3_pending_final_cross",
+      "reward_behavior": "allow the choreography's wrong-order outer-route fallback, but block group 3 and the seal"
+    },
+    {
+      "reason_id": "duplicate_transition_callback",
+      "terminal_state": "unchanged",
+      "condition": "an already-consumed idempotency key or bullet_uid callback is received again",
+      "reward_behavior": "ignore the duplicate, emit telemetry, and do not duplicate any reward"
+    }
+  ],
+  "telemetry_fields": {
+    "stage_run_uid": {
+      "type": "string",
+      "required": "all records",
+      "meaning": "Stable identity for one Stage 2 attempt and the scope for all route deduplication."
+    },
+    "difficulty": {
+      "type": "enum(normal,hard)",
+      "required": "all records"
+    },
+    "stage_tick": {
+      "type": "non_negative_integer",
+      "required": "all records"
+    },
+    "event_sequence": {
+      "type": "non_negative_integer",
+      "required": "every callback",
+      "meaning": "Monotonic tie-breaker within a stage tick."
+    },
+    "event_id": {
+      "type": "string",
+      "required": "every callback"
+    },
+    "route_state_before": {
+      "type": "route_state_id",
+      "required": "every transition"
+    },
+    "route_state_after": {
+      "type": "route_state_id",
+      "required": "every transition"
+    },
+    "transition_reason": {
+      "type": "string",
+      "required": "every transition"
+    },
+    "group_index": {
+      "type": "integer(1..3)",
+      "required": "armed, predicate, and settlement records"
+    },
+    "settled_group_count": {
+      "type": "integer(0..3)",
+      "required": "every transition and settlement"
+    },
+    "published_price": {
+      "type": "integer(1..3)",
+      "required": "publication and group records"
+    },
+    "expected_target_spawn_id": {
+      "type": "string",
+      "required": "each group arm and booth defeat"
+    },
+    "defeated_spawn_id": {
+      "type": "string",
+      "required": "each defeat callback"
+    },
+    "kill_tick": {
+      "type": "non_negative_integer",
+      "required": "each defeat callback"
+    },
+    "kill_event_sequence": {
+      "type": "non_negative_integer",
+      "required": "each defeat callback"
+    },
+    "lane_state_before_kill": {
+      "type": "symbolic_lane_state",
+      "required": "each booth defeat"
+    },
+    "killed_flag": {
+      "type": "string",
+      "required": "s2_b14 neighbor effect"
+    },
+    "affected_lane_ids": {
+      "type": "array(string)",
+      "required": "s2_b14 neighbor effect"
+    },
+    "reachable_lane_graph": {
+      "type": "directed_graph",
+      "required": "s2_b14 and all Hard topology evaluations"
+    },
+    "required_bullet_uid": {
+      "type": "string",
+      "required": "each group after required bead selection"
+    },
+    "bullet_uid": {
+      "type": "string",
+      "required": "every route graze callback"
+    },
+    "bullet_source_spawn_id": {
+      "type": "string",
+      "required": "every route graze callback"
+    },
+    "bullet_spawn_tick": {
+      "type": "non_negative_integer",
+      "required": "every required bead selection"
+    },
+    "first_reflection_tick": {
+      "type": "non_negative_integer",
+      "required": "every qualifying route graze"
+    },
+    "reflection_count_before_graze": {
+      "type": "positive_integer",
+      "required": "every route graze callback"
+    },
+    "graze_tick": {
+      "type": "non_negative_integer",
+      "required": "every route graze callback"
+    },
+    "duplicate_graze_ignored": {
+      "type": "boolean",
+      "required": "every repeated bullet_uid callback"
+    },
+    "mirror_choice_spawn_id": {
+      "type": "string",
+      "required": "group 3 mirror choice"
+    },
+    "mirror_axis": {
+      "type": "enum(left,right)",
+      "required": "group 3 mirror choice"
+    },
+    "source_lane": {
+      "type": "string",
+      "required": "group 3 mirror choice"
+    },
+    "mapped_lane": {
+      "type": "string",
+      "required": "group 3 mirror choice and topology evaluation"
+    },
+    "mirror_kill_tick": {
+      "type": "non_negative_integer",
+      "required": "group 3 recovery"
+    },
+    "abacus_kill_tick": {
+      "type": "non_negative_integer",
+      "required": "group 3 recovery"
+    },
+    "first_kill_role": {
+      "type": "string",
+      "required": "s2_b16 recovery"
+    },
+    "mirror_activation_mask": {
+      "type": "symbolic_bitset",
+      "required": "s2_b16 recovery"
+    },
+    "center_lane_preserved": {
+      "type": "boolean",
+      "required": "s2_b16 recovery"
+    },
+    "price_page_tick": {
+      "type": "non_negative_integer",
+      "required": "s2_b17 countdown"
+    },
+    "current_price": {
+      "type": "integer(1..3)",
+      "required": "s2_b17 countdown"
+    },
+    "precommit_tick": {
+      "type": "non_negative_integer",
+      "required": "group 3 precommit"
+    },
+    "final_open_lane_id": {
+      "type": "string",
+      "required": "group 3 precommit and final crossing"
+    },
+    "final_lane_cross_tick": {
+      "type": "non_negative_integer",
+      "required": "s2_b18 success"
+    },
+    "boss_gate_open_tick": {
+      "type": "non_negative_integer",
+      "required": "s2_b18 completion"
+    },
+    "point_value_multiplier_before": {
+      "type": "number",
+      "required": "every group settlement"
+    },
+    "point_value_multiplier_after": {
+      "type": "number",
+      "required": "every group settlement"
+    },
+    "seal_item_id": {
+      "type": "string",
+      "required": "group 3 settlement",
+      "constant": "night_festival_seal"
+    },
+    "seal_spawn_count": {
+      "type": "non_negative_integer",
+      "required": "every group settlement"
+    },
+    "invalidation_reason": {
+      "type": "invalidation_reason_id",
+      "required": "invalidated, expired, and ignored-duplicate records"
+    }
+  },
+  "invariants": [
+    {
+      "invariant_id": "source_referential_integrity",
+      "rule": "Every event, spawn, enemy, and canonical item ID in this contract is present in m2_stage2_choreography.json or GameDatabase."
+    },
+    {
+      "invariant_id": "teaching_isolation",
+      "rule": "s2_b01 through s2_b05 can never arm, increment, or complete the post-midboss chain; all teaching markers and teaching graze UIDs are cleared at s2_b06."
+    },
+    {
+      "invariant_id": "strict_published_order",
+      "rule": "The only successful booth order is s2_b13_red_booth_master, then s2_b13_blue_booth_master, then s2_b13_yellow_booth_master, corresponding exactly to prices 3, 2, 1."
+    },
+    {
+      "invariant_id": "finite_single_pass_state_machine",
+      "rule": "A group can settle at most once per stage_run_uid, terminal states cannot rearm, and there is no retry before a stage restart creates a new stage_run_uid."
+    },
+    {
+      "invariant_id": "required_rebound_uid_uniqueness",
+      "rule": "Exactly one selected rebound bullet_uid must qualify in each successful group; each UID contributes at most once globally and must have reflection_count_before_graze at least 1."
+    },
+    {
+      "invariant_id": "point_value_additive_progression",
+      "rule": "The canonical point item value multiplier is 1.00, 1.25, 1.50, then 1.75 after zero, one, two, then three settled groups. The three 25% deltas are additive, not compounded, and never affect power or route tokens."
+    },
+    {
+      "invariant_id": "earned_group_rewards_do_not_rollback",
+      "rule": "Invalidation or expiry blocks future settlements but does not reverse multipliers from groups that already settled."
+    },
+    {
+      "invariant_id": "seal_exactly_once",
+      "rule": "Groups 1 and 2 spawn zero seals. Group 3 and the route complete transition are one atomic callback that spawns exactly one canonical night_festival_seal; duplicate callbacks spawn zero additional seals."
+    },
+    {
+      "invariant_id": "drop_alias_canonical_whitelist",
+      "rule": "Resource-producing aliases resolve only to canonical power or point. The sole route reward uses canonical night_festival_seal. No alias resolves to bomb_fragment, life_fragment, or full_power."
+    },
+    {
+      "invariant_id": "route_tokens_are_non_resource",
+      "rule": "mirror_token_left, mirror_token_right, and price_token_1 through price_token_3 are route-local metadata and never enter persistent inventory or invoke item collection rewards."
+    },
+    {
+      "invariant_id": "normal_hard_scoring_fairness",
+      "rule": "Normal and Hard use identical target order, tick deadlines, one selected rebound UID per group, additive point multipliers, and exactly-one-seal reward."
+    },
+    {
+      "invariant_id": "hard_topology_is_stateful_not_numeric",
+      "rule": "Hard success additionally evaluates named graph states hard_current_lane_to_red_booth_edge_exists, hard_neighbor_flag_edge_reachable, and hard_mirror_axis_to_survivor_edge_reachable; bullet count, speed, and numeric thresholds do not substitute for these topology predicates."
+    },
+    {
+      "invariant_id": "gameplay_fallback_not_score_success",
+      "rule": "The s2_b16 recoverable outer route and the s2_b18 wrong-order outer crossing may continue gameplay but can never settle a score group or spawn the route seal."
+    },
+    {
+      "invariant_id": "no_unstated_miss_or_bomb_condition",
+      "rule": "Player death, bomb use, and ordinary non-route grazes do not invalidate this route because the source choreography defines no such score hook."
+    }
+  ]
+}
