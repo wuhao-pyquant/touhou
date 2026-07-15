@@ -2391,7 +2391,7 @@ func _stage2_controller_clock_evidence(output: Dictionary) -> Dictionary:
 			return {"ok": false, "error": "Stage 2 controller duplicated stage-tick evidence"}
 		if controller_tick != live_tick + 1:
 			return {"ok": false, "error": "Stage 2 controller skipped ordinary stage-tick evidence"}
-		if typeof(runtime_tick_value) != TYPE_INT or int(runtime_tick_value) != controller_tick:
+		if typeof(runtime_tick_value) != TYPE_INT or int(runtime_tick_value) != controller_tick + 1:
 			return {"ok": false, "error": "Stage 2 controller stage-tick evidence contradicts its live runtime"}
 		return {"ok": true, "mode": "advance", "stage_tick": controller_tick}
 	var canonical_ticks := {}
@@ -2439,7 +2439,7 @@ func _stage2_controller_clock_evidence(output: Dictionary) -> Dictionary:
 		previous_tick = authored_tick
 	if previous_tick != controller_tick:
 		return {"ok": false, "error": "Stage 2 controller stage tick contradicts its final authored event tick"}
-	if typeof(runtime_tick_value) != TYPE_INT or int(runtime_tick_value) != controller_tick:
+	if typeof(runtime_tick_value) != TYPE_INT or int(runtime_tick_value) != controller_tick + 1:
 		return {"ok": false, "error": "Stage 2 controller stage-tick evidence contradicts its live runtime"}
 	return {"ok": true, "mode": "events", "stage_tick": controller_tick}
 
