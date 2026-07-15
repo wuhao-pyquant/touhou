@@ -1,0 +1,35 @@
+{
+  "id": "M1-gameplay-type-annotation-static-gate",
+  "objective": "Perform the deep-review-mandated narrow read-only static gate for candidate bac51b79e7b010fe88de42d6906f60d2619f3d59. Do not launch Godot, run tests, edit files, or re-review gameplay design. Compare against reviewed candidate 56a1e0180b828a348287dbeaa9111d570bb1ed36. The entire delta must be exactly five replacement annotations in exactly two files: tests/assert_m1_gameplay_systems.gd first_hit_timer: float, advanced_timer: float, live_hash: String, completed_hash: String; tests/assert_m1_shot_mechanics.gd live_hash: String. Verify every production file and tests/assert_phase8_regressions.gd are byte-identical to 56a1e01; assertions, helpers, and test ordering are unchanged; and the complete newly added := rescan across all three assertion scripts matches the deep review classification, with the four remaining inferred declarations safe because they originate from a Dictionary literal, explicit float conversions, or a named-class constructor. Return GATE: APPROVE only if the same four serial guarded launches are safe, once each and stopping at first failure: assert_m1_gameplay_systems.gd, assert_m1_shot_mechanics.gd, assert_phase8_regressions.gd, scenes/main.tscn --quit-after 5. Otherwise return GATE: REPAIR and authorize zero Godot launches.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": [
+    "**"
+  ],
+  "dependency_commit": "bac51b79e7b010fe88de42d6906f60d2619f3d59",
+  "acceptance_commands": [
+    "if((git rev-parse HEAD).Trim() -ne 'bac51b79e7b010fe88de42d6906f60d2619f3d59'){throw 'Wrong candidate HEAD'}; Write-Host 'TYPE_GATE_HEAD=pass'",
+    "$changed=@(git diff --name-only 56a1e0180b828a348287dbeaa9111d570bb1ed36..HEAD); $expected=@('tests/assert_m1_gameplay_systems.gd','tests/assert_m1_shot_mechanics.gd'); if(Compare-Object $expected $changed){throw \"Unexpected annotation delta: $($changed -join ',')\"}; Write-Host 'TYPE_GATE_SCOPE=pass'",
+    "$num=@(git diff --numstat 56a1e0180b828a348287dbeaa9111d570bb1ed36..HEAD); $expected=@(\"4`t4`ttests/assert_m1_gameplay_systems.gd\",\"1`t1`ttests/assert_m1_shot_mechanics.gd\"); if(Compare-Object $expected $num){throw \"Unexpected annotation counts: $($num -join ',')\"}; Write-Host 'TYPE_GATE_COUNTS=pass'",
+    "git diff 56a1e0180b828a348287dbeaa9111d570bb1ed36..HEAD --check",
+    "if(git status --porcelain){throw 'Type-gate worktree is not clean'}; Write-Host 'TYPE_GATE_CLEAN=pass'",
+    "if(@(Get-Process -ErrorAction SilentlyContinue | Where-Object ProcessName -Like 'Godot*').Count-ne 0){throw 'Godot process exists during type gate'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Begin with GATE: APPROVE or GATE: REPAIR and explicitly state that no Godot command or test was run",
+    "Report the exact two-file five-annotation delta and whether production plus phase8 are byte-identical to 56a1e01",
+    "List the four remaining safe newly added := declarations and why each is inferable; report any other same-class risk as a blocker",
+    "Confirm assertions, helpers, and test order are unchanged",
+    "On APPROVE authorize exactly the four frozen serial guarded launches once each; on REPAIR authorize zero launches",
+    "Report actual runtime identity, all acceptance exit codes, zero changed files, and Godot process count zero"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "Authoritative adjudication is .agent-runs/20260715T033035Z-M1-gameplay-executable-failure-deep-review-deep_reviewer-6f322445/final.json, which ended GATE: REPAIR_AUTHORIZED and froze exactly five annotations in two test files.",
+    "Repair run 20260715T034408Z-M1-gameplay-semantic-shutdown-repair-gameplay_systems-r2-925f8798 resumed the original thread at gpt-5.6-sol/max, launched Godot zero times, and reports the next fresh gameplay_systems ticket returns to Sol/high. Treat this only as supplied evidence.",
+    "The failed guarded attempt was a test parse failure only. It emitted no native-crash marker, leak warning, access-violation popup, or residual process. The remaining three launches were not attempted.",
+    "Do not inspect, reset, stage, or mention main-worktree audio/**/*.import modifications."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
