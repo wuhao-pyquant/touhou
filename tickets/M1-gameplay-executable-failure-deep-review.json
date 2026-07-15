@@ -1,0 +1,37 @@
+{
+  "id": "M1-gameplay-executable-failure-deep-review",
+  "objective": "Perform the mandated maximum-depth read-only adjudication after the first guarded executable check of candidate 56a1e0180b828a348287dbeaa9111d570bb1ed36 failed. Do not launch Godot, run tests, edit files, or redesign M1. The guard returned FatalOutput with processExitCode 1 and no residual Godot process. Authoritative stderr is C:/Users/e/AppData/Local/Temp/godot-m1-56a1e01-gameplay-systems.log.stderr and reports four GDScript parse errors in tests/assert_m1_gameplay_systems.gd at lines 143, 147, 180, and 202 because := cannot infer types from dynamically typed shell/GameManager expressions. Establish whether this is a bounded test-code defect rather than a production regression; inspect all seven candidate files, especially every newly added := declaration and dynamic property/method result in the three authorized assertion scripts, so the next repair closes the complete same-class parse risk without speculative production edits. Decide whether the original gameplay_systems thread/worktree may receive repair round 2 under its existing profile and prescribe the exact smallest file/line correction boundary. Freeze the minimum post-repair gate sequence and avoid rerunning tests that cannot be affected. End with GATE: REPAIR_AUTHORIZED only if one bounded original-Agent repair is safe; otherwise end with GATE: BLOCKED and state the missing fact.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": [
+    "**"
+  ],
+  "dependency_commit": "56a1e0180b828a348287dbeaa9111d570bb1ed36",
+  "acceptance_commands": [
+    "if((git rev-parse HEAD).Trim() -ne '56a1e0180b828a348287dbeaa9111d570bb1ed36'){throw 'Wrong candidate HEAD'}; Write-Host 'DEEP_REVIEW_HEAD=pass'",
+    "$changed=@(git diff --name-only 770181c954567c3610a8d276eca3b5715f9b68f4..HEAD); $expected=@('autoload/game_manager.gd','scripts/main.gd','scripts/runtime/gameplay_score_system.gd','scripts/runtime/item_reward_system.gd','tests/assert_m1_gameplay_systems.gd','tests/assert_m1_shot_mechanics.gd','tests/assert_phase8_regressions.gd'); if(Compare-Object $expected $changed){throw \"Unexpected candidate paths: $($changed -join ',')\"}; Write-Host 'DEEP_REVIEW_SCOPE=pass'",
+    "git diff 770181c954567c3610a8d276eca3b5715f9b68f4..HEAD --check",
+    "$log='C:/Users/e/AppData/Local/Temp/godot-m1-56a1e01-gameplay-systems.log.stderr'; if(-not(Test-Path -LiteralPath $log)){throw 'Guarded failure evidence missing'}; $text=Get-Content -Raw -LiteralPath $log; foreach($line in @(143,147,180,202)){if($text-notmatch \"assert_m1_gameplay_systems.gd:$line\"){throw \"Missing parse evidence for line $line\"}}; Write-Host 'DEEP_REVIEW_EVIDENCE=pass'",
+    "if(git status --porcelain){throw 'Deep-review worktree is not clean'}; Write-Host 'DEEP_REVIEW_CLEAN=pass'",
+    "if(@(Get-Process -ErrorAction SilentlyContinue | Where-Object ProcessName -Like 'Godot*').Count-ne 0){throw 'Godot process exists during deep review'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "End the summary with exactly GATE: REPAIR_AUTHORIZED or GATE: BLOCKED and explicitly state that no Godot command or test was run",
+    "Classify the guarded failure as test parse, production parse, native crash, resource leak, or mixed, citing exact evidence",
+    "List every same-class risky declaration in the three pending assertion scripts and distinguish required type annotations from already safe inferred values",
+    "Freeze exact allowed repair files and semantic edits; prohibit production behavior changes unless direct evidence proves one is necessary",
+    "Specify whether original gameplay_systems repair round 2 is authorized and which profile identity it must use",
+    "Freeze the smallest verification sequence after repair, including whether a new static gate is required before any Godot relaunch and which prior unexecuted launches remain relevant",
+    "Report actual runtime identity, all acceptance exit codes, zero changed files, and Godot process count zero"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "Static review run 20260715T031832Z-M1-gameplay-semantic-shutdown-r1-review-core_simulation-40abbb42 returned GATE: APPROVE and authorized four serial guarded launches. Only the first was attempted; it failed during script parsing. The other three were stopped and were not launched.",
+    "The guarded attempt produced no signal 11, C++ backtrace, CrashHandlerException, access violation, popup, or residual Godot process. Do not conflate the parse failure with the three earlier Windows native-crash popups.",
+    "The original gameplay_systems root thread is 019f63ad-65a5-7273-bc72-12658f65ae47. Repair round 1 used gpt-5.6-sol/xhigh for the separate quit-order blocker. Its profile declares round 2 as gpt-5.6-sol/max, but the ticket currently caps max_repair_rounds at 1; deep review must decide whether release_lead may narrowly authorize round 2 without changing Agent identity.",
+    "The candidate worktree contains the reviewed commit. Release lead can safely restore its HEAD to the ticket base while retaining working files, as done for round 1, if a second repair is authorized.",
+    "Do not inspect, reset, stage, or mention main-worktree audio/**/*.import modifications."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
