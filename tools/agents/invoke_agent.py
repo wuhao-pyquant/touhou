@@ -175,6 +175,7 @@ def _repair_identity(
     *,
     prior_round: int,
     escalation_level: int,
+    deep_review_authorized: bool = False,
 ) -> dict[str, str]:
     expected_round = prior_round + 1
     if escalation_level != expected_round:
@@ -182,7 +183,12 @@ def _repair_identity(
             f"EscalationLevel must be the next contiguous round {expected_round}, "
             f"got {escalation_level}"
         )
-    if escalation_level > ticket["max_repair_rounds"]:
+    effective_limit = ticket["max_repair_rounds"]
+    if deep_review_authorized:
+        if escalation_level > 2:
+            raise BridgeError("Deep review cannot authorize repair rounds above 2")
+        effective_limit = max(effective_limit, escalation_level)
+    if escalation_level > effective_limit:
         raise BridgeError(
             f"Ticket permits {ticket['max_repair_rounds']} repair round(s); "
             f"round {escalation_level} is forbidden"
@@ -503,7 +509,9 @@ def _failure_context(run_dir: Path, summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _validate_review_repair_report(report: dict[str, Any]) -> None:
+def _validate_review_repair_report(
+    report: dict[str, Any], *, reviewer_agent: str
+) -> str:
     problems = _validate_report(report)
     if problems:
         raise BridgeError(
@@ -513,10 +521,28 @@ def _validate_review_repair_report(report: dict[str, Any]) -> None:
     if report.get("status") != "completed":
         raise BridgeError("Review failure evidence must have report.status completed")
     summary = str(report.get("summary", ""))
-    if re.match(r"^\s*GATE:\s*REPAIR\b", summary, flags=re.IGNORECASE) is None:
-        raise BridgeError("Review failure evidence must begin with GATE: REPAIR")
+    deep_authorized = re.match(
+        r"^\s*GATE:\s*REPAIR_AUTHORIZED\b", summary, flags=re.IGNORECASE
+    )
+    ordinary_repair = re.match(
+        r"^\s*GATE:\s*REPAIR\b", summary, flags=re.IGNORECASE
+    )
+    if deep_authorized is not None:
+        if reviewer_agent != "deep_reviewer":
+            raise BridgeError(
+                "Only deep_reviewer may issue GATE: REPAIR_AUTHORIZED"
+            )
+        authorization_kind = "deep_review_repair"
+    elif ordinary_repair is not None:
+        authorization_kind = "review_repair"
+    else:
+        raise BridgeError(
+            "Review failure evidence must begin with GATE: REPAIR or "
+            "GATE: REPAIR_AUTHORIZED"
+        )
     if report.get("changed_files"):
         raise BridgeError("Review failure evidence must report zero changed files")
+    return authorization_kind
 
 
 def _load_review_failure_context(
@@ -588,12 +614,15 @@ def _load_review_failure_context(
     report = _load_optional_report(review_dir)
     if report is None:
         raise BridgeError("Review failure run has no validated final report")
-    _validate_review_repair_report(report)
+    authorization_kind = _validate_review_repair_report(
+        report, reviewer_agent=str(review_invocation.get("agent", ""))
+    )
     return {
         "run_id": review_run,
         "run_dir": review_dir,
         "summary": review_summary,
         "candidate_commit": candidate_commit,
+        "authorization_kind": authorization_kind,
     }
 
 
@@ -952,6 +981,24 @@ def _load_resume_context(
     ticket, ticket_source, ticket_sha256 = _load_ticket_snapshot(
         repo, parent_dir, invocation
     )
+    base_commit = invocation.get("base_commit")
+    if not isinstance(base_commit, str) or not base_commit:
+        raise BridgeError("Prior invocation has no base_commit")
+    verified_base = _git(repo, "rev-parse", "--verify", f"{base_commit}^{{commit}}")
+    if verified_base != base_commit:
+        raise BridgeError(
+            f"Prior base commit no longer resolves exactly: {base_commit!r}"
+        )
+    review_failure: dict[str, Any] | None = None
+    expected_head = base_commit
+    if review_failure_run:
+        review_failure = _load_review_failure_context(
+            repo,
+            implementation_agent=agent,
+            review_run=review_failure_run,
+            implementation_base=base_commit,
+        )
+        expected_head = review_failure["candidate_commit"]
     if transport_retry:
         if _load_optional_report(parent_dir) is not None:
             raise BridgeError(
@@ -984,6 +1031,10 @@ def _load_resume_context(
             ticket,
             prior_round=prior_round,
             escalation_level=escalation_level,
+            deep_review_authorized=(
+                review_failure is not None
+                and review_failure["authorization_kind"] == "deep_review_repair"
+            ),
         )
         repair_round = escalation_level
 
@@ -995,14 +1046,6 @@ def _load_resume_context(
         raise BridgeError(
             "Prior run has no persisted Codex thread_id; the same session cannot resume"
         )
-    base_commit = invocation.get("base_commit")
-    if not isinstance(base_commit, str) or not base_commit:
-        raise BridgeError("Prior invocation has no base_commit")
-    verified_base = _git(repo, "rev-parse", "--verify", f"{base_commit}^{{commit}}")
-    if verified_base != base_commit:
-        raise BridgeError(
-            f"Prior base commit no longer resolves exactly: {base_commit!r}"
-        )
     worktree_value = invocation.get("worktree") or summary.get("worktree")
     if not isinstance(worktree_value, str) or not worktree_value:
         raise BridgeError("Prior invocation has no worktree")
@@ -1010,16 +1053,6 @@ def _load_resume_context(
     if branch is not None and not isinstance(branch, str):
         raise BridgeError("Prior invocation has an invalid branch")
     worktree = Path(worktree_value)
-    review_failure: dict[str, Any] | None = None
-    expected_head = base_commit
-    if review_failure_run:
-        review_failure = _load_review_failure_context(
-            repo,
-            implementation_agent=agent,
-            review_run=review_failure_run,
-            implementation_base=base_commit,
-        )
-        expected_head = review_failure["candidate_commit"]
     preexisting_changed_paths = _validate_resume_worktree(
         repo,
         worktree,
@@ -1055,7 +1088,7 @@ def _load_resume_context(
         "continuation_kind": (
             "transport_retry"
             if transport_retry
-            else "review_repair"
+            else review_failure["authorization_kind"]
             if review_failure is not None
             else "repair"
         ),

@@ -16,3 +16,8 @@ Do not spawn subagents or produce a replacement project plan.
 round = 1
 model = "gpt-5.6-sol"
 model_reasoning_effort = "max"
+
+[[repair_escalations]]
+round = 2
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"

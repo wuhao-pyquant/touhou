@@ -206,15 +206,54 @@ model_reasoning_effort = "high"
             "failures": ["one bounded blocker"],
             "residual_risks": [],
         }
-        BRIDGE._validate_review_repair_report(report)
+        self.assertEqual(
+            BRIDGE._validate_review_repair_report(
+                report, reviewer_agent="danmaku_director"
+            ),
+            "review_repair",
+        )
         with self.assertRaisesRegex(BRIDGE.BridgeError, "GATE: REPAIR"):
             BRIDGE._validate_review_repair_report(
-                {**report, "summary": "GATE: APPROVE"}
+                {**report, "summary": "GATE: APPROVE"},
+                reviewer_agent="danmaku_director",
             )
         with self.assertRaisesRegex(BRIDGE.BridgeError, "zero changed files"):
             BRIDGE._validate_review_repair_report(
-                {**report, "changed_files": ["reviewer-edit.txt"]}
+                {**report, "changed_files": ["reviewer-edit.txt"]},
+                reviewer_agent="danmaku_director",
             )
+        deep_report = {**report, "summary": "GATE: REPAIR_AUTHORIZED"}
+        self.assertEqual(
+            BRIDGE._validate_review_repair_report(
+                deep_report, reviewer_agent="deep_reviewer"
+            ),
+            "deep_review_repair",
+        )
+        with self.assertRaisesRegex(BRIDGE.BridgeError, "Only deep_reviewer"):
+            BRIDGE._validate_review_repair_report(
+                deep_report, reviewer_agent="danmaku_director"
+            )
+
+    def test_deep_review_can_authorize_one_bounded_extra_repair_round(self) -> None:
+        repo_root = Path(__file__).parents[3]
+        profile = BRIDGE._load_profile(
+            repo_root / ".codex" / "agents" / "core_simulation.toml"
+        )
+        ticket = {"max_repair_rounds": 1}
+        with self.assertRaisesRegex(BRIDGE.BridgeError, "permits 1"):
+            BRIDGE._repair_identity(
+                profile, ticket, prior_round=1, escalation_level=2
+            )
+        self.assertEqual(
+            BRIDGE._repair_identity(
+                profile,
+                ticket,
+                prior_round=1,
+                escalation_level=2,
+                deep_review_authorized=True,
+            ),
+            {"model": "gpt-5.6-sol", "model_reasoning_effort": "xhigh"},
+        )
 
     def test_review_repair_resume_accepts_release_lead_candidate_head(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
