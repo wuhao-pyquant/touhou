@@ -1351,6 +1351,8 @@ func validate_simulation_state(snapshot: Dictionary) -> bool:
 		return false
 	if typeof(snapshot.get("current_stage_local")) != TYPE_INT or int(snapshot.current_stage_local) < 1:
 		return false
+	if int(snapshot.manager.get("current_stage", -1)) != int(snapshot.current_stage_local):
+		return false
 	var is_stage2_snapshot := int(snapshot.current_stage_local) == 2
 	if is_stage2_snapshot:
 		if int(snapshot.get("version", -1)) != STAGE2_SIMULATION_SNAPSHOT_VERSION or not (snapshot.get("stage2_controller") is Dictionary):
@@ -1375,8 +1377,6 @@ func validate_simulation_state(snapshot: Dictionary) -> bool:
 	if not _validate_manager_snapshot(snapshot.manager) or not _validate_replay_runtime_snapshot(snapshot.replay):
 		return false
 	if is_stage2_snapshot:
-		if int(snapshot.manager.get("current_stage", -1)) != 2:
-			return false
 		var stage2_snapshot: Dictionary = snapshot.stage2_controller
 		if stage2_snapshot.is_empty() or not stage_director.has_method("stage2_package"):
 			return false

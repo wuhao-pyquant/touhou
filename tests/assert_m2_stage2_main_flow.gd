@@ -401,6 +401,13 @@ func _assert_legacy_main_routes() -> void:
 		_check_equal(int(snapshot.get("version", -1)), 2, "Legacy stage %d snapshot version drifted." % stage_index)
 		_check(not snapshot.has("stage2_controller"), "Legacy stage %d snapshot gained Stage 2 state." % stage_index)
 		_check_equal(_sorted_snapshot_keys(snapshot), _expected_legacy_snapshot_keys(), "Legacy stage %d snapshot field shape drifted." % stage_index)
+		_check(main.validate_simulation_state(snapshot), "Legacy stage %d v2 snapshot failed positive validation." % stage_index)
+		var live_hash := main.simulation_state_hash()
+		var mismatched_stage := snapshot.duplicate(true)
+		mismatched_stage.manager.current_stage = 3 if stage_index == 1 else 1
+		_check(not main.validate_simulation_state(mismatched_stage), "Legacy stage %d accepted mismatched manager/local stage identity." % stage_index)
+		_check(not main.restore_simulation_state(mismatched_stage), "Legacy stage %d restored mismatched manager/local stage identity." % stage_index)
+		_check_equal(main.simulation_state_hash(), live_hash, "Legacy stage %d mismatched-stage rejection partially mutated Main." % stage_index)
 	_free_main(main)
 
 func _prepare_main_snapshot_context(kind: String, difficulty: String, seed: int) -> Node:
