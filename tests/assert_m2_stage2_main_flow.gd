@@ -56,7 +56,7 @@ func _package() -> Dictionary:
 	return StageDirector.new().stage2_package()
 
 func _new_controller(difficulty: String = "normal", seed: int = 424242) -> RefCounted:
-	var controller := Stage2EncounterController.new()
+	var controller: RefCounted = Stage2EncounterController.new()
 	_check(controller.configure(_package(), difficulty, seed), "Stage 2 controller rejected the approved package for %s: %s" % [difficulty, controller.validation_errors()])
 	return controller
 
@@ -95,7 +95,7 @@ func _advance_trace(controller: RefCounted, count: int) -> Array:
 	return trace
 
 func _assert_director_package_and_legacy_isolation() -> void:
-	var director := StageDirector.new()
+	var director: RefCounted = StageDirector.new()
 	var legacy_before := {}
 	for stage_index in [1, 3, 4, 5, 6]:
 		legacy_before[stage_index] = {
@@ -117,16 +117,16 @@ func _assert_director_package_and_legacy_isolation() -> void:
 		_check_equal(director.midboss_definition(stage_index), before.midboss, "Stage 2 package loading mutated legacy stage %d midboss." % stage_index)
 
 func _assert_exact_flow_and_outputs() -> void:
-	var controller := _new_controller("normal", 90210)
+	var controller: RefCounted = _new_controller("normal", 90210)
 	var stage_ids: Array = []
-	var midboss_gate := _advance_until_encounter(controller, "midboss", stage_ids, 800)
+	var midboss_gate: Dictionary = _advance_until_encounter(controller, "midboss", stage_ids, 800)
 	_check_equal(stage_ids, EVENT_IDS.slice(0, 6), "Stage front or midboss gate event order drifted.")
 	_check_equal(String(midboss_gate.get("encounter_started", {}).get("owner_id", "")), "abacus_tsukumogami", "Midboss owner was not sourced from the approved phase.")
 	_check_equal(controller.active_phase_id(), PHASE_IDS[0], "First approved midboss phase did not become active.")
 	_check_equal(String(controller.active_phase_definition().topology_id), _expected_topology(0, "normal"), "First midboss phase did not select its authored Normal topology.")
 	_check_equal(int(controller.telemetry_snapshot().stage_runtime.stage_tick), 751, "Stage clock did not pause at the exact midboss gate tick.")
 	_check(bool(controller.telemetry_snapshot().stage_runtime.paused), "StageEncounterRuntime was not paused at s2_b06.")
-	var expected_seed := DanmakuPatternRuntime.derive_phase_local_seed(90210, "danmaku.m1.s2.midboss.nonspell.1.v1")
+	var expected_seed: int = DanmakuPatternRuntime.derive_phase_local_seed(90210, "danmaku.m1.s2.midboss.nonspell.1.v1")
 	_check_equal(int(controller.telemetry_snapshot().phase_runtime.phase_seed), expected_seed, "Phase-local seed was not derived from gameplay seed plus stream identity.")
 
 	var saw_movement := false
@@ -144,26 +144,26 @@ func _assert_exact_flow_and_outputs() -> void:
 
 	var phase_order: Array = []
 	phase_order.append(controller.active_phase_id())
-	var first_resolution := _resolve_current_phase(controller)
+	var first_resolution: Dictionary = _resolve_current_phase(controller)
 	_check_equal(String(first_resolution.get("phase_started", {}).get("id", "")), PHASE_IDS[1], "Second midboss phase did not start after the first clear.")
 	_check_equal(String(controller.active_phase_definition().topology_id), _expected_topology(1, "normal"), "Second midboss phase did not select its authored Normal topology.")
 	phase_order.append(controller.active_phase_id())
-	var midboss_clear := _resolve_current_phase(controller)
+	var midboss_clear: Dictionary = _resolve_current_phase(controller)
 	_check_equal(String(midboss_clear.get("gate_completion", {}).get("completion_token", "")), "stage2_midboss_cleared", "Midboss gate token drifted.")
 	_check_equal(controller.encounter_kind(), "stage", "Stage did not resume after exactly two midboss phases.")
-	var resume_output := controller.advance(FIXED_PLAYER_POSITION)
+	var resume_output: Dictionary = controller.advance(FIXED_PLAYER_POSITION)
 	_append_stage_ids(resume_output, stage_ids)
 	_check_equal((resume_output.get("stage_events", []) as Array).map(func(event): return String(event.get("id", ""))), EVENT_IDS.slice(6, 12), "Stage did not resume with s2_b07..s2_b12 together at runtime tick 751.")
 	_check_equal(int(resume_output.get("stage_tick", -1)), 751, "Midboss resume output tick drifted.")
 
-	var boss_gate := _advance_until_encounter(controller, "boss", stage_ids, 1200)
+	var boss_gate: Dictionary = _advance_until_encounter(controller, "boss", stage_ids, 1200)
 	_check_equal(stage_ids, EVENT_IDS, "All 18 Stage 2 events were not emitted in exact order.")
 	_check_equal(String(boss_gate.get("encounter_started", {}).get("owner_id", "")), "oni_market_leader", "Boss owner was not sourced from the approved phase.")
 	for phase_index in range(2, PHASE_IDS.size()):
 		_check_equal(controller.active_phase_id(), PHASE_IDS[phase_index], "Approved boss phase order drifted at index %d." % phase_index)
 		_check_equal(String(controller.active_phase_definition().topology_id), _expected_topology(phase_index, "normal"), "Boss phase %d did not select its authored Normal topology." % phase_index)
 		phase_order.append(controller.active_phase_id())
-		var result := _resolve_current_phase(controller)
+		var result: Dictionary = _resolve_current_phase(controller)
 		if phase_index < PHASE_IDS.size() - 1:
 			_check_equal(String(result.get("phase_started", {}).get("id", "")), PHASE_IDS[phase_index + 1], "Next approved boss phase did not start.")
 		else:
@@ -173,14 +173,14 @@ func _assert_exact_flow_and_outputs() -> void:
 	_check_equal(controller.encounter_kind(), "complete", "Stage 2 completed before or after the exact four-phase boss sequence.")
 
 func _assert_timeout_and_topology_selection() -> void:
-	var normal := _new_controller("normal", 77)
-	var hard := _new_controller("hard", 77)
+	var normal: RefCounted = _new_controller("normal", 77)
+	var hard: RefCounted = _new_controller("hard", 77)
 	_advance_until_encounter(normal, "midboss", [], 800)
 	_advance_until_encounter(hard, "midboss", [], 800)
 	_check(String(normal.active_phase_definition().topology_id) != String(hard.active_phase_definition().topology_id), "Normal and Hard selected the same authored topology.")
 	_check_equal(String(hard.active_phase_definition().topology_id), _expected_topology(0, "hard"), "Controller did not select the authored Hard topology.")
 	_check(int(normal.telemetry_snapshot().phase_runtime.phase_seed) == int(hard.telemetry_snapshot().phase_runtime.phase_seed), "Difficulty selection incorrectly changed the phase stream identity.")
-	var timeout_ticks := int(normal.active_phase_definition().timeout_ticks)
+	var timeout_ticks: int = int(normal.active_phase_definition().timeout_ticks)
 	for _tick in range(timeout_ticks):
 		var output: Dictionary = normal.advance(FIXED_PLAYER_POSITION)
 		_check(bool(output.get("ok", false)), "Timeout fixture phase advance failed.")
@@ -191,29 +191,29 @@ func _assert_timeout_and_topology_selection() -> void:
 func _assert_controller_snapshot_context(controller: RefCounted, label: String) -> void:
 	var snapshot: Dictionary = controller.capture_snapshot()
 	_check(controller.validate_snapshot(snapshot), "%s controller rejected its own snapshot." % label)
-	var expected_trace := _advance_trace(controller, 24)
-	var expected_final := controller.capture_snapshot()
-	var restored := _new_controller(String(snapshot.difficulty), int(snapshot.gameplay_seed))
+	var expected_trace: Array = _advance_trace(controller, 24)
+	var expected_final: Dictionary = controller.capture_snapshot()
+	var restored: RefCounted = _new_controller(String(snapshot.difficulty), int(snapshot.gameplay_seed))
 	_check(restored.restore_snapshot(snapshot), "%s controller snapshot restore failed." % label)
 	_check_equal(_advance_trace(restored, 24), expected_trace, "%s continuation outputs diverged after restore." % label)
 	_check_equal(restored.capture_snapshot(), expected_final, "%s continuation state diverged after restore." % label)
-	var baseline := restored.capture_snapshot()
-	var malformed := snapshot.duplicate(true)
+	var baseline: Dictionary = restored.capture_snapshot()
+	var malformed: Dictionary = snapshot.duplicate(true)
 	malformed.active_phase_index = 5
 	_check(not restored.restore_snapshot(malformed), "%s accepted a malformed active phase cursor." % label)
 	_check_equal(restored.capture_snapshot(), baseline, "%s malformed snapshot partially mutated controller state." % label)
 
 func _assert_controller_snapshots() -> void:
-	var ordinary := _new_controller("normal", 1101)
+	var ordinary: RefCounted = _new_controller("normal", 1101)
 	_advance_trace(ordinary, 320)
 	_assert_controller_snapshot_context(ordinary, "ordinary-stage")
 
-	var midboss := _new_controller("normal", 1102)
+	var midboss: RefCounted = _new_controller("normal", 1102)
 	_advance_until_encounter(midboss, "midboss", [], 800)
 	_advance_trace(midboss, 75)
 	_assert_controller_snapshot_context(midboss, "midboss")
 
-	var boss := _new_controller("hard", 1103)
+	var boss: RefCounted = _new_controller("hard", 1103)
 	_advance_until_encounter(boss, "midboss", [], 800)
 	_resolve_current_phase(boss)
 	_resolve_current_phase(boss)
@@ -270,7 +270,7 @@ func _configure_legacy_replay_interaction(main: Node) -> void:
 	main.enemies[0].shoot_timer = 99999.0
 
 func _assert_legacy_snapshot_and_replay_hash() -> void:
-	var main := _new_main("normal", 7001)
+	var main: Node = _new_main("normal", 7001)
 	main._set_active_stage(1)
 	main._load_stage(1)
 	main.game_manager_ref.state = "stage"
@@ -279,19 +279,19 @@ func _assert_legacy_snapshot_and_replay_hash() -> void:
 	_check(not snapshot.has("stage2_controller"), "Legacy stage snapshot gained a Stage 2 field.")
 	_check_equal(_sorted_snapshot_keys(snapshot), _expected_legacy_snapshot_keys(), "Legacy stage snapshot field shape changed.")
 	_check(main.validate_simulation_state(snapshot), "Legacy v2 snapshot no longer validates.")
-	var legacy_hash := main.simulation_state_hash()
-	var before_rejection := legacy_hash
-	var forged_extension := snapshot.duplicate(true)
+	var legacy_hash: String = main.simulation_state_hash()
+	var before_rejection: String = legacy_hash
+	var forged_extension: Dictionary = snapshot.duplicate(true)
 	forged_extension["stage2_controller"] = {}
 	_check(not main.restore_simulation_state(forged_extension), "Legacy v2 restore accepted a forged Stage 2 extension.")
 	_check_equal(main.simulation_state_hash(), before_rejection, "Rejected legacy extension partially mutated Main.")
-	var forged_version := snapshot.duplicate(true)
+	var forged_version: Dictionary = snapshot.duplicate(true)
 	forged_version.version = 3
 	_check(not main.restore_simulation_state(forged_version), "Legacy stage accepted the Stage 2 aggregate version.")
 	_check_equal(main.simulation_state_hash(), before_rejection, "Rejected legacy version partially mutated Main.")
 	_check(main.restore_simulation_state(snapshot), "Existing legacy v2 snapshot failed to restore.")
 	_check_equal(main.simulation_state_hash(), legacy_hash, "Legacy v2 hash changed across restore.")
-	var reference := _new_main("normal", 7001)
+	var reference: Node = _new_main("normal", 7001)
 	_check(reference.restore_simulation_state(snapshot), "Fresh Main rejected an existing legacy v2 snapshot.")
 	var input := {"move_x": 0.0, "move_y": 0.0, "shoot": false, "focus": false, "bomb": false, "pause": false}
 	main._advance_gameplay_clock(1.0 / 60.0, input)
@@ -300,7 +300,7 @@ func _assert_legacy_snapshot_and_replay_hash() -> void:
 	_free_main(reference)
 	_free_main(main)
 
-	var fixture_file := FileAccess.open("res://tests/fixtures/m0/baseline_replay.json", FileAccess.READ)
+	var fixture_file: FileAccess = FileAccess.open("res://tests/fixtures/m0/baseline_replay.json", FileAccess.READ)
 	_check(fixture_file != null, "Could not open the committed M0 replay hash fixture.")
 	if fixture_file == null:
 		return
@@ -309,7 +309,7 @@ func _assert_legacy_snapshot_and_replay_hash() -> void:
 	if not (fixture_value is Dictionary):
 		return
 	var fixture: Dictionary = fixture_value
-	var replay_main := _new_legacy_replay_main()
+	var replay_main: Node = _new_legacy_replay_main()
 	var expected_identity := {"build_version": "1.0.0-m0", "content_hash": "m0-baseline-content-v1"}
 	_check(replay_main.start_replay_playback(fixture, expected_identity), "Focused assertion could not play the committed legacy replay.")
 	_configure_legacy_replay_interaction(replay_main)
@@ -322,13 +322,13 @@ func _assert_legacy_snapshot_and_replay_hash() -> void:
 	_check_equal(int(replay_snapshot.get("version", -1)), 2, "Committed legacy replay no longer captures v2.")
 	_check(not replay_snapshot.has("stage2_controller"), "Committed legacy replay hash input gained Stage 2 fields.")
 	_check_equal(_sorted_snapshot_keys(replay_snapshot), _expected_legacy_snapshot_keys(), "Committed replay snapshot field shape changed.")
-	var committed_hash := String(fixture.get("expected_runtime_hash", ""))
+	var committed_hash: String = String(fixture.get("expected_runtime_hash", ""))
 	_check(not committed_hash.is_empty() and committed_hash != "PENDING", "Committed legacy replay hash evidence is unavailable.")
 	_check_equal(replay_main.simulation_state_hash(), committed_hash, "Committed production replay hash changed.")
 	_free_main(replay_main)
 
 func _assert_main_binding() -> void:
-	var main := _new_main("hard", 5150)
+	var main: Node = _new_main("hard", 5150)
 	_check(bool(main.stage_controller.get("stage2_bound", false)), "Main did not bind Stage 2 to the deterministic controller.")
 	var rng_before: Dictionary = main.gameplay_rng.snapshot()
 	var first_output: Dictionary = main.stage2_encounter_controller.advance(Vector2(main.player_x, main.player_y))
@@ -365,10 +365,10 @@ func _assert_main_binding() -> void:
 	_check(saw_main_movement and saw_main_bullets, "Main did not consume phase movement and bullet-spec outputs.")
 	_check(not (main.stage_controller.get("stage2_boss_movement_records", []) as Array).is_empty(), "Main did not retain boss movement telemetry records.")
 	_check(not (main.stage_controller.get("stage2_warning_records", []) as Array).is_empty(), "Main did not retain phase warning records.")
-	var first_clear := main.stage2_encounter_controller.resolve_active_phase("clear")
+	var first_clear: Dictionary = main.stage2_encounter_controller.resolve_active_phase("clear")
 	main._consume_stage2_controller_output(first_clear)
 	_check_equal(String(main.boss.get("stage2_phase_id", "")), PHASE_IDS[1], "Main did not transfer ownership to the second approved midboss phase.")
-	var second_clear := main.stage2_encounter_controller.resolve_active_phase("clear")
+	var second_clear: Dictionary = main.stage2_encounter_controller.resolve_active_phase("clear")
 	main._consume_stage2_controller_output(second_clear)
 	_check(not main.boss_alive and String(main.game_manager_ref.state) == "stage", "Main did not release midboss ownership and resume stage state.")
 	main._consume_stage2_controller_output(main.stage2_encounter_controller.advance(Vector2(main.player_x, main.player_y)))
@@ -381,7 +381,7 @@ func _assert_main_binding() -> void:
 	_check(main.boss_alive and String(main.boss.get("stage2_owner_id", "")) == "oni_market_leader", "Main did not create the real four-phase Stage 2 boss owner.")
 	_check_equal(String(main.boss.get("stage2_phase_id", "")), PHASE_IDS[2], "Main boss ownership started on the wrong approved phase.")
 	for phase_index in range(2, PHASE_IDS.size()):
-		var boss_clear := main.stage2_encounter_controller.resolve_active_phase("clear")
+		var boss_clear: Dictionary = main.stage2_encounter_controller.resolve_active_phase("clear")
 		main._consume_stage2_controller_output(boss_clear)
 		if phase_index < PHASE_IDS.size() - 1:
 			_check_equal(String(main.boss.get("stage2_phase_id", "")), PHASE_IDS[phase_index + 1], "Main skipped an approved boss phase.")
@@ -390,7 +390,7 @@ func _assert_main_binding() -> void:
 	_free_main(main)
 
 func _assert_legacy_main_routes() -> void:
-	var main := _new_main()
+	var main: Node = _new_main()
 	for stage_index in [1, 3, 4, 5, 6]:
 		main._set_active_stage(stage_index)
 		main._load_stage(stage_index)
@@ -402,8 +402,8 @@ func _assert_legacy_main_routes() -> void:
 		_check(not snapshot.has("stage2_controller"), "Legacy stage %d snapshot gained Stage 2 state." % stage_index)
 		_check_equal(_sorted_snapshot_keys(snapshot), _expected_legacy_snapshot_keys(), "Legacy stage %d snapshot field shape drifted." % stage_index)
 		_check(main.validate_simulation_state(snapshot), "Legacy stage %d v2 snapshot failed positive validation." % stage_index)
-		var live_hash := main.simulation_state_hash()
-		var mismatched_stage := snapshot.duplicate(true)
+		var live_hash: String = main.simulation_state_hash()
+		var mismatched_stage: Dictionary = snapshot.duplicate(true)
 		mismatched_stage.manager.current_stage = 3 if stage_index == 1 else 1
 		_check(not main.validate_simulation_state(mismatched_stage), "Legacy stage %d accepted mismatched manager/local stage identity." % stage_index)
 		_check(not main.restore_simulation_state(mismatched_stage), "Legacy stage %d restored mismatched manager/local stage identity." % stage_index)
@@ -411,7 +411,7 @@ func _assert_legacy_main_routes() -> void:
 	_free_main(main)
 
 func _prepare_main_snapshot_context(kind: String, difficulty: String, seed: int) -> Node:
-	var main := _new_main(difficulty, seed)
+	var main: Node = _new_main(difficulty, seed)
 	match kind:
 		"ordinary-stage":
 			_advance_trace(main.stage2_encounter_controller, 320)
@@ -430,25 +430,25 @@ func _prepare_main_snapshot_context(kind: String, difficulty: String, seed: int)
 	return main
 
 func _assert_aggregate_snapshot_context(kind: String, difficulty: String, seed: int) -> void:
-	var main := _prepare_main_snapshot_context(kind, difficulty, seed)
+	var main: Node = _prepare_main_snapshot_context(kind, difficulty, seed)
 	var snapshot: Dictionary = main.capture_simulation_state()
 	_check_equal(int(snapshot.get("version", -1)), 3, "%s Stage 2 aggregate snapshot did not use the extended version." % kind)
 	_check(not snapshot.stage2_controller.is_empty(), "%s aggregate snapshot omitted the Stage 2 controller." % kind)
 	_check(main.validate_simulation_state(snapshot), "%s aggregate snapshot rejected its own Stage 2 state." % kind)
-	var before_rejection := main.simulation_state_hash()
-	var missing_controller := snapshot.duplicate(true)
+	var before_rejection: String = main.simulation_state_hash()
+	var missing_controller: Dictionary = snapshot.duplicate(true)
 	missing_controller.erase("stage2_controller")
 	_check(not main.restore_simulation_state(missing_controller), "%s aggregate restore accepted a missing Stage 2 controller." % kind)
 	_check_equal(main.simulation_state_hash(), before_rejection, "%s missing-controller snapshot partially mutated Main." % kind)
-	var legacy_version := snapshot.duplicate(true)
+	var legacy_version: Dictionary = snapshot.duplicate(true)
 	legacy_version.version = 2
 	_check(not main.restore_simulation_state(legacy_version), "%s Stage 2 aggregate restore accepted legacy v2." % kind)
 	_check_equal(main.simulation_state_hash(), before_rejection, "%s wrong-version Stage 2 snapshot partially mutated Main." % kind)
-	var malformed := snapshot.duplicate(true)
+	var malformed: Dictionary = snapshot.duplicate(true)
 	malformed.stage2_controller.version = 999
 	_check(not main.restore_simulation_state(malformed), "%s aggregate restore accepted a malformed nested controller snapshot." % kind)
 	_check_equal(main.simulation_state_hash(), before_rejection, "%s malformed aggregate snapshot partially mutated Main." % kind)
-	var reference := _new_main(difficulty, seed)
+	var reference: Node = _new_main(difficulty, seed)
 	_check(main.restore_simulation_state(snapshot), "%s valid aggregate restore failed on source Main." % kind)
 	_check(reference.restore_simulation_state(snapshot), "%s valid aggregate restore failed on reference Main." % kind)
 	var input := {"move_x": 0.125, "move_y": 0.0, "shoot": false, "focus": true, "bomb": false, "pause": false}
@@ -464,10 +464,10 @@ func _assert_aggregate_snapshots() -> void:
 	_assert_aggregate_snapshot_context("boss", "hard", 6103)
 
 func _assert_fail_closed_configuration() -> void:
-	var malformed := _package()
+	var malformed: Dictionary = _package()
 	malformed.phase_specs = (malformed.phase_specs as Array).duplicate(true)
 	malformed.phase_specs.reverse()
-	var rejected := Stage2EncounterController.new()
+	var rejected: RefCounted = Stage2EncounterController.new()
 	_check(not rejected.configure(malformed, "normal", 1), "Controller accepted a reordered phase package.")
 	_check(rejected.has_hard_error() and rejected.capture_snapshot().is_empty(), "Rejected configuration did not fail closed.")
 	_check(not bool(rejected.advance(FIXED_PLAYER_POSITION).get("ok", true)), "Rejected controller still advanced.")
