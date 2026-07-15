@@ -38,7 +38,11 @@
       "emits_resource_item": false,
       "metadata": {
         "token_kind": "mirror_choice",
-        "mirror_axis": "left",
+        "mirror_spawn_side": "left",
+        "mirror_geometric_axis": "horizontal",
+        "mirror_transform_id": "horizontal_left_to_right_once",
+        "source_lane_id": "lane_left",
+        "mapped_lane_id": "lane_right",
         "route_local": true,
         "persistent_inventory": false
       }
@@ -48,7 +52,11 @@
       "emits_resource_item": false,
       "metadata": {
         "token_kind": "mirror_choice",
-        "mirror_axis": "right",
+        "mirror_spawn_side": "right",
+        "mirror_geometric_axis": "diagonal_down_left",
+        "mirror_transform_id": "diagonal_right_to_left_after_delay",
+        "source_lane_id": "lane_right",
+        "mapped_lane_id": "lane_left",
         "route_local": true,
         "persistent_inventory": false
       }
@@ -348,6 +356,415 @@
     "simultaneous_booth_defeats": "Do not coalesce. A booth defeat that is not the currently expected target invalidates the chain even when another booth was defeated on the same tick.",
     "idempotency_key": "stage_run_uid plus group_index plus transition name"
   },
+  "stage_front_topology": {
+    "topology_version": 1,
+    "node_id_namespace": "stage_front_route_node",
+    "coordinate_contract": {
+      "sample_point": "player collision-center x at the callback being evaluated",
+      "combat_x_min": 24,
+      "combat_x_max": 696,
+      "out_of_bounds_rule": "Clamp player_center_x to the inclusive range 24 through 696 before deriving a lane.",
+      "lane_partitions": [
+        {
+          "lane_id": "lane_left",
+          "minimum_x_inclusive": 24,
+          "maximum_x_exclusive": 248
+        },
+        {
+          "lane_id": "lane_center",
+          "minimum_x_inclusive": 248,
+          "maximum_x_exclusive": 472
+        },
+        {
+          "lane_id": "lane_right",
+          "minimum_x_inclusive": 472,
+          "maximum_x_inclusive": 696
+        }
+      ],
+      "current_lane_algorithm": "After clamping, return lane_left when x is less than 248, lane_center when x is less than 472, otherwise lane_right.",
+      "checkpoint_samples": {
+        "group_1": "sample at the s2_b13_red_booth_master defeat callback before applying the red-kill transform",
+        "group_2": "sample at the s2_b13_blue_booth_master defeat callback after the red-kill transform and before applying the blue-kill transform",
+        "mirror_choice": "sample at the selected s2_b15 mirror defeat callback before applying its mirror transform",
+        "group_3_target": "sample at the s2_b13_yellow_booth_master defeat callback after the selected mirror transform and before applying the yellow-kill transform",
+        "final_cross": "derive the crossing lane from the same x partition at final_lane_cross_tick"
+      }
+    },
+    "nodes": [
+      {
+        "node_id": "lane_left",
+        "kind": "lane"
+      },
+      {
+        "node_id": "lane_center",
+        "kind": "lane"
+      },
+      {
+        "node_id": "lane_right",
+        "kind": "lane"
+      },
+      {
+        "node_id": "booth_red",
+        "kind": "booth_target",
+        "source_spawn_id": "s2_b13_red_booth_master"
+      },
+      {
+        "node_id": "booth_blue",
+        "kind": "booth_target",
+        "source_spawn_id": "s2_b13_blue_booth_master"
+      },
+      {
+        "node_id": "booth_yellow",
+        "kind": "booth_target",
+        "source_spawn_id": "s2_b13_yellow_booth_master"
+      },
+      {
+        "node_id": "mirror_left",
+        "kind": "mirror",
+        "source_spawn_id": "s2_b15_left_mirror"
+      },
+      {
+        "node_id": "mirror_right",
+        "kind": "mirror",
+        "source_spawn_id": "s2_b15_right_mirror"
+      },
+      {
+        "node_id": "abacus_center",
+        "kind": "recovery_enemy",
+        "source_spawn_id": "s2_b16_abacus_keeper"
+      },
+      {
+        "node_id": "boss_gate",
+        "kind": "stage_front_exit",
+        "source_event_id": "s2_b18"
+      }
+    ],
+    "edge_contract": {
+      "encoding": "Each directed edge is a unique two-string array [from_node_id, to_node_id].",
+      "graph_semantics": "Only listed active edges exist. Removing a missing edge or adding an existing edge is a contract error unless the operation explicitly removes then re-adds that same edge.",
+      "reachability_algorithm": "Run breadth-first search over outgoing directed edges in lexicographic to_node_id order. A zero-edge path makes a node reachable from itself. Inactive enemy nodes and their incident edges are excluded.",
+      "normal_projection": "Normal applies the same node activation, target removal, mirror mapping, and final-gate operations, but treats every active lane-to-lane edge as traversable in both directions during reachability. Enemy attachment edges remain directed.",
+      "hard_projection": "Hard uses the directed edges exactly as listed and applies every ordered transform below."
+    },
+    "transform_callback_order": [
+      "Derive current_lane_id from player_center_x using the checkpoint rule.",
+      "Evaluate and latch the applicable pre-transform reachability predicate against topology_revision_id.",
+      "Apply the declared remove_edges and add_edges exactly once, then emit the new topology_revision_id and reachable_lane_graph.",
+      "Evaluate group settlement using the latched topology result plus the other group predicates. A later graze callback may complete a group, but it cannot resample or rewrite the topology result captured at the target defeat callback."
+    ],
+    "initial_graph": {
+      "revision_id": "stage_front_initial",
+      "activation_event_id": "s2_b13",
+      "directed_edges": [
+        [
+          "lane_left",
+          "lane_center"
+        ],
+        [
+          "lane_center",
+          "lane_right"
+        ],
+        [
+          "lane_left",
+          "booth_red"
+        ],
+        [
+          "lane_center",
+          "booth_red"
+        ],
+        [
+          "lane_right",
+          "booth_red"
+        ],
+        [
+          "lane_center",
+          "booth_blue"
+        ],
+        [
+          "lane_right",
+          "booth_yellow"
+        ]
+      ]
+    },
+    "neighbor_kill_transforms": {
+      "red_kill": {
+        "trigger_event_id": "s2_b13",
+        "trigger_spawn_id": "s2_b13_red_booth_master",
+        "input_revision_id": "stage_front_initial",
+        "killed_flag": "red",
+        "killed_lane_id": "lane_left",
+        "affected_lane_ids": [
+          "lane_left",
+          "lane_center"
+        ],
+        "remove_edges": [
+          [
+            "lane_left",
+            "lane_center"
+          ],
+          [
+            "lane_left",
+            "booth_red"
+          ],
+          [
+            "lane_center",
+            "booth_red"
+          ],
+          [
+            "lane_right",
+            "booth_red"
+          ]
+        ],
+        "add_edges": [
+          [
+            "lane_center",
+            "lane_left"
+          ]
+        ],
+        "output_revision_id": "stage_front_after_red_neighbor_flip",
+        "output_directed_edges": [
+          [
+            "lane_center",
+            "lane_left"
+          ],
+          [
+            "lane_center",
+            "lane_right"
+          ],
+          [
+            "lane_center",
+            "booth_blue"
+          ],
+          [
+            "lane_right",
+            "booth_yellow"
+          ]
+        ]
+      },
+      "blue_kill": {
+        "trigger_event_id": "s2_b14",
+        "trigger_spawn_id": "s2_b13_blue_booth_master",
+        "input_revision_id": "stage_front_after_red_neighbor_flip",
+        "killed_flag": "blue",
+        "killed_lane_id": "lane_center",
+        "affected_lane_ids": [
+          "lane_center",
+          "lane_right"
+        ],
+        "remove_edges": [
+          [
+            "lane_center",
+            "lane_right"
+          ],
+          [
+            "lane_center",
+            "booth_blue"
+          ]
+        ],
+        "add_edges": [
+          [
+            "lane_right",
+            "lane_center"
+          ]
+        ],
+        "output_revision_id": "stage_front_after_blue_neighbor_flip",
+        "output_directed_edges": [
+          [
+            "lane_center",
+            "lane_left"
+          ],
+          [
+            "lane_right",
+            "lane_center"
+          ],
+          [
+            "lane_right",
+            "booth_yellow"
+          ]
+        ]
+      }
+    },
+    "mirror_transform_table": [
+      {
+        "selected_spawn_id": "s2_b15_left_mirror",
+        "surviving_spawn_id": "s2_b15_right_mirror",
+        "token_alias": "mirror_token_left",
+        "spawn_side": "left",
+        "spawn_x": 228,
+        "geometric_axis": "horizontal",
+        "geometric_transform_id": "horizontal_left_to_right_once",
+        "source_routing_id": "horizontal_mirror_to_right_lane_once",
+        "source_lane_id": "lane_left",
+        "mapped_lane_id": "lane_right"
+      },
+      {
+        "selected_spawn_id": "s2_b15_right_mirror",
+        "surviving_spawn_id": "s2_b15_left_mirror",
+        "token_alias": "mirror_token_right",
+        "spawn_side": "right",
+        "spawn_x": 492,
+        "geometric_axis": "diagonal_down_left",
+        "geometric_transform_id": "diagonal_right_to_left_after_delay",
+        "source_routing_id": "diagonal_mirror_to_left_lane_after_delay",
+        "source_lane_id": "lane_right",
+        "mapped_lane_id": "lane_left"
+      }
+    ],
+    "mirror_graph_transform": {
+      "activation_event_id": "s2_b15",
+      "input_revision_id": "stage_front_after_blue_neighbor_flip",
+      "activation_add_edges": [
+        [
+          "lane_left",
+          "mirror_left"
+        ],
+        [
+          "lane_right",
+          "mirror_right"
+        ]
+      ],
+      "selection_precondition": "Before defeating the selected mirror, current_lane_id must reach that mirror's node in the activated Hard graph. Resolve the selected row from mirror_transform_table by exact selected_spawn_id.",
+      "selection_operations": [
+        "Remove the edge from the selected row's source_lane_id to its selected mirror node.",
+        "Remove [lane_right, booth_yellow].",
+        "Add [source_lane_id, mapped_lane_id].",
+        "Add [mapped_lane_id, booth_yellow].",
+        "Leave the other mirror attachment active; that other spawn is surviving_spawn_id for the s2_b16 order comparison."
+      ],
+      "output_by_selected_spawn_id": {
+        "s2_b15_left_mirror": {
+          "revision_id": "stage_front_after_left_horizontal_transform",
+          "directed_edges": [
+            [
+              "lane_center",
+              "lane_left"
+            ],
+            [
+              "lane_right",
+              "lane_center"
+            ],
+            [
+              "lane_left",
+              "lane_right"
+            ],
+            [
+              "lane_right",
+              "booth_yellow"
+            ],
+            [
+              "lane_right",
+              "mirror_right"
+            ]
+          ]
+        },
+        "s2_b15_right_mirror": {
+          "revision_id": "stage_front_after_right_diagonal_transform",
+          "directed_edges": [
+            [
+              "lane_center",
+              "lane_left"
+            ],
+            [
+              "lane_right",
+              "lane_center"
+            ],
+            [
+              "lane_right",
+              "lane_left"
+            ],
+            [
+              "lane_left",
+              "booth_yellow"
+            ],
+            [
+              "lane_left",
+              "mirror_left"
+            ]
+          ]
+        }
+      }
+    },
+    "abacus_activation": {
+      "event_id": "s2_b16",
+      "spawn_id": "s2_b16_abacus_keeper",
+      "add_edge": [
+        "lane_center",
+        "abacus_center"
+      ],
+      "center_lane_preserved_algorithm": "At the abacus defeat callback, center_lane_preserved is true exactly when lane_center has at least one active incoming or outgoing lane-to-lane edge. Enemy attachment edges do not count.",
+      "defeat_cleanup": "Remove [lane_center, abacus_center] when the abacus keeper is defeated. Remove the surviving mirror attachment when surviving_mirror_spawn_id is defeated."
+    },
+    "final_open_lane_algorithm": {
+      "trigger_event_id": "s2_b17",
+      "target_spawn_id": "s2_b13_yellow_booth_master",
+      "precondition": "Immediately before the yellow defeat, the defeated booth set is exactly red and blue, so booth_yellow is the last surviving booth node, and current_lane_id reaches booth_yellow in the selected mirror graph.",
+      "steps": [
+        "Resolve the selected mirror row by selected_mirror_spawn_id.",
+        "Set final_open_lane_id to that row's mapped_lane_id.",
+        "Require the active edge [final_open_lane_id, booth_yellow].",
+        "Remove [final_open_lane_id, booth_yellow] when yellow is defeated.",
+        "Add [final_open_lane_id, boss_gate].",
+        "Freeze final_open_lane_id through s2_b18; it cannot be recomputed from later player movement."
+      ],
+      "result_by_selected_spawn_id": {
+        "s2_b15_left_mirror": {
+          "final_open_lane_id": "lane_right",
+          "final_gate_edge": [
+            "lane_right",
+            "boss_gate"
+          ],
+          "final_directed_edges": [
+            [
+              "lane_center",
+              "lane_left"
+            ],
+            [
+              "lane_right",
+              "lane_center"
+            ],
+            [
+              "lane_left",
+              "lane_right"
+            ],
+            [
+              "lane_right",
+              "boss_gate"
+            ]
+          ]
+        },
+        "s2_b15_right_mirror": {
+          "final_open_lane_id": "lane_left",
+          "final_gate_edge": [
+            "lane_left",
+            "boss_gate"
+          ],
+          "final_directed_edges": [
+            [
+              "lane_center",
+              "lane_left"
+            ],
+            [
+              "lane_right",
+              "lane_center"
+            ],
+            [
+              "lane_right",
+              "lane_left"
+            ],
+            [
+              "lane_left",
+              "boss_gate"
+            ]
+          ]
+        }
+      }
+    },
+    "hard_predicate_algorithms": {
+      "hard_current_lane_to_red_booth_edge_exists": "In stage_front_initial, derive current_lane_id at the red defeat callback and require directed reachability to booth_red before applying red_kill.",
+      "hard_neighbor_flag_edge_reachable": "In stage_front_after_red_neighbor_flip, derive current_lane_id at the blue defeat callback and require directed reachability to booth_blue before applying blue_kill.",
+      "hard_selected_transform_to_final_gate_reachable": "At mirror choice require current_lane_id to reach the selected mirror node in the activated graph; after applying its exact table row require mapped_lane_id to reach booth_yellow; after the yellow transform require the literal edge [final_open_lane_id, boss_gate] and require the s2_b18 crossing lane to equal final_open_lane_id."
+    }
+  },
   "rebound_graze_contract": {
     "required_beads_per_group": 1,
     "selection_rule": "For each group, select the first bullet emitted by required_source_spawn_id at or after the group start tick, ordered by bullet_spawn_tick, event_sequence, then bullet_uid. The selected bullet_uid is immutable for that group.",
@@ -383,7 +800,7 @@
         "maximum_accepted_unique_uids": 1
       },
       "order_predicate": "settled_group_count equals 0 and the first defeated booth master after arming is s2_b13_red_booth_master",
-      "shared_topology_predicate": "lane_state_before_kill reports that the price-3 target is reachable before its defeat",
+      "shared_topology_predicate": "Derive current_lane_id from player_center_x at the red defeat callback and evaluate reachability to booth_red in stage_front_initial before applying the red-kill transform.",
       "difficulty_topology_predicates": {
         "normal": {
           "predicate_id": "normal_red_lane_reachable",
@@ -392,7 +809,7 @@
         "hard": {
           "predicate_id": "hard_current_lane_to_red_booth_edge_exists",
           "required_state": "hard_red_target_edge_open",
-          "non_numeric_topology_test": "lane_state_before_kill contains a directed reachable edge from the current lane state to the red booth node"
+          "non_numeric_topology_test": "Run stage_front_topology.hard_predicate_algorithms.hard_current_lane_to_red_booth_edge_exists against the canonical directed graph."
         }
       },
       "success_rule": "Latch the expected target defeat, one qualifying required bullet_uid, and the topology predicate in any callback order within the window; settle on the callback tick that completes the set.",
@@ -433,7 +850,7 @@
         "maximum_accepted_unique_uids": 1
       },
       "order_predicate": "settled_group_count equals 1, red is already settled, and the next defeated booth master is s2_b13_blue_booth_master",
-      "shared_topology_predicate": "The s2_b14 neighbor flag effect is committed before blue settlement and its reachable_lane_graph still reaches the price-2 target.",
+      "shared_topology_predicate": "Apply stage_front_topology.neighbor_kill_transforms.red_kill, derive current_lane_id at the blue defeat callback, and require reachability to booth_blue before applying the blue-kill transform.",
       "difficulty_topology_predicates": {
         "normal": {
           "predicate_id": "normal_neighbor_state_reaches_blue_lane",
@@ -442,7 +859,7 @@
         "hard": {
           "predicate_id": "hard_neighbor_flag_edge_reachable",
           "required_state": "neighbor_flip_graph_reaches_blue_booth",
-          "non_numeric_topology_test": "Apply killed_flag red to affected_lane_ids, then require reachable_lane_graph to contain a directed edge to the blue booth node"
+          "non_numeric_topology_test": "Run stage_front_topology.hard_predicate_algorithms.hard_neighbor_flag_edge_reachable against revision stage_front_after_red_neighbor_flip."
         }
       },
       "success_rule": "Latch the blue defeat, one new qualifying required bullet_uid emitted at or after tick 1950, and the committed neighbor topology by tick 2094; settle on the callback tick that completes the set.",
@@ -487,14 +904,20 @@
           "s2_b15_right_mirror"
         ],
         "enemy_id": "water_mirror_yokai",
-        "predicate": "Exactly one allowed mirror is defeated by tick 2244 and its mirror_axis, source_lane, mapped_lane, and activation_tick are frozen as the selected route."
+        "predicate": "Exactly one allowed mirror is defeated by tick 2244. Resolve its exact mirror_transform_table row and freeze selected_mirror_spawn_id, surviving_mirror_spawn_id, mirror_spawn_side, mirror_geometric_axis, mirror_transform_id, source_lane_id, mapped_lane_id, and activation_tick."
       },
       "mirror_before_abacus_recovery": {
         "event_id": "s2_b16",
         "abacus_spawn_id": "s2_b16_abacus_keeper",
         "abacus_enemy_id": "closing_abacus_keeper",
-        "predicate": "The selected mirror defeat precedes the abacus keeper defeat in total event order; first_kill_role is mirror and center_lane_preserved is true by tick 2394.",
-        "gameplay_fallback_is_not_score_success": "The choreography's recoverable outer route remains playable when the abacus is defeated first, but that path invalidates this score chain."
+        "predicate": "The selected mirror was already defeated during s2_b15. At s2_b16 entry, compare the still-alive surviving_mirror_spawn_id from the frozen transform row against s2_b16_abacus_keeper: the surviving mirror defeat must precede the abacus keeper defeat in total event order, first_kill_role must equal surviving_mirror, and center_lane_preserved must be true by tick 2394.",
+        "reachable_success_order": [
+          "selected s2_b15 mirror defeated and route committed by tick 2244",
+          "other s2_b15 mirror remains alive as surviving_mirror_spawn_id at tick 2250",
+          "surviving_mirror_spawn_id defeated during s2_b16",
+          "s2_b16_abacus_keeper defeated after the surviving mirror"
+        ],
+        "gameplay_fallback_is_not_score_success": "At tick 2250 both surviving_mirror_spawn_id and s2_b16_abacus_keeper are alive. Defeating the abacus keeper before that surviving mirror is therefore a reachable recoverable outer-route fallback, but it invalidates this score chain."
       },
       "required_rebound": {
         "source_event_id": "s2_b16",
@@ -505,19 +928,19 @@
         "maximum_accepted_unique_uids": 1
       },
       "order_predicate": "settled_group_count equals 2, red and blue are settled, and the next defeated booth master is s2_b13_yellow_booth_master by tick 2544",
-      "shared_topology_predicate": "The selected mirror mapping and committed booth lane state identify one final_open_lane_id, and that lane remains reachable after the yellow target defeat.",
+      "shared_topology_predicate": "Resolve and apply the exact selected mirror table row, replace the yellow booth attachment with [mapped_lane_id, booth_yellow], verify yellow is the last surviving booth, then compute and freeze final_open_lane_id with stage_front_topology.final_open_lane_algorithm.",
       "difficulty_topology_predicates": {
         "normal": {
           "predicate_id": "normal_selected_mirror_maps_to_open_lane",
-          "required_state": "mapped_lane_matches_final_open_lane"
+          "required_state": "mapped_lane_id_equals_final_open_lane_id_under_undirected_lane_projection"
         },
         "hard": {
-          "predicate_id": "hard_mirror_axis_to_survivor_edge_reachable",
-          "required_state": "mirror_neighbor_graph_reaches_final_open_lane",
-          "non_numeric_topology_test": "Apply the selected mirror_axis to the neighbor-flipped reachable_lane_graph and require a directed edge from mapped_lane to the lane determined by the last surviving yellow booth"
+          "predicate_id": "hard_selected_transform_to_final_gate_reachable",
+          "required_state": "selected_mirror_transform_graph_reaches_yellow_then_final_gate",
+          "non_numeric_topology_test": "Run stage_front_topology.hard_predicate_algorithms.hard_selected_transform_to_final_gate_reachable with the selected mirror table row and exact directed graph revisions."
         }
       },
-      "precommit_rule": "By tick 2544, latch exactly one mirror choice, mirror-before-abacus recovery, one qualifying abacus bullet_uid, yellow as the third booth defeat, and the applicable topology predicate; then freeze the result in group_3_pending_final_cross.",
+      "precommit_rule": "By tick 2544, latch exactly one selected mirror and its surviving counterpart, surviving-mirror-before-abacus recovery, one qualifying abacus bullet_uid, yellow as the third booth defeat, and the applicable computable topology predicate; then freeze final_open_lane_id in group_3_pending_final_cross.",
       "success_rule": "While group_3_pending_final_cross, accept exactly one crossing of final_open_lane_id during s2_b18 ticks 2550 through 2700. The crossing callback is the group-3 settlement tick.",
       "settlement": {
         "settlement_tick_rule": "final_lane_cross_tick in the inclusive range 2550 through 2700 after all preconditions were frozen by tick 2544",
@@ -574,9 +997,9 @@
       "reward_behavior": "block group 3 and the seal"
     },
     {
-      "reason_id": "abacus_before_mirror",
+      "reason_id": "abacus_before_surviving_mirror",
       "terminal_state": "invalidated",
-      "condition": "s2_b16_abacus_keeper is defeated before the selected s2_b15 mirror in total event order",
+      "condition": "After selected_mirror_spawn_id was defeated and frozen during s2_b15, s2_b16_abacus_keeper is defeated before the still-alive surviving_mirror_spawn_id in total event order during s2_b16.",
       "reward_behavior": "allow the choreography's gameplay fallback, but block group 3 and the seal"
     },
     {
@@ -667,21 +1090,42 @@
       "type": "non_negative_integer",
       "required": "each defeat callback"
     },
+    "player_center_x": {
+      "type": "number",
+      "required": "every topology checkpoint",
+      "meaning": "Input to stage_front_topology.coordinate_contract.current_lane_algorithm."
+    },
+    "current_lane_id": {
+      "type": "enum(lane_left,lane_center,lane_right)",
+      "required": "every topology checkpoint",
+      "meaning": "Deterministically derived from player_center_x, never supplied independently."
+    },
     "lane_state_before_kill": {
-      "type": "symbolic_lane_state",
-      "required": "each booth defeat"
+      "type": "object",
+      "required": "each booth defeat",
+      "schema": {
+        "revision_id": "string",
+        "current_lane_id": "enum(lane_left,lane_center,lane_right)",
+        "active_directed_edges": "array([from_node_id,to_node_id])"
+      }
     },
     "killed_flag": {
-      "type": "string",
+      "type": "enum(red,blue,yellow)",
       "required": "s2_b14 neighbor effect"
     },
     "affected_lane_ids": {
-      "type": "array(string)",
-      "required": "s2_b14 neighbor effect"
+      "type": "ordered_array(enum(lane_left,lane_center,lane_right))",
+      "required": "each neighbor kill transform",
+      "meaning": "Must exactly equal the affected_lane_ids array declared by the applied transform."
+    },
+    "topology_revision_id": {
+      "type": "stage_front_topology revision_id",
+      "required": "every topology checkpoint and transform"
     },
     "reachable_lane_graph": {
-      "type": "directed_graph",
-      "required": "s2_b14 and all Hard topology evaluations"
+      "type": "array([from_node_id,to_node_id])",
+      "required": "s2_b14 and all topology evaluations",
+      "encoding": "Unique active edges sorted first by from_node_id and then by to_node_id; node and edge semantics come only from stage_front_topology."
     },
     "required_bullet_uid": {
       "type": "string",
@@ -715,37 +1159,72 @@
       "type": "boolean",
       "required": "every repeated bullet_uid callback"
     },
-    "mirror_choice_spawn_id": {
-      "type": "string",
+    "selected_mirror_spawn_id": {
+      "type": "enum(s2_b15_left_mirror,s2_b15_right_mirror)",
       "required": "group 3 mirror choice"
     },
-    "mirror_axis": {
+    "surviving_mirror_spawn_id": {
+      "type": "enum(s2_b15_left_mirror,s2_b15_right_mirror)",
+      "required": "group 3 mirror choice and s2_b16 recovery",
+      "meaning": "The other spawn in the selected mirror_transform_table row; it must differ from selected_mirror_spawn_id."
+    },
+    "mirror_spawn_side": {
       "type": "enum(left,right)",
       "required": "group 3 mirror choice"
     },
-    "source_lane": {
-      "type": "string",
+    "mirror_geometric_axis": {
+      "type": "enum(horizontal,diagonal_down_left)",
       "required": "group 3 mirror choice"
     },
-    "mapped_lane": {
-      "type": "string",
+    "mirror_transform_id": {
+      "type": "enum(horizontal_left_to_right_once,diagonal_right_to_left_after_delay)",
+      "required": "group 3 mirror choice"
+    },
+    "source_lane_id": {
+      "type": "enum(lane_left,lane_right)",
+      "required": "group 3 mirror choice"
+    },
+    "mapped_lane_id": {
+      "type": "enum(lane_left,lane_right)",
       "required": "group 3 mirror choice and topology evaluation"
     },
-    "mirror_kill_tick": {
+    "selected_mirror_kill_tick": {
       "type": "non_negative_integer",
-      "required": "group 3 recovery"
+      "required": "s2_b15 mirror choice"
+    },
+    "surviving_mirror_kill_tick": {
+      "type": "non_negative_integer",
+      "required": "s2_b16 recovery"
+    },
+    "surviving_mirror_kill_event_sequence": {
+      "type": "non_negative_integer",
+      "required": "s2_b16 recovery"
     },
     "abacus_kill_tick": {
       "type": "non_negative_integer",
       "required": "group 3 recovery"
     },
-    "first_kill_role": {
-      "type": "string",
+    "abacus_kill_event_sequence": {
+      "type": "non_negative_integer",
       "required": "s2_b16 recovery"
     },
+    "first_kill_role": {
+      "type": "enum(surviving_mirror,abacus_keeper)",
+      "required": "s2_b16 recovery",
+      "meaning": "First defeat in total event order among surviving_mirror_spawn_id and s2_b16_abacus_keeper; the already-defeated selected mirror is excluded."
+    },
     "mirror_activation_mask": {
-      "type": "symbolic_bitset",
-      "required": "s2_b16 recovery"
+      "type": "integer(0..7)",
+      "required": "s2_b16 recovery",
+      "bit_definitions": {
+        "bit_0_value_1": "left horizontal transform is the selected committed route",
+        "bit_1_value_2": "right diagonal transform is the selected committed route",
+        "bit_2_value_4": "surviving_mirror_spawn_id is alive at s2_b16 entry"
+      },
+      "score_candidate_values": [
+        5,
+        6
+      ]
     },
     "center_lane_preserved": {
       "type": "boolean",
@@ -764,8 +1243,18 @@
       "required": "group 3 precommit"
     },
     "final_open_lane_id": {
-      "type": "string",
-      "required": "group 3 precommit and final crossing"
+      "type": "enum(lane_left,lane_right)",
+      "required": "group 3 precommit and final crossing",
+      "derivation": "Exact mapped_lane_id from the frozen selected mirror_transform_table row after booth_yellow is verified as the last surviving booth."
+    },
+    "last_surviving_booth_node_id": {
+      "type": "constant(booth_yellow)",
+      "required": "group 3 target defeat"
+    },
+    "final_lane_cross_lane_id": {
+      "type": "enum(lane_left,lane_center,lane_right)",
+      "required": "s2_b18 crossing callback",
+      "meaning": "Lane derived from player_center_x at final_lane_cross_tick; success requires equality with frozen final_open_lane_id."
     },
     "final_lane_cross_tick": {
       "type": "non_negative_integer",
@@ -844,7 +1333,19 @@
     },
     {
       "invariant_id": "hard_topology_is_stateful_not_numeric",
-      "rule": "Hard success additionally evaluates named graph states hard_current_lane_to_red_booth_edge_exists, hard_neighbor_flag_edge_reachable, and hard_mirror_axis_to_survivor_edge_reachable; bullet count, speed, and numeric thresholds do not substitute for these topology predicates."
+      "rule": "Hard success additionally evaluates the computable directed-graph predicates hard_current_lane_to_red_booth_edge_exists, hard_neighbor_flag_edge_reachable, and hard_selected_transform_to_final_gate_reachable; bullet count, speed, and numeric thresholds do not substitute for these topology predicates."
+    },
+    {
+      "invariant_id": "topology_reconstruction_is_deterministic",
+      "rule": "Given player_center_x, selected_mirror_spawn_id, and the ordered defeat callbacks, a runtime must reconstruct exactly one topology revision from stage_front_initial through the declared red, blue, mirror, and yellow transforms without inventing nodes or edges."
+    },
+    {
+      "invariant_id": "mirror_side_axis_mapping_is_exact",
+      "rule": "s2_b15_left_mirror is spawn side left with horizontal_left_to_right_once from lane_left to lane_right; s2_b15_right_mirror is spawn side right with diagonal_right_to_left_after_delay from lane_right to lane_left. Spawn side, geometric axis, transform ID, source lane, and mapped lane are distinct fields and must match mirror_transform_table."
+    },
+    {
+      "invariant_id": "abacus_fallback_compares_surviving_mirror",
+      "rule": "selected_mirror_spawn_id is defeated during s2_b15. The s2_b16 success/fallback order compares s2_b16_abacus_keeper only with the other still-alive surviving_mirror_spawn_id; surviving mirror then abacus is score success, while abacus then surviving mirror is the reachable gameplay-only fallback."
     },
     {
       "invariant_id": "gameplay_fallback_not_score_success",
