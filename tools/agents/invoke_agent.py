@@ -503,6 +503,100 @@ def _failure_context(run_dir: Path, summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _validate_review_repair_report(report: dict[str, Any]) -> None:
+    problems = _validate_report(report)
+    if problems:
+        raise BridgeError(
+            "Review failure report does not match report.schema.json: "
+            + "; ".join(problems)
+        )
+    if report.get("status") != "completed":
+        raise BridgeError("Review failure evidence must have report.status completed")
+    summary = str(report.get("summary", ""))
+    if re.match(r"^\s*GATE:\s*REPAIR\b", summary, flags=re.IGNORECASE) is None:
+        raise BridgeError("Review failure evidence must begin with GATE: REPAIR")
+    if report.get("changed_files"):
+        raise BridgeError("Review failure evidence must report zero changed files")
+
+
+def _load_review_failure_context(
+    repo: Path,
+    *,
+    implementation_agent: str,
+    review_run: str,
+    implementation_base: str,
+) -> dict[str, Any]:
+    review_dir = _resolve_run_dir(repo, review_run)
+    review_invocation = _load_json(review_dir / "invocation.json")
+    review_summary = _load_json(review_dir / "run-summary.json")
+    if review_summary.get("status") != "completed":
+        raise BridgeError(
+            f"Review run {review_run!r} is {review_summary.get('status')!r}, "
+            "not completed review-failure evidence"
+        )
+    if review_invocation.get("dry_run") is True:
+        raise BridgeError("Dry-run records cannot be review-failure evidence")
+    if review_invocation.get("agent") == implementation_agent:
+        raise BridgeError("Review failure must come from a different Agent")
+    if review_invocation.get("sandbox") != "read-only":
+        raise BridgeError("Review failure evidence must use the read-only sandbox")
+    if review_invocation.get("branch") is not None:
+        raise BridgeError("Review failure evidence must come from a detached review")
+    for key in (
+        "changed_paths",
+        "policy_violations",
+        "report_problems",
+        "identity_problems",
+    ):
+        if review_summary.get(key):
+            raise BridgeError(f"Review failure evidence has non-empty {key}")
+    runtime = review_summary.get("runtime", {})
+    if not isinstance(runtime, dict) or runtime.get("verified") is not True:
+        raise BridgeError("Review failure runtime identity is not verified")
+    review_ticket, _, _ = _load_ticket_snapshot(
+        repo, review_dir, review_invocation
+    )
+    if review_ticket.get("mode") != "read_only":
+        raise BridgeError("Review failure ticket must be read_only")
+    candidate_commit = review_invocation.get("base_commit")
+    if not isinstance(candidate_commit, str) or not candidate_commit:
+        raise BridgeError("Review failure invocation has no candidate commit")
+    verified_candidate = _git(
+        repo, "rev-parse", "--verify", f"{candidate_commit}^{{commit}}"
+    )
+    if verified_candidate != candidate_commit:
+        raise BridgeError("Review failure candidate commit no longer resolves exactly")
+    review_dependency = _git(
+        repo,
+        "rev-parse",
+        "--verify",
+        f"{review_ticket['dependency_commit']}^{{commit}}",
+    )
+    if review_dependency != candidate_commit:
+        raise BridgeError(
+            "Review failure ticket dependency does not match the reviewed candidate"
+        )
+    ancestry = _run(
+        ["git", "merge-base", "--is-ancestor", implementation_base, candidate_commit],
+        cwd=repo,
+        check=False,
+    )
+    if ancestry.returncode != 0:
+        raise BridgeError(
+            "Reviewed candidate is not descended from the implementation base"
+        )
+    report = _load_optional_report(review_dir)
+    if report is None:
+        raise BridgeError("Review failure run has no validated final report")
+    _validate_review_repair_report(report)
+    return {
+        "run_id": review_run,
+        "run_dir": review_dir,
+        "summary": review_summary,
+        "candidate_commit": candidate_commit,
+    }
+
+
 def _build_repair_prompt(
     profile: dict[str, Any],
     ticket: dict[str, Any],
@@ -666,6 +760,7 @@ def _validate_resume_worktree(
     worktree: Path,
     *,
     base_commit: str,
+    expected_head: str,
     branch: str | None,
     ticket: dict[str, Any],
 ) -> list[str]:
@@ -683,10 +778,10 @@ def _validate_resume_worktree(
     if _normalized_path(actual_root) != _normalized_path(resolved):
         raise BridgeError(f"Git worktree root mismatch for {resolved}")
     actual_head = _git(resolved, "rev-parse", "HEAD")
-    if actual_head != base_commit:
+    if actual_head != expected_head:
         raise BridgeError(
-            "The leaf Agent committed or moved the worktree HEAD; resume requires "
-            f"the original base {base_commit}, found {actual_head}"
+            "The implementation worktree HEAD no longer matches the resumable "
+            f"candidate {expected_head}, found {actual_head}"
         )
     actual_branch = _git(resolved, "branch", "--show-current") or None
     if actual_branch != branch:
@@ -811,14 +906,31 @@ def _load_resume_context(
     resume_run: str,
     escalation_level: int | None,
     transport_retry: bool,
+    review_failure_run: str | None,
     profile: dict[str, Any],
 ) -> dict[str, Any]:
     parent_dir = _resolve_run_dir(repo, resume_run)
     invocation = _load_json(parent_dir / "invocation.json")
     summary = _load_json(parent_dir / "run-summary.json")
-    if summary.get("status") not in {"failed", "bridge_error"}:
+    parent_status = summary.get("status")
+    if parent_status == "completed":
+        if not review_failure_run:
+            raise BridgeError(
+                f"Run {resume_run!r} is completed; a verified "
+                "--review-failure-run is required to reopen it"
+            )
+        if transport_retry:
+            raise BridgeError(
+                "Review-failure repair cannot be combined with transport retry"
+            )
+    elif parent_status in {"failed", "bridge_error"}:
+        if review_failure_run:
+            raise BridgeError(
+                "--review-failure-run is only valid when reopening a completed run"
+            )
+    else:
         raise BridgeError(
-            f"Run {resume_run!r} is {summary.get('status')!r}, not resumable"
+            f"Run {resume_run!r} is {parent_status!r}, not resumable"
         )
     if invocation.get("dry_run") is True:
         raise BridgeError("Dry-run records cannot be resumed")
@@ -898,10 +1010,21 @@ def _load_resume_context(
     if branch is not None and not isinstance(branch, str):
         raise BridgeError("Prior invocation has an invalid branch")
     worktree = Path(worktree_value)
+    review_failure: dict[str, Any] | None = None
+    expected_head = base_commit
+    if review_failure_run:
+        review_failure = _load_review_failure_context(
+            repo,
+            implementation_agent=agent,
+            review_run=review_failure_run,
+            implementation_base=base_commit,
+        )
+        expected_head = review_failure["candidate_commit"]
     preexisting_changed_paths = _validate_resume_worktree(
         repo,
         worktree,
         base_commit=base_commit,
+        expected_head=expected_head,
         branch=branch,
         ticket=ticket,
     )
@@ -929,17 +1052,31 @@ def _load_resume_context(
         "parent_invocation": invocation,
         "parent_summary": summary,
         "repair_round": repair_round,
-        "continuation_kind": "transport_retry" if transport_retry else "repair",
+        "continuation_kind": (
+            "transport_retry"
+            if transport_retry
+            else "review_repair"
+            if review_failure is not None
+            else "repair"
+        ),
         "ticket": ticket,
         "ticket_source": ticket_source,
         "ticket_sha256": ticket_sha256,
         "requested_identity": requested_identity,
         "thread_id": thread_id,
         "base_commit": base_commit,
+        "expected_head": expected_head,
         "worktree": worktree.resolve(),
         "branch": branch,
         "sandbox": sandbox,
         "preexisting_changed_paths": preexisting_changed_paths,
+        "failure_dir": (
+            review_failure["run_dir"] if review_failure is not None else parent_dir
+        ),
+        "failure_summary": (
+            review_failure["summary"] if review_failure is not None else summary
+        ),
+        "review_failure_run_id": review_failure_run,
     }
 
 
@@ -952,6 +1089,7 @@ def main() -> int:
     parser.add_argument("--escalation-level", type=int)
     parser.add_argument("--transport-retry", action="store_true")
     parser.add_argument("--repair-instruction")
+    parser.add_argument("--review-failure-run")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--keep-worktree", action="store_true")
     args = parser.parse_args()
@@ -961,9 +1099,14 @@ def main() -> int:
         raise BridgeError("Specify exactly one of --ticket or --resume-run")
     if is_resume:
         if args.transport_retry:
-            if args.escalation_level is not None or args.repair_instruction:
+            if (
+                args.escalation_level is not None
+                or args.repair_instruction
+                or args.review_failure_run
+            ):
                 raise BridgeError(
-                    "--transport-retry cannot be combined with escalation or repair input"
+                    "--transport-retry cannot be combined with escalation, repair "
+                    "input, or review-failure evidence"
                 )
         else:
             if args.escalation_level is None:
@@ -976,6 +1119,7 @@ def main() -> int:
         args.escalation_level is not None
         or args.transport_retry
         or args.repair_instruction
+        or args.review_failure_run
     ):
         raise BridgeError(
             "continuation options require --resume-run"
@@ -1002,6 +1146,7 @@ def main() -> int:
             resume_run=args.resume_run,
             escalation_level=args.escalation_level,
             transport_retry=args.transport_retry,
+            review_failure_run=args.review_failure_run,
             profile=profile,
         )
         ticket = resume_context["ticket"]
@@ -1069,8 +1214,8 @@ def main() -> int:
                     parent_run_id=parent_run_id,
                     repair_round=repair_round,
                     failure_context=_failure_context(
-                        resume_context["parent_dir"],
-                        resume_context["parent_summary"],
+                        resume_context["failure_dir"],
+                        resume_context["failure_summary"],
                     ),
                     repair_instruction=args.repair_instruction,
                 )
@@ -1139,6 +1284,16 @@ def main() -> int:
                 resume_context["continuation_kind"]
                 if resume_context is not None
                 else "fresh"
+            ),
+            "review_failure_run_id": (
+                resume_context["review_failure_run_id"]
+                if resume_context is not None
+                else None
+            ),
+            "resume_head_commit": (
+                resume_context["expected_head"]
+                if resume_context is not None
+                else base_commit
             ),
             "thread_id": thread_id,
             "profile_default": default_identity,
@@ -1216,9 +1371,14 @@ def main() -> int:
         if ticket["mode"] == "read_only" and changed:
             violations.extend(f"read-only task changed: {path}" for path in changed)
         actual_head = _git(worktree, "rev-parse", "HEAD")
-        if actual_head != base_commit:
+        expected_head = (
+            resume_context["expected_head"]
+            if resume_context is not None
+            else base_commit
+        )
+        if actual_head != expected_head:
             violations.append(
-                f"leaf Agent moved worktree HEAD: {actual_head} != {base_commit}"
+                f"leaf Agent moved worktree HEAD: {actual_head} != {expected_head}"
             )
         actual_branch = _git(worktree, "branch", "--show-current") or None
         if actual_branch != branch:
@@ -1278,6 +1438,11 @@ def main() -> int:
             "parent_run_id": parent_run_id,
             "root_run_id": root_run_id,
             "repair_round": repair_round,
+            "review_failure_run_id": (
+                resume_context["review_failure_run_id"]
+                if resume_context is not None
+                else None
+            ),
             "requested": requested_identity,
             "routing": {
                 "scope": "single_invocation",

@@ -19,6 +19,9 @@ param(
     [Parameter(ParameterSetName = 'Resume')]
     [string]$RepairInstruction,
 
+    [Parameter(ParameterSetName = 'Resume')]
+    [string]$ReviewFailureRun,
+
     [switch]$DryRun,
     [switch]$KeepWorktree
 )
@@ -45,6 +48,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Resume') {
     }
     if ($RepairInstruction) {
         $pythonArgs += @('--repair-instruction', $RepairInstruction)
+    }
+    if ($ReviewFailureRun) {
+        $pythonArgs += @('--review-failure-run', $ReviewFailureRun)
     }
 }
 else {

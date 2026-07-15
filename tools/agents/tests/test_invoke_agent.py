@@ -190,6 +190,79 @@ model_reasoning_effort = "high"
         self.assertIn("same agent", prompt)
         self.assertNotIn("temporarily overridden", prompt)
 
+    def test_review_repair_report_must_be_read_only_gate_repair_evidence(self) -> None:
+        report = {
+            "status": "completed",
+            "summary": "GATE: REPAIR - zero Godot launches.",
+            "changed_files": [],
+            "commands": ["git diff --check"],
+            "tests": [
+                {
+                    "name": "static review",
+                    "status": "passed",
+                    "evidence": "read-only",
+                }
+            ],
+            "failures": ["one bounded blocker"],
+            "residual_risks": [],
+        }
+        BRIDGE._validate_review_repair_report(report)
+        with self.assertRaisesRegex(BRIDGE.BridgeError, "GATE: REPAIR"):
+            BRIDGE._validate_review_repair_report(
+                {**report, "summary": "GATE: APPROVE"}
+            )
+        with self.assertRaisesRegex(BRIDGE.BridgeError, "zero changed files"):
+            BRIDGE._validate_review_repair_report(
+                {**report, "changed_files": ["reviewer-edit.txt"]}
+            )
+
+    def test_review_repair_resume_accepts_release_lead_candidate_head(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            worktree = repo / ".worktrees" / "candidate"
+            worktree.mkdir(parents=True)
+            branch = "codex/candidate"
+            base = "a" * 40
+            candidate = "b" * 40
+
+            def fake_git(_repo: Path, *args: str, check: bool = True) -> str:
+                del check
+                if args == ("rev-parse", "--show-toplevel"):
+                    return str(worktree)
+                if args == ("rev-parse", "HEAD"):
+                    return candidate
+                if args == ("branch", "--show-current"):
+                    return branch
+                raise AssertionError(f"Unexpected git args: {args}")
+
+            with (
+                mock.patch.object(
+                    BRIDGE,
+                    "_registered_worktrees",
+                    return_value={BRIDGE._normalized_path(worktree)},
+                ),
+                mock.patch.object(BRIDGE, "_git", side_effect=fake_git),
+                mock.patch.object(BRIDGE, "_changed_paths", return_value=[]),
+            ):
+                changed = BRIDGE._validate_resume_worktree(
+                    repo,
+                    worktree,
+                    base_commit=base,
+                    expected_head=candidate,
+                    branch=branch,
+                    ticket={"mode": "write", "allowed_paths": ["**"], "forbidden_paths": []},
+                )
+                self.assertEqual(changed, [])
+                with self.assertRaisesRegex(BRIDGE.BridgeError, "resumable candidate"):
+                    BRIDGE._validate_resume_worktree(
+                        repo,
+                        worktree,
+                        base_commit=base,
+                        expected_head=base,
+                        branch=branch,
+                        ticket={"mode": "write", "allowed_paths": ["**"], "forbidden_paths": []},
+                    )
+
     def test_resume_identity_is_read_from_only_the_appended_turn(self) -> None:
         thread_id = "019f0000-0000-7000-8000-000000000001"
         with tempfile.TemporaryDirectory() as temporary:
