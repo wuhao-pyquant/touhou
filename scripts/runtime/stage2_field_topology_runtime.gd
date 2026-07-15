@@ -682,7 +682,7 @@ func _validate_contract(contract: Dictionary) -> Array[String]:
 	if int(scope.get("covered_spawn_count", -1)) != EXPECTED_SPAWN_COUNT or int(scope.get("field_owned_spawn_count", -1)) != 21:
 		errors.append("contract_scope.coverage: expected 22 total and 21 field-owned rows")
 	var coordinate: Dictionary = contract.get("coordinate_contract", {})
-	if int(coordinate.get("tick_rate", -1)) != TICK_RATE or coordinate.get("combat_bounds") != [24, 48, 696, 936]:
+	if int(coordinate.get("tick_rate", -1)) != TICK_RATE or not _valid_combat_bounds(coordinate.get("combat_bounds")):
 		errors.append("coordinate_contract: tick rate or combat bounds mismatch")
 	var seen_spawns := {}
 	var seen_topologies := {}
@@ -749,6 +749,15 @@ func _validate_contract(contract: Dictionary) -> Array[String]:
 	if digest != CONTRACT_DIGEST:
 		errors.append("contract_digest: frozen v1 content mismatch (%s)" % digest)
 	return errors
+
+func _valid_combat_bounds(value: Variant) -> bool:
+	if not (value is Array) or (value as Array).size() != COMBAT_BOUNDS.size():
+		return false
+	var bounds: Array = value
+	for index in range(COMBAT_BOUNDS.size()):
+		if not _finite_number(bounds[index]) or float(bounds[index]) != float(COMBAT_BOUNDS[index]):
+			return false
+	return true
 
 func _validate_source_row(row: Dictionary, path: String, errors: Array[String]) -> void:
 	var source: Dictionary = row.source

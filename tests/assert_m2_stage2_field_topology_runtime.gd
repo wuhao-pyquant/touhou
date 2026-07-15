@@ -494,7 +494,47 @@ func _assert_snapshot_continuation(runtime: RefCounted, stage_run_uid: String) -
 	_check(seeked.seek_snapshot(snapshot), "Snapshot seek alias rejected a valid deterministic state.")
 	_check_equal(seeked.advance(1884, 1), expected_next, "Seek continuation diverged from the original output.")
 
+func _assert_coordinate_contract_rejected(contract: Dictionary, stage_run_uid: String, label: String) -> void:
+	var runtime := Stage2FieldTopologyRuntime.new()
+	_check(not runtime.configure(contract, "normal", stage_run_uid), "%s coordinate fixture was accepted." % label)
+	var error: Dictionary = runtime.hard_error_snapshot()
+	_check_equal(String(error.get("code", "")), "configuration_rejected", "%s used the wrong rejection code." % label)
+	_check_equal(String(error.get("path", "")), "coordinate_contract", "%s used the wrong rejection path." % label)
+	_check(runtime.capture_snapshot().is_empty(), "%s rejection exposed a snapshot." % label)
+
 func _assert_fail_closed_contracts_caps_and_uids() -> void:
+	var parsed_json_runtime := Stage2FieldTopologyRuntime.new()
+	_check(parsed_json_runtime.configure(_frozen_contract, "normal", "parsed_json_bounds"), "Parsed JSON combat bounds were rejected: %s" % parsed_json_runtime.last_error())
+	_check(not parsed_json_runtime.capture_snapshot().is_empty(), "Parsed JSON combat bounds did not produce a configured snapshot.")
+
+	var integer_bounds: Dictionary = _frozen_contract.duplicate(true)
+	integer_bounds.coordinate_contract.combat_bounds = [24, 48, 696, 936]
+	var integer_bounds_runtime := Stage2FieldTopologyRuntime.new()
+	_check(integer_bounds_runtime.configure(integer_bounds, "normal", "integer_bounds"), "Equivalent integer combat bounds were rejected: %s" % integer_bounds_runtime.last_error())
+	_check(not integer_bounds_runtime.capture_snapshot().is_empty(), "Equivalent integer combat bounds did not produce a configured snapshot.")
+
+	var wrong_length: Dictionary = _frozen_contract.duplicate(true)
+	wrong_length.coordinate_contract.combat_bounds = [24.0, 48.0, 696.0]
+	_assert_coordinate_contract_rejected(wrong_length, "bounds_wrong_length", "Wrong-length bounds")
+	var numeric_string: Dictionary = _frozen_contract.duplicate(true)
+	numeric_string.coordinate_contract.combat_bounds = ["24", 48.0, 696.0, 936.0]
+	_assert_coordinate_contract_rejected(numeric_string, "bounds_numeric_string", "Numeric-looking String bound")
+	var nan_bound: Dictionary = _frozen_contract.duplicate(true)
+	nan_bound.coordinate_contract.combat_bounds = [NAN, 48.0, 696.0, 936.0]
+	_assert_coordinate_contract_rejected(nan_bound, "bounds_nan", "NAN bound")
+	var inf_bound: Dictionary = _frozen_contract.duplicate(true)
+	inf_bound.coordinate_contract.combat_bounds = [24.0, INF, 696.0, 936.0]
+	_assert_coordinate_contract_rejected(inf_bound, "bounds_inf", "INF bound")
+	var incorrect_bound: Dictionary = _frozen_contract.duplicate(true)
+	incorrect_bound.coordinate_contract.combat_bounds = [25.0, 48.0, 696.0, 936.0]
+	_assert_coordinate_contract_rejected(incorrect_bound, "bounds_incorrect", "Incorrect finite bound")
+	var reordered_bounds: Dictionary = _frozen_contract.duplicate(true)
+	reordered_bounds.coordinate_contract.combat_bounds = [48.0, 24.0, 696.0, 936.0]
+	_assert_coordinate_contract_rejected(reordered_bounds, "bounds_reordered", "Reordered finite bounds")
+	var wrong_tick_rate: Dictionary = _frozen_contract.duplicate(true)
+	wrong_tick_rate.coordinate_contract.tick_rate = 59
+	_assert_coordinate_contract_rejected(wrong_tick_rate, "tick_rate_59", "tick_rate 59")
+
 	var missing_row: Dictionary = _frozen_contract.duplicate(true)
 	missing_row.spawn_topologies.pop_back()
 	var missing_runtime := Stage2FieldTopologyRuntime.new()
