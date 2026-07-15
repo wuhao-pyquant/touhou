@@ -356,7 +356,7 @@ func _validate_phase_order_and_identity(
 	var expected_slot := "%s_card_%d" % [phase.encounter_role, role_ordinal]
 	if phase.encounter_slot != expected_slot:
 		_load_errors.append("phase %s encounter slot must be %s at source index %d" % [phase.id, expected_slot, source_index])
-	var expected_owner := stage.midboss_id if phase.encounter_role == "midboss" else stage.boss_id
+	var expected_owner: String = stage.midboss_id if phase.encounter_role == "midboss" else stage.boss_id
 	if String(phase.owner.get("id", "")) != expected_owner:
 		_load_errors.append("phase %s owner does not match its stage encounter role" % phase.id)
 	if String(phase.source_identity.get("source_owner_id", "")) != expected_owner:
