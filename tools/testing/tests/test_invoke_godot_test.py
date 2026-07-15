@@ -572,17 +572,38 @@ class InvokeGodotTestTests(unittest.TestCase):
         supervisor = subprocess.Popen(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.processes.append(supervisor)
         worker_pid = self.wait_for_child(supervisor.pid, Path(command[0]).name)
-        time.sleep(1.5)
-        self.assertTrue(self.pid_alive(worker_pid), "fault did not leave a real unconfirmed worker")
         try:
+            deadline = time.monotonic() + 8
+            while supervisor.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.02)
+            self.assertIsNotNone(supervisor.returncode, "first supervisor did not exit within its fixed failure bound")
+            first_summary_line = supervisor.stdout.readline()
+            lines = [line for line in (first_summary_line,) if line.startswith("{")]
+            self.assertEqual(len(lines), 1, f"stdout={first_summary_line}")
+            summary = json.loads(lines[0])
+            self.assertEqual((supervisor.returncode, summary["category"]), (7, "CleanupFailure"))
+            self.assertTrue(self.pid_alive(worker_pid), "fault did not leave a real unconfirmed worker after supervisor exit")
+            time.sleep(0.25)
+            self.assertTrue(self.pid_alive(worker_pid), "worker exited before it could retain the abandoned mutex")
             self.assert_category(4, "LockContention", timeout=5)
         finally:
             subprocess.run(["taskkill", "/PID", str(worker_pid), "/T", "/F"], text=True, capture_output=True)
-        stdout, stderr = supervisor.communicate(timeout=8)
-        lines = [line for line in stdout.splitlines() if line.startswith("{")]
-        self.assertEqual(len(lines), 1, f"stdout={stdout}\nstderr={stderr}")
-        summary = json.loads(lines[0])
-        self.assertEqual((supervisor.returncode, summary["category"]), (7, "CleanupFailure"), stderr)
+            self.assert_pid_gone(worker_pid, timeout=10)
+        stdout, stderr = supervisor.communicate(timeout=5)
+        self.assertEqual([line for line in stdout.splitlines() if line.startswith("{")], [], f"stdout={stdout}\nstderr={stderr}")
+
+    # 37: a valid cleanup frame buffered with a trailing protocol-pump failure
+    # still takes CleanupFailure precedence after the worker exits.
+    def test_37_terminal_buffered_cleanup_precedes_pump_failure(self) -> None:
+        existing = subprocess.Popen(
+            [str(self.engine), "--mode", "sleep", "--duration", "30", "--headless", "--path", str(self.project)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        self.processes.append(existing)
+        time.sleep(0.2)
+        self.assert_category(7, "CleanupFailure", fault="cleanup-trailing-partial", cleanup=True, timeout=5)
+        self.assertIsNone(existing.poll(), "terminal protocol seam mutated the retained target")
 
 
 if __name__ == "__main__":

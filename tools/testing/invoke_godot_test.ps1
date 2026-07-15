@@ -112,6 +112,22 @@ function Update-ProtocolPump([object]$Pump,[long]$Deadline) {
         Start-ProtocolPump $Pump $Deadline
     } catch {$Pump.Failure=$_.Exception.Message;$Pump.Complete=$true}
 }
+function Read-NewCleanupFrames([object]$Pump,[string]$FrameNonce,[ref]$CleanupCount,[ref]$CleanupObserved,[ref]$NextFrame,[bool]$CleanupAllowed) {
+    # Only advance over authenticated optional cleanup frames.  FINAL remains for
+    # the immutable terminal-protocol check, so a second/malformed phase cannot
+    # be silently consumed.
+    while($Pump.Frames.Count -gt [int]$NextFrame.Value){
+        $raw=$Pump.Frames[[int]$NextFrame.Value]
+        if($raw -notlike 'GTR1 CLEANUP_BEGIN*'){break}
+        if(-not $CleanupAllowed){throw 'cleanup begin before GO'}
+        if([bool]$CleanupObserved.Value){throw 'duplicate cleanup begin'}
+        $cleanupFrame=Read-Frame $raw 'CLEANUP_BEGIN' $FrameNonce
+        Test-ExactProperties $cleanupFrame @('count') 'cleanup'
+        $CleanupCount.Value=Test-Integral $cleanupFrame.count 'cleanup count' 1 ([UInt64]::MaxValue)
+        $CleanupObserved.Value=$true
+        $NextFrame.Value=[int]$NextFrame.Value+1
+    }
+}
 function Test-Integral([object]$Value,[string]$Name,[long]$Minimum,[UInt64]$Maximum) {
     if($Value -isnot [sbyte] -and $Value -isnot [byte] -and $Value -isnot [int16] -and $Value -isnot [uint16] -and $Value -isnot [int] -and $Value -isnot [uint32] -and $Value -isnot [int64] -and $Value -isnot [uint64]){throw "invalid integral $Name"}
     try{$number=[UInt64]$Value}catch{throw "invalid integral $Name"};if($number -lt $Minimum -or $number -gt $Maximum){throw "invalid integral $Name"};return $number
@@ -226,7 +242,7 @@ namespace Gtr {
       w.Ready.Set();
       while(true){
        if(w.Stop.WaitOne(Math.Min(5,Math.Max(1,Remaining(deadline)))))return;
-       if(Now()>=deadline){FailWatch(w);return;}
+       if(Now()>=deadline&&fault!="worker-kill-failure"){FailWatch(w);return;}
        lock(w.Gate){h=w.Handle;}
        if(h==IntPtr.Zero)return;
        uint r=WaitForSingleObject(h,0);
@@ -269,7 +285,7 @@ namespace Gtr {
    public static SupervisorWatch OpenSupervisorWatch(int pid,long creation,long deadline,string fault){IntPtr h=OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,false,(uint)pid);if(h==IntPtr.Zero||fault=="watcher-failure"){if(h!=IntPtr.Zero)Need(CloseHandle(h),"CloseHandle rejected supervisor");throw new InvalidOperationException("supervisor watcher failure");}var w=new SupervisorWatch{Handle=h,Creation=creation};try{CheckWatch(w);StartWatch(w,deadline,fault);int remaining=Remaining(deadline);if(remaining<=0||!w.Ready.WaitOne(remaining)){throw new TimeoutException("supervisor watcher ready deadline");}CheckWatch(w);return w;}catch{w.Stop.Set();w.Done.WaitOne(Math.Max(1,Remaining(deadline)));lock(w.Gate){h=w.Handle;w.Handle=IntPtr.Zero;}if(h!=IntPtr.Zero)Need(CloseHandle(h),"CloseHandle failed supervisor watch");throw;}}
   public static void VerifySupervisorWatch(SupervisorWatch w){CheckWatch(w);}
    public static IntPtr RetainMutex(string key){IntPtr h=OpenMutexW(SYNCHRONIZE,false,"Global\\GodotTestRunner_v1_"+key);if(h==IntPtr.Zero)throw new Win32Exception(Marshal.GetLastWin32Error(),"OpenMutex worker retention");return h;}
-   public static void AcquireRetainedMutexForFault(string key){HeldFaultMutex=new Mutex(false,"Global\\GodotTestRunner_v1_"+key);HeldFaultMutex.WaitOne();}
+   public static void AcquireRetainedMutexForFault(string key){HeldFaultMutex=new Mutex(false,"Global\\GodotTestRunner_v1_"+key);try{HeldFaultMutex.WaitOne();}catch(AbandonedMutexException){}}
    public static void CloseRetainedMutex(IntPtr h){if(h!=IntPtr.Zero)Need(CloseHandle(h),"CloseHandle retained mutex");}
    public static void CloseSupervisorWatch(SupervisorWatch w,long deadline){if(w==null)return;w.Stop.Set();int remaining=Remaining(deadline);if(remaining<=0||!w.Done.WaitOne(remaining))throw new TimeoutException("supervisor watcher close deadline");IntPtr h,j;lock(w.Gate){h=w.Handle;w.Handle=IntPtr.Zero;j=w.Job;w.Job=IntPtr.Zero;}if(j!=IntPtr.Zero)Need(CloseHandle(j),"CloseHandle watcher job");if(h!=IntPtr.Zero)Need(CloseHandle(h),"CloseHandle supervisor");}
   // W4-W8: JOB_LIST and HANDLE_LIST are installed before CreateProcessW.  Captures
@@ -336,7 +352,7 @@ function Invoke-Worker {
         [Gtr.Native]::VerifySupervisorWatch($watch)
         $existing=@([Gtr.Native]::Inventory($exeIdentity,$projectIdentity,$WorkerFault))
         if($existing.Count -and -not $CleanupExisting){$category='PreexistingHeadlessProcess';throw 'existing guarded process'}
-        if($existing.Count){[Console]::Out.WriteLine((New-Frame 'CLEANUP_BEGIN' $Nonce @{count=if($WorkerFault -eq 'fractional-cleanup'){1.5}else{$existing.Count}}));[Console]::Out.Flush();$cleanupBegan=$true;if($WorkerFault -eq 'fractional-cleanup'){return};$category='CleanupFailure';[Gtr.Native]::VerifySupervisorWatch($watch);$cleaned=@([Gtr.Native]::Cleanup($existing,$WorkerFault,$DeadlineTicks));[Gtr.Native]::VerifySupervisorWatch($watch);$again=@([Gtr.Native]::Inventory($exeIdentity,$projectIdentity,''));if($again.Count){throw 'cleanup verification failed'};$category='InvalidInput'}elseif($WorkerFault -eq 'retained-identity'){$category='CleanupFailure';throw 'retained identity changed'}
+        if($existing.Count){[Console]::Out.WriteLine((New-Frame 'CLEANUP_BEGIN' $Nonce @{count=if($WorkerFault -eq 'fractional-cleanup'){1.5}else{$existing.Count}}));[Console]::Out.Flush();$cleanupBegan=$true;if($WorkerFault -eq 'fractional-cleanup'){return};$category='CleanupFailure';if($WorkerFault -eq 'cleanup-trailing-partial'){[Console]::Out.Write('GTR1 CLEANUP_BEGIN');[Console]::Out.Flush();[Console]::Out.Close();return};[Gtr.Native]::VerifySupervisorWatch($watch);$cleaned=@([Gtr.Native]::Cleanup($existing,$WorkerFault,$DeadlineTicks));[Gtr.Native]::VerifySupervisorWatch($watch);$again=@([Gtr.Native]::Inventory($exeIdentity,$projectIdentity,''));if($again.Count){throw 'cleanup verification failed'};$category='InvalidInput'}elseif($WorkerFault -eq 'retained-identity'){$category='CleanupFailure';throw 'retained identity changed'}
         $remaining=Get-Remaining $DeadlineTicks;if($remaining -le 0){$category='Timeout';throw 'deadline'};$reserve=[Math]::Min(2000,[Math]::Max(250,[int][Math]::Ceiling(($TimeoutSeconds*1000)/10.0)));$engineDeadline=$DeadlineTicks-[int64]($reserve*[Diagnostics.Stopwatch]::Frequency/1000);if((Get-Remaining $engineDeadline) -le 0){$category='Timeout';throw 'deadline'}
         $engine=@($args)+@('--headless','--path',$project,'--log-file',$log); $line=(($engine|ForEach-Object{Quote-WindowsArgument $_}) -join ' ');if((Quote-WindowsArgument $exeIdentity.DiagnosticPath).Length+1+$line.Length -gt $script:MaxWindowsCommand){throw 'engine command exceeds cap'}
         $category='CleanupFailure';$r=[Gtr.Native]::Run($exeIdentity,$line,$projectIdentity,"$log.stdout","$log.stderr",$watch,$engineDeadline,$DeadlineTicks,$PollMilliseconds,$WorkerFault);$category='InvalidInput'
@@ -370,7 +386,7 @@ function Invoke-Supervisor {
         $argumentB64=[string]::Join(',',@($workerArguments|ForEach-Object{ConvertTo-B64Url $_}));if($argumentB64.Length -gt ($script:MaxInput*2)){throw 'worker argument transport exceeds cap'};$forward+=@('-WorkerArgumentB64',$argumentB64);if($LogFile){$forward+=@('-LogFile',$LogFile)};if($CleanupExisting){$forward+='-CleanupExisting'};if($WorkerFault){$forward+=@('-WorkerFault',$WorkerFault)}
         $psi.Arguments=(($forward|ForEach-Object{Quote-WindowsArgument $_}) -join ' ');$completeWorkerCommand=(Quote-WindowsArgument $psi.FileName)+' '+$psi.Arguments;if($completeWorkerCommand.Length -gt $script:MaxWindowsCommand){throw 'worker command exceeds cap'};if($WorkerFault -eq 'start-failure'){$psi.FileName=Join-Path ([IO.Path]::GetTempPath()) ('missing-worker-'+[Guid]::NewGuid().ToString('N')+'.exe')};$worker=New-Object Diagnostics.Process;$workerCreated=$true;$worker.StartInfo=$psi;if(-not $worker.Start()){throw 'worker launch failure'};$workerStarted=$true;$stdoutPump=New-ProtocolPump $worker.StandardOutput.BaseStream;$stderrPump=New-ProtocolPump $worker.StandardError.BaseStream;Start-ProtocolPump $stdoutPump $deadline;Start-ProtocolPump $stderrPump $deadline
         # S2: continuous bounded byte pumps drain both redirected streams before READY.
-        while($stdoutPump.Frames.Count -lt 1 -and -not $stdoutPump.Complete -and (Get-Remaining $deadline) -gt 0){Update-ProtocolPump $stdoutPump $deadline;Update-ProtocolPump $stderrPump $deadline;Start-Sleep -Milliseconds 5};if($stdoutPump.Failure){throw $stdoutPump.Failure};if($stdoutPump.Frames.Count -ne 1){throw 'worker protocol ready deadline'};$firstWorkerFrame=$stdoutPump.Frames[0];try{$ready=Read-Frame $firstWorkerFrame 'READY' $nonce;Test-ExactProperties $ready @('mutexKey','project') 'ready';if($ready.mutexKey -isnot [string] -or $ready.mutexKey -notmatch '^[0-9A-F]{64}$' -or $ready.project -isnot [string] -or [string]::IsNullOrWhiteSpace($ready.project)){throw 'invalid ready contract'};$hadReady=$true}catch{throw "$($_.Exception.Message) worker=$($stderrPump.Text.ToString())"};$project=[string]$ready.project;$readyProject=$project
+        while($stdoutPump.Frames.Count -lt 1 -and -not $stdoutPump.Complete -and (Get-Remaining $deadline) -gt 0){Update-ProtocolPump $stdoutPump $deadline;Update-ProtocolPump $stderrPump $deadline;Read-NewCleanupFrames $stdoutPump $nonce ([ref]$cleanupCount) ([ref]$cleanupObserved) ([ref]$nextFrame) $false;Start-Sleep -Milliseconds 5};if($stdoutPump.Failure){throw $stdoutPump.Failure};if($stdoutPump.Frames.Count -ne 1){throw 'worker protocol ready deadline'};$firstWorkerFrame=$stdoutPump.Frames[0];try{$ready=Read-Frame $firstWorkerFrame 'READY' $nonce;Test-ExactProperties $ready @('mutexKey','project') 'ready';if($ready.mutexKey -isnot [string] -or $ready.mutexKey -notmatch '^[0-9A-F]{64}$' -or $ready.project -isnot [string] -or [string]::IsNullOrWhiteSpace($ready.project)){throw 'invalid ready contract'};$hadReady=$true}catch{throw "$($_.Exception.Message) worker=$($stderrPump.Text.ToString())"};$project=[string]$ready.project;$readyProject=$project
         if($WorkerFault -eq 'global-denied'){throw 'mutex global denied'};if($WorkerFault -eq 'global-abandoned'){throw 'mutex abandoned'}
         $created=$false;$mutex=New-Object Threading.Mutex($false,"Global\GodotTestRunner_v1_$($ready.mutexKey)",[ref]$created);try{if(-not $mutex.WaitOne(0)){throw 'mutex contention'};$mutexHeld=$true}catch [Threading.AbandonedMutexException]{throw 'mutex abandoned'}
         # S3: nonce-authenticated GO only after the one Global mutex is held.
@@ -380,18 +396,12 @@ function Invoke-Supervisor {
         # failure, even if the worker has not yet emitted FINAL.
         while(-not $worker.HasExited -and (Get-Remaining $deadline) -gt 0){
             Update-ProtocolPump $stdoutPump $deadline;Update-ProtocolPump $stderrPump $deadline
+            Read-NewCleanupFrames $stdoutPump $nonce ([ref]$cleanupCount) ([ref]$cleanupObserved) ([ref]$nextFrame) $true
             if($stdoutPump.Failure){throw $stdoutPump.Failure};if($stderrPump.Failure){throw $stderrPump.Failure}
-            while($stdoutPump.Frames.Count -gt $nextFrame){
-                $raw=$stdoutPump.Frames[$nextFrame]
-                if(-not $cleanupObserved -and $raw -like 'GTR1 CLEANUP_BEGIN *'){
-                    $cleanupFrame=Read-Frame $raw 'CLEANUP_BEGIN' $nonce;Test-ExactProperties $cleanupFrame @('count') 'cleanup';$cleanupCount=Test-Integral $cleanupFrame.count 'cleanup count' 1 ([UInt64]::MaxValue);$cleanupObserved=$true;$nextFrame++;continue
-                }
-                break
-            }
             Start-Sleep -Milliseconds 5
         }
         if(-not $worker.HasExited){$emergencyUsed=$true;$workerExitConfirmed=Stop-StartedWorker $worker ($WorkerFault -eq 'worker-kill-failure');if(-not $workerExitConfirmed){$category='CleanupFailure';throw 'unconfirmed worker termination'};if($cleanupObserved){$category='CleanupFailure';throw 'cleanup deadline worker'};throw 'deadline worker'};$workerExitConfirmed=$true
-        while((-not $stdoutPump.Complete -or -not $stderrPump.Complete) -and (Get-Remaining $deadline) -gt 0){Update-ProtocolPump $stdoutPump $deadline;Update-ProtocolPump $stderrPump $deadline;Start-Sleep -Milliseconds 5};if($stdoutPump.Failure){throw $stdoutPump.Failure};if($stderrPump.Failure){throw $stderrPump.Failure};if(-not $stdoutPump.Complete -or -not $stderrPump.Complete){if($cleanupObserved){$category='CleanupFailure';throw 'cleanup worker protocol pipe deadline'};throw 'worker protocol pipe deadline'}
+        while((-not $stdoutPump.Complete -or -not $stderrPump.Complete) -and (Get-Remaining $deadline) -gt 0){Update-ProtocolPump $stdoutPump $deadline;Update-ProtocolPump $stderrPump $deadline;Read-NewCleanupFrames $stdoutPump $nonce ([ref]$cleanupCount) ([ref]$cleanupObserved) ([ref]$nextFrame) $true;Start-Sleep -Milliseconds 5};Read-NewCleanupFrames $stdoutPump $nonce ([ref]$cleanupCount) ([ref]$cleanupObserved) ([ref]$nextFrame) $true;if($stdoutPump.Failure){throw $stdoutPump.Failure};if($stderrPump.Failure){throw $stderrPump.Failure};if(-not $stdoutPump.Complete -or -not $stderrPump.Complete){if($cleanupObserved){$category='CleanupFailure';throw 'cleanup worker protocol pipe deadline'};throw 'worker protocol pipe deadline'}
         # S6: READY [CLEANUP_BEGIN] FINAL is the complete immutable protocol.
         if($stdoutPump.Frames.Count -ne ($nextFrame+1)){throw 'extra or missing worker protocol frame'};$final=Read-Frame $stdoutPump.Frames[$nextFrame] 'FINAL' $nonce;[Console]::Error.Write($stderrPump.Text.ToString())
         Test-ExactProperties $final @('status','category','processExitCode','project','logPath','cleanedPids','elapsedSeconds') 'final'
