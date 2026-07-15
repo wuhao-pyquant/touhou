@@ -309,7 +309,7 @@ func _load_phases(root: Dictionary, legacy_content: Object, game_database: Objec
 	if seen_legacy_bindings.size() != EXPECTED_PHASE_COUNT:
 		_load_errors.append("all 40 M1 phases must map one-to-one onto legacy encounter cards")
 
-func _build_pattern_definition(source: Dictionary, game_database: Object):
+func _build_pattern_definition(source: Dictionary, game_database: Object) -> PatternDefinition:
 	var normal: Dictionary = _dictionary_copy(source.get("normal_structure", {}))
 	var source_emitters := _dictionary_array_copy(source.get("emitters", []))
 	var bullet_family_metadata := {}

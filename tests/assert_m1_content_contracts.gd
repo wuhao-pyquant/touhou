@@ -293,7 +293,7 @@ func _assert_pattern_contract(phase) -> void:
 	var pattern_round_trip := PatternDefinition.new(pattern.to_dict())
 	_check(pattern_round_trip.is_valid(), "Phase %s PatternDefinition did not round-trip: %s" % [phase.id, pattern_round_trip.validation_errors()])
 
-func _assert_phase_seed_contract(catalog) -> void:
+func _assert_phase_seed_contract(catalog: M1ContentCatalog) -> void:
 	var first_id := String(EXPECTED_PHASE_IDS[0])
 	var second_id := String(EXPECTED_PHASE_IDS[1])
 	var seed_a := catalog.phase_local_seed(0x12345678, first_id)
