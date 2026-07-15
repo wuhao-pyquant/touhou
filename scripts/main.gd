@@ -1348,10 +1348,14 @@ func _validate_stage2_bullet_observability_snapshot(stage_state: Dictionary, bul
 					return false
 		if stage_source_count not in [0, stage_source_fields.size()] or phase_source_count not in [0, phase_source_fields.size()]:
 			return false
+		var has_stage_source := stage_source_count == stage_source_fields.size()
+		var has_phase_source := phase_source_count == phase_source_fields.size()
 		if bullet_type in ["player", "bomb"]:
-			if bullet.has("stage2_reflection_count") or stage_source_count > 0 or phase_source_count > 0:
+			if bullet.has("stage2_reflection_count") or has_stage_source or has_phase_source:
 				return false
 		else:
+			if has_stage_source == has_phase_source:
+				return false
 			if typeof(bullet.get("stage2_reflection_count")) != TYPE_INT or int(bullet.stage2_reflection_count) < 0:
 				return false
 	return true
@@ -2118,11 +2122,24 @@ func _consume_stage2_controller_output(output: Dictionary) -> void:
 		movement_records.append(movement.duplicate(true))
 		stage_controller["stage2_boss_movement_records"] = movement_records
 		_apply_stage2_boss_movement(movement)
+	var validated_bullet_specs: Array[Dictionary] = []
+	var active_definition: Dictionary = stage2_encounter_controller.active_phase_definition()
+	var active_phase_id := String(active_definition.get("id", ""))
+	var active_owner_id := String(active_definition.get("owner_id", ""))
 	for bullet_spec_value in output.get("bullet_specs", []):
-		var active_definition: Dictionary = stage2_encounter_controller.active_phase_definition()
-		_spawn_enemy_bullet_spec(bullet_spec_value, {
-			"stage2_source_phase_id": String(active_definition.get("id", "")),
-			"stage2_source_owner_id": String(active_definition.get("owner_id", "")),
+		if not (bullet_spec_value is Dictionary):
+			_stage2_fail_closed("Stage 2 bullet producer emitted a malformed spec")
+			return
+		var bullet_spec: Dictionary = bullet_spec_value
+		var producer_phase_id := String(bullet_spec.get("phase_id", ""))
+		if producer_phase_id == "" or producer_phase_id != active_phase_id or active_owner_id == "":
+			_stage2_fail_closed("Stage 2 bullet producer phase does not match active phase ownership")
+			return
+		validated_bullet_specs.append(bullet_spec)
+	for validated_spec in validated_bullet_specs:
+		_spawn_enemy_bullet_spec(validated_spec, {
+			"stage2_source_phase_id": String(validated_spec.phase_id),
+			"stage2_source_owner_id": active_owner_id,
 		})
 	for resolution_value in output.get("phase_resolutions", []):
 		var resolution_records: Array = stage_controller.get("stage2_phase_resolutions", [])

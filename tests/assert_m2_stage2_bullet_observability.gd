@@ -6,6 +6,7 @@ const GameplayInputBuffer := preload("res://scripts/runtime/gameplay_input_buffe
 
 const MIDBOSS_PHASE_ID := "stage_2_midboss_nonspell_1"
 const BOSS_PHASE_ID := "stage_2_boss_nonspell_1"
+const STAGE_SOURCE_FIELDS := ["stage2_source_event_id", "stage2_source_spawn_id", "stage2_source_enemy_id", "stage2_primitive", "stage2_routing"]
 const LEGACY_SNAPSHOT_KEYS := [
 	"version", "tick", "gameplay_seed", "gameplay_difficulty", "clock", "rng", "input", "manager",
 	"current_stage_local", "stage_timer", "stage_controller", "player", "boss_alive", "boss", "bullets",
@@ -68,7 +69,7 @@ func _retire_only_bullet(main: Node, label: String) -> void:
 	_check(main.bullet_world.retire_slot(int(entry.slot)), "%s active bullet could not be retired." % label)
 	main._sync_bullet_world_compatibility_views()
 
-func _phase_bullet_spec() -> Dictionary:
+func _phase_bullet_spec(phase_id: String) -> Dictionary:
 	return {
 		"position": Vector2(360.0, 160.0),
 		"velocity": Vector2(0.0, 2.0),
@@ -78,6 +79,7 @@ func _phase_bullet_spec() -> Dictionary:
 		"lifetime": 360.0,
 		"motion": {"kind": "reflect", "bounce_count": 1},
 		"primitive": "rebound_bead",
+		"phase_id": phase_id,
 	}
 
 func _install_practice_controller(main: Node, phase_id: String) -> Dictionary:
@@ -154,7 +156,7 @@ func _assert_uid_sources_failure_and_reflection() -> void:
 	_retire_only_bullet(main, "authored stage-enemy source")
 
 	var midboss_definition := _install_practice_controller(main, MIDBOSS_PHASE_ID)
-	main._consume_stage2_controller_output({"bullet_specs": [_phase_bullet_spec()]})
+	main._consume_stage2_controller_output({"bullet_specs": [_phase_bullet_spec(MIDBOSS_PHASE_ID)]})
 	var midboss_entry := _only_active_entry(main, "midboss phase source")
 	var midboss_bullet: Dictionary = midboss_entry.bullet
 	observed_uids.append(int(midboss_bullet.stage2_bullet_uid))
@@ -165,7 +167,7 @@ func _assert_uid_sources_failure_and_reflection() -> void:
 	_retire_only_bullet(main, "midboss phase source")
 
 	var boss_definition := _install_practice_controller(main, BOSS_PHASE_ID)
-	main._consume_stage2_controller_output({"bullet_specs": [_phase_bullet_spec()]})
+	main._consume_stage2_controller_output({"bullet_specs": [_phase_bullet_spec(BOSS_PHASE_ID)]})
 	var boss_entry := _only_active_entry(main, "boss phase source")
 	var boss_bullet: Dictionary = boss_entry.bullet
 	observed_uids.append(int(boss_bullet.stage2_bullet_uid))
@@ -177,6 +179,17 @@ func _assert_uid_sources_failure_and_reflection() -> void:
 	_check_equal(int(main.stage_controller.stage2_next_bullet_uid), 6, "Stage 2 UID continuation did not point past all successful allocations.")
 	_free_main(main)
 
+func _assert_controller_producer_mismatch_fails_closed() -> void:
+	var main: Node = _new_main(2, 22102, 2)
+	_install_practice_controller(main, MIDBOSS_PHASE_ID)
+	var counter_before := int(main.stage_controller.stage2_next_bullet_uid)
+	main._consume_stage2_controller_output({"bullet_specs": [_phase_bullet_spec(MIDBOSS_PHASE_ID), _phase_bullet_spec(BOSS_PHASE_ID)]})
+	_check_equal(main.bullet_world.active_order(), [], "Mismatched producer phase partially spawned its controller bullet batch.")
+	_check_equal(int(main.stage_controller.stage2_next_bullet_uid), counter_before, "Mismatched producer phase consumed a UID.")
+	_check_equal(String(main.game_manager_ref.state), "game_over", "Mismatched producer phase did not fail closed.")
+	_check(not String(main.stage_controller.get("stage2_hard_error", "")).is_empty(), "Mismatched producer phase did not record a hard error.")
+	_free_main(main)
+
 func _stage_source_fixture() -> Dictionary:
 	return {
 		"stage2_source_event_id": "s2_snapshot_event",
@@ -185,6 +198,17 @@ func _stage_source_fixture() -> Dictionary:
 		"stage2_primitive": "rebound_bead",
 		"stage2_routing": "snapshot_outer_bar_once",
 	}
+
+func _assert_snapshot_rejected_atomically(main: Node, malformed: Dictionary, label: String) -> void:
+	var baseline_hash: String = main.simulation_state_hash()
+	_check(not main.validate_simulation_state(malformed), "%s was accepted by aggregate validation." % label)
+	_check_equal(main.simulation_state_hash(), baseline_hash, "%s validation mutated live Main." % label)
+	_check(not main.restore_simulation_state(malformed), "%s was accepted by aggregate restore." % label)
+	_check_equal(main.simulation_state_hash(), baseline_hash, "%s restore partially mutated live Main." % label)
+
+func _erase_stage_source_tuple(bullet: Dictionary) -> void:
+	for field in STAGE_SOURCE_FIELDS:
+		bullet.erase(field)
 
 func _assert_snapshot_continuation_and_atomic_rejection() -> void:
 	var main: Node = _new_main(2, 22202, 4)
@@ -208,16 +232,43 @@ func _assert_snapshot_continuation_and_atomic_rejection() -> void:
 	_check_equal(int(restored.bullet_pool[restored.bullet_world.active_order()[-1]].stage2_bullet_uid), 2, "Restored continuation assigned a divergent next UID.")
 	_check_equal(restored.capture_simulation_state(), main.capture_simulation_state(), "Restored continuation diverged from the source aggregate state.")
 
-	var baseline_hash: String = main.simulation_state_hash()
-	var malformed_zero: Dictionary = main.capture_simulation_state()
-	malformed_zero.stage_controller.stage2_next_bullet_uid = 0
-	_check(not main.validate_simulation_state(malformed_zero), "Aggregate validation accepted a non-positive Stage 2 UID counter.")
-	_check(not main.restore_simulation_state(malformed_zero), "Aggregate restore accepted a non-positive Stage 2 UID counter.")
-	_check_equal(main.simulation_state_hash(), baseline_hash, "Rejected non-positive UID counter partially mutated Main.")
-	var malformed_type: Dictionary = main.capture_simulation_state()
-	malformed_type.stage_controller.stage2_next_bullet_uid = "3"
-	_check(not main.restore_simulation_state(malformed_type), "Aggregate restore accepted a non-integer Stage 2 UID counter.")
-	_check_equal(main.simulation_state_hash(), baseline_hash, "Rejected non-integer UID counter partially mutated Main.")
+	var valid_continuation: Dictionary = main.capture_simulation_state()
+	_check(main.validate_simulation_state(valid_continuation), "Continuation fixture was not valid before malformed snapshot checks.")
+
+	var malformed_counter_zero: Dictionary = valid_continuation.duplicate(true)
+	malformed_counter_zero.stage_controller.stage2_next_bullet_uid = 0
+	_assert_snapshot_rejected_atomically(main, malformed_counter_zero, "Non-positive Stage 2 UID counter")
+	var malformed_counter_type: Dictionary = valid_continuation.duplicate(true)
+	malformed_counter_type.stage_controller.stage2_next_bullet_uid = "3"
+	_assert_snapshot_rejected_atomically(main, malformed_counter_type, "Non-integer Stage 2 UID counter")
+
+	var duplicate_uid: Dictionary = valid_continuation.duplicate(true)
+	duplicate_uid.bullets.active_bullets[1].state.stage2_bullet_uid = int(duplicate_uid.bullets.active_bullets[0].state.stage2_bullet_uid)
+	_assert_snapshot_rejected_atomically(main, duplicate_uid, "Duplicate active Stage 2 bullet UID")
+	var zero_uid: Dictionary = valid_continuation.duplicate(true)
+	zero_uid.bullets.active_bullets[0].state.stage2_bullet_uid = 0
+	_assert_snapshot_rejected_atomically(main, zero_uid, "Zero active Stage 2 bullet UID")
+	var out_of_range_uid: Dictionary = valid_continuation.duplicate(true)
+	out_of_range_uid.bullets.active_bullets[0].state.stage2_bullet_uid = int(out_of_range_uid.stage_controller.stage2_next_bullet_uid)
+	_assert_snapshot_rejected_atomically(main, out_of_range_uid, "Out-of-range active Stage 2 bullet UID")
+
+	var partial_stage_tuple: Dictionary = valid_continuation.duplicate(true)
+	partial_stage_tuple.bullets.active_bullets[0].state.erase("stage2_routing")
+	_assert_snapshot_rejected_atomically(main, partial_stage_tuple, "Partial authored-stage source tuple")
+	var missing_enemy_source: Dictionary = valid_continuation.duplicate(true)
+	_erase_stage_source_tuple(missing_enemy_source.bullets.active_bullets[0].state)
+	_assert_snapshot_rejected_atomically(main, missing_enemy_source, "Enemy bullet without a source tuple")
+	var partial_phase_tuple: Dictionary = valid_continuation.duplicate(true)
+	_erase_stage_source_tuple(partial_phase_tuple.bullets.active_bullets[0].state)
+	partial_phase_tuple.bullets.active_bullets[0].state["stage2_source_phase_id"] = MIDBOSS_PHASE_ID
+	_assert_snapshot_rejected_atomically(main, partial_phase_tuple, "Partial controller-phase source tuple")
+	var mixed_complete_tuples: Dictionary = valid_continuation.duplicate(true)
+	mixed_complete_tuples.bullets.active_bullets[0].state["stage2_source_phase_id"] = MIDBOSS_PHASE_ID
+	mixed_complete_tuples.bullets.active_bullets[0].state["stage2_source_owner_id"] = "abacus_tsukumogami"
+	_assert_snapshot_rejected_atomically(main, mixed_complete_tuples, "Enemy bullet with both complete source tuples")
+	var negative_reflection: Dictionary = valid_continuation.duplicate(true)
+	negative_reflection.bullets.active_bullets[0].state.stage2_reflection_count = -1
+	_assert_snapshot_rejected_atomically(main, negative_reflection, "Negative Stage 2 reflection count")
 	_free_main(restored)
 	_free_main(main)
 
@@ -243,6 +294,7 @@ func _assert_stage1_legacy_shape() -> void:
 
 func _run() -> void:
 	_assert_uid_sources_failure_and_reflection()
+	_assert_controller_producer_mismatch_fails_closed()
 	_assert_snapshot_continuation_and_atomic_rejection()
 	_assert_stage1_legacy_shape()
 	if failed:
