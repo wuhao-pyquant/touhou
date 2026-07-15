@@ -1,0 +1,50 @@
+{
+  "id": "M2-stage2-runtime-choreography",
+  "objective": "Translate only the already frozen Stage 2 Yokai Market design into one executable numeric choreography artifact at content/runtime/m2_stage2_choreography.json. This is content production, not a new project plan or redesign. Preserve the exact stage ID, three segments, 18 beat IDs/order, abacus_tsukumogami midboss, oni_market_leader boss, six exact M1 phase IDs/names/kinds/roles, and the approved Normal/Hard/high-score identities. Use schema_version 1, tick_rate 60, playfield 720x960, raw SHA-256 bindings to content/design/m1_stage_beats.json and content/design/m1_phase_cards.json, and stable machine IDs. Define every stage event with absolute authored tick, segment, event type, warning lead, enemy formation/spawns, movement, pattern primitive, explicit deterministic drop_item_ids, completion/deadline, and score-route telemetry hooks; include explicit midboss gate/resume, boss-front climax and final boss gate. Define all six phases with base HP, timeout/loop ticks, owner/encounter identity, Normal and Hard topology IDs, non-numeric Hard transformation, warning ticks, three-part boss movement, ordered four-event timeline, capture/failure hooks, score-route hooks, and numeric emitter parameters. The shared phase runtime schema is: phase.difficulties.normal/hard each has topology_id and emitters; each emitter has id, primitive, start_tick, interval_ticks, bursts_per_loop, shots_per_burst, anchor, family, color_rgba, radius, lifetime_ticks, speed, angle/routing parameters, warning, and motion. Restrict primitives to rebound_bead, grid_edge, lane_fan, rhythm_pulse, and delayed_seed. Hard must change lane/graph/axis/order/target routing, never only speed/count. All delayed turns/reflections must have at least 12 Normal and 8 Hard warning ticks, while authored phase warning remains at least 30/18. Keep peak budgets and safe-route widths explicit but do not claim final fun or performance. Do not edit M1 sources, runtime code, audio, readiness, or any other file; launch Godot zero times.",
+  "mode": "write",
+  "allowed_paths": [
+    "content/runtime/m2_stage2_choreography.json"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "project.godot",
+    "autoload/**",
+    "content/design/**",
+    "docs/**",
+    "scenes/**",
+    "scripts/**",
+    "tests/**",
+    "tools/**"
+  ],
+  "dependency_commit": "f6e1c809cc2155468c8e621361459fe809c8fe6a",
+  "acceptance_commands": [
+    "$c=Get-Content -Raw content/runtime/m2_stage2_choreography.json|ConvertFrom-Json; if($c.schema_version-ne1 -or $c.stage.stage_index-ne2 -or $c.stage.stage_id-ne'yokai_market' -or $c.stage.tick_rate-ne60 -or $c.stage.playfield.width-ne720 -or $c.stage.playfield.height-ne960){throw 'Stage 2 runtime header mismatch'}; if($c.stage.segments.Count-ne3 -or $c.stage.events.Count-ne18 -or $c.phases.Count-ne6){throw 'Stage 2 runtime counts mismatch'}; Write-Host 'M2_CHOREOGRAPHY_HEADER=pass'",
+    "$c=Get-Content -Raw content/runtime/m2_stage2_choreography.json|ConvertFrom-Json; $expected=@('stage_2_midboss_nonspell_1','stage_2_midboss_spell_1','stage_2_boss_nonspell_1','stage_2_boss_spell_1','stage_2_boss_spell_2','stage_2_boss_spell_3'); if(Compare-Object $expected @($c.phases.id)){throw 'Phase identity/order mismatch'}; foreach($p in $c.phases){if(-not $p.difficulties.normal.topology_id -or -not $p.difficulties.hard.topology_id -or $p.difficulties.normal.topology_id-eq$p.difficulties.hard.topology_id){throw \"Missing topology change $($p.id)\"}; if($p.warning_ticks.normal-lt30 -or $p.warning_ticks.hard-lt18 -or $p.boss_movement.Count-ne3 -or $p.timeline.Count-ne4){throw \"Incomplete phase $($p.id)\"}; foreach($d in @($p.difficulties.normal,$p.difficulties.hard)){foreach($e in $d.emitters){if($e.primitive-notin @('rebound_bead','grid_edge','lane_fan','rhythm_pulse','delayed_seed') -or $e.warning.lead_ticks-lt8){throw \"Invalid emitter $($e.id)\"}}}}; Write-Host 'M2_CHOREOGRAPHY_PHASES=pass'",
+    "$c=Get-Content -Raw content/runtime/m2_stage2_choreography.json|ConvertFrom-Json; $ids=@($c.stage.events.id); if((Compare-Object (@(1..18|ForEach-Object{'s2_b{0:d2}'-f$_})) $ids)){throw 'Beat identity/order mismatch'}; foreach($event in $c.stage.events){foreach($spawn in @($event.spawns)){if($null-eq$spawn.drop_item_ids){throw \"Missing deterministic drops $($event.id)\"}}}; if(@($c.stage.events|Where-Object event_type -eq 'midboss_gate').Count-ne1 -or @($c.stage.events|Where-Object event_type -eq 'boss_gate').Count-ne1){throw 'Encounter gates missing'}; Write-Host 'M2_CHOREOGRAPHY_EVENTS=pass'",
+    "git diff --check",
+    "if(@(Get-Process -ErrorAction SilentlyContinue|Where-Object ProcessName -Like 'Godot*').Count-ne0){throw 'Godot process exists during choreography production'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Report exact source hashes, schema version, 18 beat IDs, 6 phase IDs and the 2 midboss/4 boss split",
+    "Report Normal/Hard topology and numeric emitter realization for each phase, including warning and safe-route budgets",
+    "Report deterministic drops, score-route hooks, midboss resume and boss-front completion semantics",
+    "Report all commands, changed file, zero Godot launches and residual numeric tuning deferred to M2 playtest evidence",
+    "Confirm no plan, M1 source, runtime code, test, audio, readiness or project file changed"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "The authoritative creative sources are content/design/m1_stage_beats.json, content/design/m1_phase_cards.json, and docs/content/m1-design-freeze.md; read but never edit them.",
+    "This artifact is consumed later by content_runtime and core_simulation. Keep the shared schema exactly as stated; do not invent code APIs or modify Agent policy.",
+    "Stage 2 identity is abacus rebounds, booth lanes and kill-order topology. Hard changes the route graph. It must not become generic circles with higher speed or count.",
+    "Do not run Godot, tests outside the listed no-write structural checks, full benchmarks, or any subagent. Do not commit or merge."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}

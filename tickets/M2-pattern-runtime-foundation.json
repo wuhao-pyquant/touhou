@@ -1,0 +1,63 @@
+{
+  "id": "M2-pattern-runtime-foundation",
+  "objective": "Implement only the reusable deterministic runtime foundation needed by the Stage 2 golden vertical slice, without integrating main.gd or authoring Stage 2 content. Add scripts/runtime/danmaku_pattern_runtime.gd, scripts/runtime/stage_encounter_runtime.gd, and tests/assert_m2_pattern_runtime.gd. DanmakuPatternRuntime must accept the frozen schema_version 1 phase dictionary described in the ticket context, select only normal/hard, validate non-numeric topology difference and warnings, derive/use a phase-local deterministic stream without consuming shared gameplay RNG, and advance exact integer ticks. It must emit stable warning/event/boss-movement/bullet-spec records for rebound_bead, grid_edge, lane_fan, rhythm_pulse, and delayed_seed; commit player-aim only at explicit lock ticks; encode reflection/delay/curve behavior in bullet motion data rather than mutating BulletWorld; reject unsupported/malformed emitters; bound per-tick/per-loop output and expose overflow as a hard error. It must support reset, sequential advance, deterministic seek by reset-and-replay, capture/validate/restore snapshot, and a stable telemetry snapshot. StageEncounterRuntime must accept a generic 18-event stage spec, advance a stage tick, emit due events once, pause at explicit midboss/boss gates, resume only through a matching completion token, preserve encounter role/phase cursor, and support deterministic reset/seek/snapshot/restore. No wall clock, audio position, global randomness or frame delta may affect either class. The behavioral assertion must use in-memory fixtures, exercise both difficulties and all five primitives, prove same seed/input gives identical output and snapshot restore, prove a different seed or topology changes structure, prove direct seek equals sequential state, prove gate pause/resume and event uniqueness, and prove malformed/overflow/warning violations fail closed with a nonzero test exit. Avoid brittle exact projectile-count assertions beyond declared safety caps. Do not launch Godot during implementation; release lead will gate one guarded assertion after independent static review.",
+  "mode": "write",
+  "allowed_paths": [
+    "scripts/runtime/danmaku_pattern_runtime.gd",
+    "scripts/runtime/stage_encounter_runtime.gd",
+    "tests/assert_m2_pattern_runtime.gd"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "project.godot",
+    "autoload/**",
+    "content/**",
+    "docs/**",
+    "scenes/**",
+    "scripts/main.gd",
+    "scripts/content/**",
+    "scripts/data/**",
+    "scripts/replay/**",
+    "scripts/runtime/boss_state_machine.gd",
+    "scripts/runtime/bullet_world.gd",
+    "scripts/runtime/enemy_pattern_executor.gd",
+    "scripts/runtime/fixed_tick_clock.gd",
+    "scripts/runtime/gameplay_score_system.gd",
+    "scripts/runtime/item_reward_system.gd",
+    "scripts/ui/**",
+    "tests/assert_m0_*.gd",
+    "tests/assert_m1_*.gd",
+    "tests/assert_phase*.gd",
+    "tools/**"
+  ],
+  "dependency_commit": "f6e1c809cc2155468c8e621361459fe809c8fe6a",
+  "acceptance_commands": [
+    "git diff --check",
+    "$changed=@(git status --porcelain -uall|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $allowed=@('scripts/runtime/danmaku_pattern_runtime.gd','scripts/runtime/stage_encounter_runtime.gd','tests/assert_m2_pattern_runtime.gd'); $outside=@($changed|Where-Object{$_-notin$allowed}); if($outside.Count-ne0){throw \"Outside changes: $($outside-join',')\"}; Write-Host 'M2_PATTERN_SCOPE=pass'",
+    "if(@(Get-Process -ErrorAction SilentlyContinue|Where-Object ProcessName -Like 'Godot*').Count-ne0){throw 'Godot process exists during runtime implementation'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Report the public methods, validation contract, deterministic seed ownership, caps and error behavior of both runtime classes",
+    "Report how all five primitives map to stable warning/event/bullet specs without changing BulletWorld",
+    "Report seek and snapshot equivalence, gate pause/resume, difficulty topology distinction and malformed-input coverage encoded in the behavioral test",
+    "Report every changed file and static command, tests intentionally not run, Godot launch count zero and residual integration work",
+    "Confirm main.gd, BulletWorld, BossStateMachine, M1 contracts/content, replay, UI, audio, tools, readiness and project files were not changed"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "Shared phase schema_version is 1. A phase has id, deterministic_random_stream_id, loop_ticks, warning_ticks.normal/hard, boss_movement[3], timeline[4], and difficulties.normal/hard. Each difficulty has topology_id and emitters. Each emitter has id, primitive, start_tick, interval_ticks, bursts_per_loop, shots_per_burst, anchor, family, color_rgba, radius, lifetime_ticks, speed, warning.lead_ticks and primitive-specific angle/routing/motion fields.",
+    "The five permitted primitives are rebound_bead, grid_edge, lane_fan, rhythm_pulse and delayed_seed. The runtime may share low-level emit math but must preserve emitter IDs and topology in telemetry.",
+    "Output bullet specs must use position Vector2, velocity Vector2, radius, color, family_id, lifetime and motion keys so main integration can call the existing _spawn_enemy_bullet_spec seam later.",
+    "Use exact integer 60 Hz ticks. Player position may be supplied as deterministic input to advance/seek; do not read scene globals.",
+    "Do not run Godot or any import-producing command in this implementation Agent. Do not commit, merge, spawn subagents, or edit the frozen plan."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
