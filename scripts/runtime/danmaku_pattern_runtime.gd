@@ -16,6 +16,9 @@ const MAX_BULLETS_PER_LOOP := 4096
 const MAX_RECORDS_PER_TICK := 1024
 const MAX_LOOP_TICKS := 36000
 const MAX_SEEK_TICKS := 216000
+const MAX_REFLECTIONS := 8
+const MAX_CANONICAL_DEPTH := 32
+const MAX_CANONICAL_COLLECTION := 4096
 const PERMITTED_PRIMITIVES := [
 	"rebound_bead",
 	"grid_edge",
@@ -23,6 +26,45 @@ const PERMITTED_PRIMITIVES := [
 	"rhythm_pulse",
 	"delayed_seed",
 ]
+const PHASE_KEYS := [
+	"schema_version",
+	"id",
+	"deterministic_random_stream_id",
+	"loop_ticks",
+	"warning_ticks",
+	"boss_movement",
+	"timeline",
+	"difficulties",
+]
+const PROFILE_KEYS := ["topology_id", "emitters"]
+const EMITTER_KEYS := [
+	"id",
+	"primitive",
+	"start_tick",
+	"interval_ticks",
+	"bursts_per_loop",
+	"shots_per_burst",
+	"anchor",
+	"family",
+	"color_rgba",
+	"radius",
+	"lifetime_ticks",
+	"speed",
+	"warning",
+	"angle_degrees",
+	"burst_angle_step_degrees",
+	"random_angle_degrees",
+	"spread_degrees",
+	"aim_mode",
+	"aim_lock_ticks",
+	"reflection",
+	"routing",
+	"spacing",
+	"turn_rate",
+	"delay_ticks",
+]
+const WARNING_KEYS := ["lead_ticks"]
+const REFLECTION_KEYS := ["axes", "max_reflections", "bounds"]
 
 var _phase: Dictionary = {}
 var _profile: Dictionary = {}
@@ -61,6 +103,12 @@ func configure(phase: Dictionary, difficulty: String, run_seed: int) -> bool:
 		return false
 	_phase = phase.duplicate(true)
 	_profile = _phase.difficulties[_difficulty].duplicate(true)
+	if _phase_signature().is_empty():
+		_validation_errors.append("canonical phase signature generation failed")
+		_hard_error = "configuration rejected: canonical phase signature generation failed"
+		_phase = {}
+		_profile = {}
+		return false
 	_phase_seed = derive_phase_local_seed(_run_seed, String(_phase.deterministic_random_stream_id))
 	if _phase_seed == 0:
 		_validation_errors.append("phase-local seed derivation failed")
@@ -111,7 +159,7 @@ func advance(player_position: Vector2 = Vector2.ZERO) -> Dictionary:
 		return _failure_result(_hard_error)
 	var loop_ticks := int(_phase.loop_ticks)
 	var loop_tick := _tick % loop_ticks
-	var loop_index := _tick / loop_ticks
+	var loop_index: int = int(_tick / loop_ticks)
 	var output := {
 		"ok": true,
 		"tick": _tick,
@@ -246,7 +294,7 @@ func telemetry_snapshot() -> Dictionary:
 		"run_seed": _run_seed,
 		"phase_seed": _phase_seed,
 		"tick": _tick,
-		"loop_index": 0 if _phase.is_empty() else _tick / int(_phase.loop_ticks),
+		"loop_index": 0 if _phase.is_empty() else int(_tick / int(_phase.loop_ticks)),
 		"loop_tick": 0 if _phase.is_empty() else _tick % int(_phase.loop_ticks),
 		"rng_draw_count": int(_rng.draw_count),
 		"locked_angles": _locked_angles.duplicate(true),
@@ -281,16 +329,18 @@ static func derive_phase_local_seed(run_seed: int, stream_id: String) -> int:
 
 func _validate_phase(phase: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
+	_validate_dictionary_keys(phase, PHASE_KEYS, "phase", errors)
 	if typeof(phase.get("schema_version")) != TYPE_INT or int(phase.schema_version) != SCHEMA_VERSION:
 		errors.append("schema_version must be integer 1")
 	for key in ["id", "deterministic_random_stream_id"]:
-		if String(phase.get(key, "")).is_empty():
+		if typeof(phase.get(key)) != TYPE_STRING or String(phase.get(key, "")).is_empty():
 			errors.append("%s is required" % key)
 	if typeof(phase.get("loop_ticks")) != TYPE_INT or int(phase.get("loop_ticks", 0)) <= 0 or int(phase.get("loop_ticks", 0)) > MAX_LOOP_TICKS:
 		errors.append("loop_ticks must be within 1..%d" % MAX_LOOP_TICKS)
 	if not (phase.get("warning_ticks") is Dictionary):
 		errors.append("warning_ticks must be a Dictionary")
 	else:
+		_validate_dictionary_keys(phase.warning_ticks, ["normal", "hard"], "warning_ticks", errors)
 		_validate_warning_floor(phase.warning_ticks, "normal", NORMAL_WARNING_FLOOR, errors)
 		_validate_warning_floor(phase.warning_ticks, "hard", HARD_WARNING_FLOOR, errors)
 	_validate_ordered_records(phase.get("boss_movement"), "boss_movement", 3, true, int(phase.get("loop_ticks", 0)), errors)
@@ -299,6 +349,7 @@ func _validate_phase(phase: Dictionary) -> Array[String]:
 		errors.append("difficulties must be a Dictionary")
 		return errors
 	var profiles: Dictionary = phase.difficulties
+	_validate_dictionary_keys(profiles, ["normal", "hard"], "difficulties", errors)
 	for difficulty in ["normal", "hard"]:
 		if not (profiles.get(difficulty) is Dictionary):
 			errors.append("difficulties.%s must be a Dictionary" % difficulty)
@@ -313,6 +364,8 @@ func _validate_phase(phase: Dictionary) -> Array[String]:
 			errors.append("topology_id must describe a non-numeric structural topology")
 		if _topology_shape_signature(profiles.normal) == _topology_shape_signature(profiles.hard):
 			errors.append("normal and hard emitters must differ structurally, not only numerically")
+	if not _is_canonical_value(phase):
+		errors.append("phase contains a key type or Variant outside the canonical schema value set")
 	return errors
 
 func _validate_warning_floor(values: Dictionary, difficulty: String, floor_ticks: int, errors: Array[String]) -> void:
@@ -342,8 +395,9 @@ func _validate_ordered_records(value: Variant, label: String, expected_size: int
 			errors.append("%s[%d].position must be a finite Vector2 value" % [label, index])
 
 func _validate_profile(profile: Dictionary, difficulty: String, phase: Dictionary, errors: Array[String]) -> void:
+	_validate_dictionary_keys(profile, PROFILE_KEYS, "difficulties.%s" % difficulty, errors)
 	var topology_id := String(profile.get("topology_id", ""))
-	if topology_id.is_empty() or _is_numeric_identifier(topology_id):
+	if typeof(profile.get("topology_id")) != TYPE_STRING or topology_id.is_empty() or _is_numeric_identifier(topology_id):
 		errors.append("difficulties.%s.topology_id must be a non-numeric identifier" % difficulty)
 	if not (profile.get("emitters") is Array):
 		errors.append("difficulties.%s.emitters must be an Array" % difficulty)
@@ -397,11 +451,12 @@ func _validate_profile(profile: Dictionary, difficulty: String, phase: Dictionar
 
 func _validate_emitter(emitter: Dictionary, difficulty: String, index: int, loop_ticks: int, warning_floor: int, errors: Array[String]) -> void:
 	var label := "difficulties.%s.emitters[%d]" % [difficulty, index]
+	_validate_dictionary_keys(emitter, EMITTER_KEYS, label, errors)
 	for key in ["id", "family"]:
-		if String(emitter.get(key, "")).is_empty():
+		if typeof(emitter.get(key)) != TYPE_STRING or String(emitter.get(key, "")).is_empty():
 			errors.append("%s.%s is required" % [label, key])
 	var primitive := String(emitter.get("primitive", ""))
-	if primitive not in PERMITTED_PRIMITIVES:
+	if typeof(emitter.get("primitive")) != TYPE_STRING or primitive not in PERMITTED_PRIMITIVES:
 		errors.append("%s.primitive is unsupported" % label)
 	for key in ["start_tick", "interval_ticks", "bursts_per_loop", "shots_per_burst", "lifetime_ticks"]:
 		if typeof(emitter.get(key)) != TYPE_INT:
@@ -421,10 +476,29 @@ func _validate_emitter(emitter: Dictionary, difficulty: String, index: int, loop
 		errors.append("%s.speed must be non-negative" % label)
 	if not (emitter.get("warning") is Dictionary) or typeof(emitter.warning.get("lead_ticks")) != TYPE_INT:
 		errors.append("%s.warning.lead_ticks must be an integer" % label)
-	elif int(emitter.warning.lead_ticks) < warning_floor or int(emitter.warning.lead_ticks) > loop_ticks:
-		errors.append("%s.warning.lead_ticks violates the difficulty warning contract" % label)
+	else:
+		_validate_dictionary_keys(emitter.warning, WARNING_KEYS, "%s.warning" % label, errors)
+		if int(emitter.warning.lead_ticks) < warning_floor or int(emitter.warning.lead_ticks) > loop_ticks:
+			errors.append("%s.warning.lead_ticks violates the difficulty warning contract" % label)
+	for optional_angle_key in ["burst_angle_step_degrees", "random_angle_degrees"]:
+		if emitter.has(optional_angle_key) and not _is_finite_number(emitter[optional_angle_key]):
+			errors.append("%s.%s must be finite numeric data" % [label, optional_angle_key])
+	if emitter.has("spread_degrees") and (not _is_finite_number(emitter.spread_degrees) or float(emitter.spread_degrees) < 0.0):
+		errors.append("%s.spread_degrees must be finite and non-negative" % label)
+	if emitter.has("aim_lock_ticks"):
+		if not (emitter.aim_lock_ticks is Array):
+			errors.append("%s.aim_lock_ticks must be an Array" % label)
+		else:
+			var seen_lock_ticks := {}
+			for lock_tick_value in emitter.aim_lock_ticks:
+				if typeof(lock_tick_value) != TYPE_INT or seen_lock_ticks.has(lock_tick_value):
+					errors.append("%s.aim_lock_ticks must contain unique integers" % label)
+					break
+				seen_lock_ticks[lock_tick_value] = true
 	var aim_mode := String(emitter.get("aim_mode", "fixed"))
-	if aim_mode not in ["fixed", "player_locked"]:
+	if emitter.has("aim_mode") and typeof(emitter.aim_mode) != TYPE_STRING:
+		errors.append("%s.aim_mode must be a String" % label)
+	elif aim_mode not in ["fixed", "player_locked"]:
 		errors.append("%s.aim_mode must be fixed or player_locked" % label)
 	if aim_mode == "player_locked":
 		var lock_ticks := _aim_lock_ticks(emitter)
@@ -447,9 +521,12 @@ func _validate_emitter(emitter: Dictionary, difficulty: String, index: int, loop
 			if not (emitter.get("reflection") is Dictionary):
 				errors.append("%s.reflection must encode rebound behavior" % label)
 			else:
+				_validate_dictionary_keys(emitter.reflection, REFLECTION_KEYS, "%s.reflection" % label, errors)
 				var axes := String(emitter.reflection.get("axes", ""))
-				if axes not in ["x", "y", "xy"] or typeof(emitter.reflection.get("max_reflections")) != TYPE_INT or int(emitter.reflection.max_reflections) < 1:
+				if axes not in ["x", "y", "xy"] or typeof(emitter.reflection.get("max_reflections")) != TYPE_INT or int(emitter.reflection.max_reflections) < 1 or int(emitter.reflection.max_reflections) > MAX_REFLECTIONS:
 					errors.append("%s.reflection is malformed" % label)
+				if emitter.reflection.has("bounds") and not _is_valid_rect2(emitter.reflection.bounds):
+					errors.append("%s.reflection.bounds must be a finite positive Rect2" % label)
 		"grid_edge":
 			if String(emitter.get("routing", "")) not in ["down", "up", "left", "right"] or not _is_positive_number(emitter.get("spacing")):
 				errors.append("%s grid routing/spacing is malformed" % label)
@@ -460,7 +537,13 @@ func _validate_emitter(emitter: Dictionary, difficulty: String, index: int, loop
 			if not _is_finite_number(emitter.get("turn_rate")):
 				errors.append("%s.turn_rate is required for curve motion" % label)
 		"delayed_seed":
-			if typeof(emitter.get("delay_ticks")) != TYPE_INT or int(emitter.get("delay_ticks", 0)) <= 0 or not _is_finite_number(emitter.get("turn_rate", 0.0)):
+			if (
+				typeof(emitter.get("delay_ticks")) != TYPE_INT
+				or int(emitter.get("delay_ticks", 0)) <= 0
+				or int(emitter.get("delay_ticks", 0)) >= int(emitter.get("lifetime_ticks", 0))
+				or not _is_positive_number(emitter.get("speed"))
+				or not _is_finite_number(emitter.get("turn_rate"))
+			):
 				errors.append("%s delay/curve motion is malformed" % label)
 
 func _emitter_schedule_shape_is_valid(emitter: Dictionary, loop_ticks: int) -> bool:
@@ -710,8 +793,7 @@ func _topology_shape_signature(profile: Dictionary) -> String:
 			var reflection_axes := ""
 			if emitter.get("reflection") is Dictionary:
 				reflection_axes = String(emitter.reflection.get("axes", ""))
-			parts.append("%s:%s:%s:%s:%s" % [
-				String(emitter.get("id", "")),
+			parts.append("primitive=%s:routing=%s:aim=%s:axes=%s" % [
 				String(emitter.get("primitive", "")),
 				String(emitter.get("routing", "")),
 				String(emitter.get("aim_mode", "fixed")),
@@ -722,12 +804,113 @@ func _topology_shape_signature(profile: Dictionary) -> String:
 func _phase_signature() -> String:
 	if _phase.is_empty():
 		return ""
+	return _canonical_digest("danmaku-phase-schema-v1", _phase)
+
+func _canonical_digest(contract: String, value: Variant) -> String:
+	var encoded := _canonical_encode(value)
+	if encoded.is_empty():
+		return ""
 	var context := HashingContext.new()
 	if context.start(HashingContext.HASH_SHA256) != OK:
 		return ""
-	if context.update(var_to_bytes(_phase)) != OK:
+	if context.update((contract + "|" + encoded).to_utf8_buffer()) != OK:
 		return ""
 	return context.finish().hex_encode()
+
+func _canonical_encode(value: Variant, depth: int = 0) -> String:
+	if depth > MAX_CANONICAL_DEPTH:
+		return ""
+	match typeof(value):
+		TYPE_NIL:
+			return "n"
+		TYPE_BOOL:
+			return "b1" if bool(value) else "b0"
+		TYPE_INT:
+			return "i%d" % int(value)
+		TYPE_FLOAT:
+			return "f" + var_to_bytes(float(value)).hex_encode()
+		TYPE_STRING:
+			return "s" + String(value).to_utf8_buffer().hex_encode()
+		TYPE_VECTOR2:
+			return "v2" + var_to_bytes(value).hex_encode()
+		TYPE_COLOR:
+			return "c" + var_to_bytes(value).hex_encode()
+		TYPE_RECT2:
+			return "r2" + var_to_bytes(value).hex_encode()
+		TYPE_ARRAY:
+			if value.size() > MAX_CANONICAL_COLLECTION:
+				return ""
+			var array_parts := PackedStringArray()
+			for entry in value:
+				var encoded_entry := _canonical_encode(entry, depth + 1)
+				if encoded_entry.is_empty():
+					return ""
+				array_parts.append(encoded_entry)
+			return "a%d[%s]" % [value.size(), ";".join(array_parts)]
+		TYPE_DICTIONARY:
+			if value.size() > MAX_CANONICAL_COLLECTION:
+				return ""
+			var sorted_keys := PackedStringArray()
+			for key in value.keys():
+				if typeof(key) != TYPE_STRING:
+					return ""
+				sorted_keys.append(String(key))
+			sorted_keys.sort()
+			var dictionary_parts := PackedStringArray()
+			for key in sorted_keys:
+				var encoded_value := _canonical_encode(value[key], depth + 1)
+				if encoded_value.is_empty():
+					return ""
+				dictionary_parts.append(String(key).to_utf8_buffer().hex_encode() + "=" + encoded_value)
+			return "d%d{%s}" % [sorted_keys.size(), ";".join(dictionary_parts)]
+	return ""
+
+func _is_canonical_value(value: Variant, depth: int = 0) -> bool:
+	if depth > MAX_CANONICAL_DEPTH:
+		return false
+	match typeof(value):
+		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_STRING:
+			return true
+		TYPE_FLOAT:
+			return _is_finite_number(value)
+		TYPE_VECTOR2:
+			return _is_vector2_value(value)
+		TYPE_COLOR:
+			return _is_color_value(value)
+		TYPE_RECT2:
+			return _is_valid_rect2(value)
+		TYPE_ARRAY:
+			if value.size() > MAX_CANONICAL_COLLECTION:
+				return false
+			for entry in value:
+				if not _is_canonical_value(entry, depth + 1):
+					return false
+			return true
+		TYPE_DICTIONARY:
+			if value.size() > MAX_CANONICAL_COLLECTION:
+				return false
+			for key in value.keys():
+				if typeof(key) != TYPE_STRING or not _is_canonical_value(value[key], depth + 1):
+					return false
+			return true
+	return false
+
+func _validate_dictionary_keys(values: Dictionary, allowed_keys: Array, label: String, errors: Array[String]) -> void:
+	for key in values.keys():
+		if typeof(key) != TYPE_STRING or String(key) not in allowed_keys:
+			errors.append("%s contains unsupported key %s" % [label, String(key)])
+
+func _is_valid_rect2(value: Variant) -> bool:
+	if not (value is Rect2):
+		return false
+	return (
+		_is_finite_number(value.position.x)
+		and _is_finite_number(value.position.y)
+		and _is_finite_number(value.size.x)
+		and _is_finite_number(value.size.y)
+		and value.size.x > 0.0
+		and value.size.y > 0.0
+	)
 
 func _failure_result(message: String) -> Dictionary:
 	return {"ok": false, "tick": _tick, "error": message}
@@ -773,7 +956,10 @@ func _as_vector2(value: Variant) -> Vector2:
 
 func _is_color_value(value: Variant) -> bool:
 	if value is Color:
-		return _is_finite_number(value.r) and _is_finite_number(value.g) and _is_finite_number(value.b) and _is_finite_number(value.a)
+		for channel in [value.r, value.g, value.b, value.a]:
+			if not _is_finite_number(channel) or float(channel) < 0.0 or float(channel) > 1.0:
+				return false
+		return true
 	if value is Array and value.size() == 4:
 		for channel in value:
 			if not _is_finite_number(channel) or float(channel) < 0.0 or float(channel) > 1.0:
