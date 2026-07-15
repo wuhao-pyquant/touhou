@@ -1,0 +1,60 @@
+{
+  "id": "M1-content-evidence-tooling",
+  "objective": "Implement the remaining frozen M1 developer-tooling slice without changing gameplay, content, or public runtime interfaces. Create one standard-library Python CLI under tools/content plus focused Python tests. The CLI must provide four bounded capabilities for later M2-M5 work: (1) a phase sandbox command that selects one of the frozen 40 phase IDs, normal or hard, a run seed, and a frame/window seek, then emits a deterministic authored-schedule preview containing the phase-local seed, warnings, ordered events, emitter schedules, movement and topology; when no runtime trace is supplied it must state evidence_kind=authored_schedule_preview and runtime_evidence=false and must never fabricate projectile positions or claim playability; (2) a versioned JSONL runtime-trace contract and deterministic time-jump reader that verifies phase, difficulty, seed, content hash, 60 Hz tick order, unique bullet IDs and 720x960 playfield bounds, and proves a direct seek returns the same normalized frame state as a sequential scan; (3) a trace analyzer that generates stable JSON telemetry plus a deterministic SVG heatmap from real or explicitly labeled synthetic trace samples, including active-bullet curve, peak active bullets, out-of-bounds counts, occupancy grid, frame-time p50/p95/p99 and the selected time window; it must reject malformed, mismatched, duplicate-frame, duplicate-bullet, non-finite, out-of-order and out-of-range inputs with nonzero exit; and (4) a fingerprint command that recomputes the exact runtime canonical fingerprint order grammar, role-qualified emitter composition, ordered events, movement graph, Normal topology, Hard transformation, warning contract for all 40 frozen cards, rejects drift or duplicates, and reports the exact 26 spell / 14 nonspell split. Keep outputs deterministic and machine-readable with stable schema versions. Use only Python standard library, clean temporary artifacts, and launch Godot zero times. Do not edit frozen sources, runtime code, readiness, project settings, the Godot guard, or the project plan.",
+  "mode": "write",
+  "allowed_paths": [
+    "tools/content/**",
+    "tests/test_m1_content_tooling.py"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "project.godot",
+    "autoload/**",
+    "content/**",
+    "docs/**",
+    "scenes/**",
+    "scripts/**",
+    "tools/agents/**",
+    "tools/art/**",
+    "tools/audio/**",
+    "tools/testing/**",
+    "tests/*.gd",
+    "tests/test_phase7_*.py"
+  ],
+  "dependency_commit": "06f59a6da2e72f68aab3cdbf9676f72956751e88",
+  "acceptance_commands": [
+    "python -m unittest tests.test_m1_content_tooling",
+    "$raw=& python tools/content/m1_content_tool.py fingerprints --cards content/design/m1_phase_cards.json; if($LASTEXITCODE-ne0){exit $LASTEXITCODE}; $r=$raw|ConvertFrom-Json; if($r.schema_version-ne1 -or $r.phase_count-ne40 -or $r.spell_count-ne26 -or $r.nonspell_count-ne14 -or $r.unique_fingerprint_count-ne40 -or $r.drift_count-ne0){throw 'Fingerprint report contract failed'}; Write-Host 'M1_TOOL_FINGERPRINTS=pass'",
+    "$raw=& python tools/content/m1_content_tool.py sandbox --cards content/design/m1_phase_cards.json --phase-id stage_2_midboss_nonspell_1 --difficulty hard --run-seed 20260715 --seek-frame 324; if($LASTEXITCODE-ne0){exit $LASTEXITCODE}; $r=$raw|ConvertFrom-Json; if($r.evidence_kind-ne'authored_schedule_preview' -or $r.runtime_evidence-ne$false -or $r.phase_id-ne'stage_2_midboss_nonspell_1' -or $r.difficulty-ne'hard' -or $r.seek_frame-ne324 -or -not $r.phase_local_seed){throw 'Sandbox preview contract failed'}; Write-Host 'M1_TOOL_SANDBOX=pass'",
+    "git diff --check",
+    "if(@(Get-Process -ErrorAction SilentlyContinue | Where-Object ProcessName -Like 'Godot*').Count-ne0){throw 'Godot process exists during tooling implementation'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Report the CLI commands, schema versions, exact files, and zero external dependencies",
+    "Report how authored schedule previews are prevented from masquerading as runtime bullet evidence",
+    "Report the runtime trace header/frame contract, content-hash binding, deterministic seek equivalence, validation failures, and nonzero exit behavior",
+    "Report the heatmap grid/SVG rules, active-bullet curve, frame-time percentile method, bounds handling, and deterministic output proof",
+    "Report the exact canonical fingerprint serialization and 40 unique / 26 spell / 14 nonspell evidence",
+    "Report every focused test and acceptance command with exit code, zero Godot launches, cleaned temporary artifacts, and residual work reserved for M2 runtime trace production",
+    "Confirm scripts, scenes, content/design, docs/readiness, audio imports, Godot guard, Agent bridge/config, tickets, project settings, and frozen plan were not changed"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "This is tooling implementation inside M1, not a new design pass and not implementation of the 40 playable projectile patterns.",
+    "The authoritative read-only phase source is content/design/m1_phase_cards.json. Runtime canonical fingerprints include an E: emitter-composition field; the stored structure_fingerprint is the legacy source fingerprint and must be checked separately rather than mistaken for the runtime canonical value.",
+    "The phase-local seed algorithm must match scripts/content/boss_phase_definition.gd exactly and be side-effect-free. Do not import or execute Godot to obtain it.",
+    "A trace without source=runtime_capture must be labeled synthetic. Synthetic traces are valid only for tool tests and may never satisfy later M2 content evidence gates.",
+    "Heatmaps must use the internal 720x960 playfield and never silently clamp out-of-bounds bullets into an edge cell. Count them separately and fail validation when the trace contract declares strict bounds.",
+    "Time jump means deterministic inspection of an already recorded trace or authored schedule. It does not claim the current game can execute frozen M1 patterns before M2.",
+    "Run only the focused Python unit test and listed CLI smoke commands. Do not run the repository suite, performance benchmark, or Godot. Do not commit, merge, spawn subagents, or rewrite the project plan."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
