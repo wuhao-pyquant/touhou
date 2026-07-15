@@ -1,0 +1,49 @@
+{
+  "id": "M1-content-evidence-tooling-static-review",
+  "objective": "Perform one bounded read-only static and no-write CLI audit of candidate 993f32d172da2aaccb79050651e7c12d09b2b6d4 for the M1 content-evidence tooling ticket. Change zero files, launch Godot zero times, and do not rerun the unit test suite. Inspect tools/content/m1_content_tool.py and tests/test_m1_content_tooling.py against the frozen ticket and authoritative read-only sources content/design/m1_phase_cards.json plus scripts/content/boss_phase_definition.gd. Verify: Python standard-library-only imports; exact canonical runtime fingerprint serialization including E: emitters while separately validating the legacy stored fingerprint; exact side-effect-free phase-local seed parity with GDScript; raw content SHA-256 binding; phase/difficulty/seed/tick-rate/playfield/schema header checks; finite numeric and strict 720x960 bounds behavior; ordered unique frames and bullet IDs; meaningful direct-seek versus sequential-scan equality; source labeling that never promotes synthetic or authored-preview data to runtime evidence; authored preview contains no fabricated bullet positions; stable JSON and deterministic 12x16 SVG output; no edge clamping; correct active-count curve, peak, OOB accounting and nearest-rank p50/p95/p99; nonzero CLI failures for malformed/mismatched/out-of-range traces; no writes or temporary artifacts from the two allowed stdout-only smoke commands; and tests that behaviorally exercise the critical contracts rather than merely matching source text. Treat the implementation report as evidence, not proof. Return GATE: APPROVE only if no blocker remains; otherwise begin with GATE: REPAIR and list exact file/line defects plus the smallest repair boundary. Do not redesign M1 or request playable pattern output before M2.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    ".godot/**",
+    "tickets/**",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "content/**",
+    "docs/**",
+    "scenes/**",
+    "scripts/**",
+    "tests/**",
+    "tools/**"
+  ],
+  "dependency_commit": "993f32d172da2aaccb79050651e7c12d09b2b6d4",
+  "acceptance_commands": [
+    "python -B -c \"import ast,pathlib; [ast.parse(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('tools/content/m1_content_tool.py','tests/test_m1_content_tooling.py')]; print('PYTHON_AST=pass')\"",
+    "python -B tools/content/m1_content_tool.py fingerprints --cards content/design/m1_phase_cards.json",
+    "python -B tools/content/m1_content_tool.py sandbox --cards content/design/m1_phase_cards.json --phase-id stage_2_midboss_nonspell_1 --difficulty hard --run-seed 20260715 --seek-frame 324",
+    "git diff --check 06f59a6da2e72f68aab3cdbf9676f72956751e88..993f32d172da2aaccb79050651e7c12d09b2b6d4 -- tools/content/m1_content_tool.py tests/test_m1_content_tooling.py",
+    "if(git status --porcelain){throw 'Read-only review worktree changed'}; Write-Host 'READ_ONLY_TREE=clean'",
+    "if(@(Get-Process -ErrorAction SilentlyContinue | Where-Object ProcessName -Like 'Godot*').Count-ne0){throw 'Godot process exists during read-only review'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Begin the summary with exactly GATE: APPROVE or GATE: REPAIR",
+    "Report exact candidate files, line-specific findings, import inventory, schema/fingerprint/seed parity, trace validation, seek, heatmap and percentile conclusions",
+    "Distinguish commands executed in this review from the implementation Agent's historical 4-test pass",
+    "Report changed-files count zero, Godot launch/process count zero, no temporary artifacts, and actual runtime identity",
+    "If rejecting, prescribe only the smallest repair inside the two implementation paths and do not rewrite the ticket or plan"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "Implementation run 20260715T080753Z-M1-content-evidence-tooling-test_performance-a9a219e2 reported 4 focused tests, both stdout-only CLI smokes, diff check and Godot count zero as passing. Do not rerun that suite in this review.",
+    "The release lead removed three confirmed-empty tmp directories that the implementation sandbox could not remove; the committed candidate contains only the two authorized files and is clean.",
+    "Read-only Agents on Windows must never launch Godot. The allowed Python -B commands emit stdout only and must not write __pycache__, traces, SVGs, or other files.",
+    "M1 tooling may preview authored schedules and analyze supplied traces; only M2 can produce real runtime_capture evidence from implemented patterns."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
