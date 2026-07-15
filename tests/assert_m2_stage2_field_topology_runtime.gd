@@ -1,6 +1,8 @@
 extends SceneTree
 
 const Stage2FieldTopologyRuntime := preload("res://scripts/runtime/stage2_field_topology_runtime.gd")
+const MAX_CANONICAL_DEPTH := 32
+const MAX_CANONICAL_COLLECTION := 8192
 
 const FIELD_EVENTS := ["s2_b01", "s2_b02", "s2_b03", "s2_b04", "s2_b05", "s2_b12", "s2_b13", "s2_b15", "s2_b16"]
 const FIRST_BURST_TICKS := {
@@ -90,6 +92,41 @@ func _records_for_spawn(records: Array, spawn_id: String) -> Array:
 			result.append(record)
 	return result
 
+func _records_for_event(records: Array, event_id: String) -> Array:
+	var result: Array = []
+	for record_value in records:
+		var record: Dictionary = record_value
+		if String(record.get("stage2_source_event_id", "")) == event_id:
+			result.append(record)
+	return result
+
+func _behavior_signature(record: Dictionary) -> Dictionary:
+	return {
+		"topology_id": record.get("topology_id", ""),
+		"topology_fingerprint": record.get("topology_fingerprint", ""),
+		"motion_kind": record.get("motion_kind", ""),
+		"route_id": record.get("route_id", ""),
+		"route_points": record.get("route_points", []),
+		"reflection_plan": record.get("reflection_plan", []),
+		"edge_id": record.get("edge_id", ""),
+		"lane_id": record.get("lane_id", ""),
+		"seed_id": record.get("seed_id", ""),
+		"activation_velocity_px_per_second": record.get("activation_velocity_px_per_second", []),
+		"collision_delay_ticks": int(record.get("stage2_collision_enable_tick", 0)) - int(record.get("stage2_bullet_spawn_tick", 0)),
+		"lifetime_ticks": int(record.get("stage2_lifetime_end_tick", 0)) - int(record.get("stage2_bullet_spawn_tick", 0)),
+	}
+
+func _opposite_mirror(selected_spawn_id: String) -> String:
+	return "s2_b15_right_mirror" if selected_spawn_id == "s2_b15_left_mirror" else "s2_b15_left_mirror"
+
+func _new_b16_runtime(difficulty: String, stage_run_uid: String, selected_spawn_id: String = "s2_b15_right_mirror") -> RefCounted:
+	var runtime := _new_runtime(difficulty, stage_run_uid)
+	_check(bool(runtime.activate_event("s2_b15", [], 2100, 0).ok), "%s s2_b16 fixture could not activate s2_b15." % difficulty)
+	_check(bool(runtime.accept_defeat(selected_spawn_id, 2101, 0).ok), "%s s2_b16 fixture could not select %s." % [difficulty, selected_spawn_id])
+	var survivor := _opposite_mirror(selected_spawn_id)
+	_check(bool(runtime.activate_event("s2_b16", [survivor], 2250, 0).ok), "%s s2_b16 fixture rejected live survivor %s." % [difficulty, survivor])
+	return runtime
+
 func _assert_contract_coverage_and_difficulty_identity() -> void:
 	var normal := _new_runtime("normal", "coverage_normal")
 	var hard := _new_runtime("hard", "coverage_hard")
@@ -126,39 +163,69 @@ func _assert_contract_coverage_and_difficulty_identity() -> void:
 	_check(float((normal_first.route_points[1] as Array)[0]) != float((hard_first.route_points[1] as Array)[0]), "Hard s2_b01 did not move the first bound waypoint to the opposite booth side.")
 
 func _assert_all_rows_and_primitives_execute() -> void:
-	var observed_spawns := {}
-	var observed_primitives := {}
+	var observed_by_difficulty := {"normal": {}, "hard": {}}
+	var primitives_by_difficulty := {"normal": {}, "hard": {}}
 	var first_b01: Dictionary = {}
-	for event_id in FIELD_EVENTS:
-		var runtime := _new_runtime("normal", "rows_%s" % event_id)
-		var authored_tick := int(Stage2FieldTopologyRuntime.EVENT_TICKS[event_id])
-		var activation: Dictionary = runtime.activate_event(event_id, [], authored_tick, 0)
-		_check(bool(activation.get("ok", false)), "%s activation failed: %s" % [event_id, activation.get("error", "")])
-		var output: Dictionary = runtime.advance(int(FIRST_BURST_TICKS[event_id]), 1)
-		_check(bool(output.get("ok", false)), "%s first-burst advance failed: %s" % [event_id, output.get("error", "")])
-		_check_equal((output.bullet_constructions as Array).size(), int(FIRST_BURST_COUNTS[event_id]), "%s silently changed or truncated its first source bursts." % event_id)
-		for record_value in output.bullet_constructions:
-			var record: Dictionary = record_value
-			observed_spawns[String(record.stage2_source_spawn_id)] = true
-			observed_primitives[String(record.stage2_primitive)] = true
-			if first_b01.is_empty() and String(record.stage2_source_spawn_id) == "s2_b01_abacus_left":
-				first_b01 = record
-	var delegated := _new_runtime("normal", "delegated_phase")
-	var delegated_activation: Dictionary = delegated.activate_event("s2_b06", [], 750, 0)
-	_check_equal((delegated_activation.source_activations as Array).size(), 1, "Delegated phase source was not registered.")
-	var delegated_output: Dictionary = delegated.advance(900, 1)
-	_check((delegated_output.bullet_constructions as Array).is_empty(), "phase_owned s2_b06 emitted substitute field bullets.")
-	for spawn_id in EXPECTED_FIELD_SPAWNS:
-		_check(observed_spawns.has(spawn_id), "No authored construction was observed for %s." % spawn_id)
-	for primitive in Stage2FieldTopologyRuntime.PRIMITIVES:
-		_check(observed_primitives.has(primitive), "No construction output exercised %s." % primitive)
+	var delegated_signatures := {}
+	var executed_fingerprints := {}
+	for difficulty in Stage2FieldTopologyRuntime.DIFFICULTIES:
+		var difficulty_observed: Dictionary = observed_by_difficulty[difficulty]
+		var difficulty_primitives: Dictionary = primitives_by_difficulty[difficulty]
+		for event_id in FIELD_EVENTS:
+			var runtime: RefCounted
+			if event_id == "s2_b16":
+				runtime = _new_b16_runtime(difficulty, "rows_%s_%s" % [difficulty, event_id])
+			else:
+				runtime = _new_runtime(difficulty, "rows_%s_%s" % [difficulty, event_id])
+				var authored_tick := int(Stage2FieldTopologyRuntime.EVENT_TICKS[event_id])
+				var activation: Dictionary = runtime.activate_event(event_id, [], authored_tick, 0)
+				_check(bool(activation.get("ok", false)), "%s %s activation failed: %s" % [difficulty, event_id, activation.get("error", "")])
+			var output: Dictionary = runtime.advance(int(FIRST_BURST_TICKS[event_id]), 1)
+			_check(bool(output.get("ok", false)), "%s %s first-burst advance failed: %s" % [difficulty, event_id, output.get("error", "")])
+			var event_records := _records_for_event(output.bullet_constructions, event_id)
+			_check_equal(event_records.size(), int(FIRST_BURST_COUNTS[event_id]), "%s %s silently changed or truncated its first source bursts." % [difficulty, event_id])
+			for record_value in event_records:
+				var record: Dictionary = record_value
+				var record_spawn_id := String(record.stage2_source_spawn_id)
+				if not difficulty_observed.has(record_spawn_id):
+					difficulty_observed[record_spawn_id] = record
+				difficulty_primitives[String(record.stage2_primitive)] = true
+				executed_fingerprints[String(record.topology_fingerprint)] = true
+				if difficulty == "normal" and first_b01.is_empty() and record_spawn_id == "s2_b01_abacus_left":
+					first_b01 = record
+		var delegated := _new_runtime(difficulty, "delegated_phase_%s" % difficulty)
+		var delegated_activation: Dictionary = delegated.activate_event("s2_b06", [], 750, 0)
+		_check_equal((delegated_activation.source_activations as Array).size(), 1, "%s delegated phase source was not registered." % difficulty)
+		var activation_record: Dictionary = delegated_activation.source_activations[0]
+		var delegated_definition: Dictionary = delegated.definition_for_spawn("s2_midboss_abacus_tsukumogami")
+		_check_equal(String(activation_record.get("execution_owner", "")), "phase_runtime", "%s delegated row lost its phase owner." % difficulty)
+		_check_equal(String(activation_record.get("topology_id", "")), String(delegated_definition.profile.topology_id), "%s delegated activation did not select its frozen topology." % difficulty)
+		_check_equal(String(activation_record.get("topology_fingerprint", "")), String(delegated_definition.profile.topology_fingerprint), "%s delegated activation did not select its frozen fingerprint." % difficulty)
+		delegated_signatures[difficulty] = [activation_record.topology_id, activation_record.topology_fingerprint, activation_record.execution_owner]
+		executed_fingerprints[String(activation_record.topology_fingerprint)] = true
+		var delegated_output: Dictionary = delegated.advance(900, 1)
+		_check((delegated_output.bullet_constructions as Array).is_empty(), "%s phase-owned s2_b06 emitted substitute field bullets." % difficulty)
+		observed_by_difficulty[difficulty] = difficulty_observed
+		primitives_by_difficulty[difficulty] = difficulty_primitives
+	for expected_spawn_id in EXPECTED_FIELD_SPAWNS:
+		var normal_record: Dictionary = (observed_by_difficulty.normal as Dictionary).get(expected_spawn_id, {})
+		var hard_record: Dictionary = (observed_by_difficulty.hard as Dictionary).get(expected_spawn_id, {})
+		_check(not normal_record.is_empty(), "No Normal construction behavior was observed for %s." % expected_spawn_id)
+		_check(not hard_record.is_empty(), "No Hard construction behavior was observed for %s." % expected_spawn_id)
+		if not normal_record.is_empty() and not hard_record.is_empty():
+			_check(_behavior_signature(normal_record) != _behavior_signature(hard_record), "%s emitted no structural Normal/Hard behavior distinction." % expected_spawn_id)
+	for difficulty in Stage2FieldTopologyRuntime.DIFFICULTIES:
+		for primitive in Stage2FieldTopologyRuntime.PRIMITIVES:
+			_check((primitives_by_difficulty[difficulty] as Dictionary).has(primitive), "%s construction output never exercised %s." % [difficulty, primitive])
+	_check(delegated_signatures.normal != delegated_signatures.hard, "The executed phase-owned row did not expose distinct Normal/Hard topology selection.")
+	_check_equal(executed_fingerprints.size(), 44, "Actual Normal/Hard row execution did not expose all 44 frozen structural fingerprints.")
 	_assert_exact_metadata(first_b01)
 
 func _assert_exact_metadata(record: Dictionary) -> void:
 	_check(not record.is_empty(), "Exact metadata fixture is missing.")
 	if record.is_empty():
 		return
-	var expected_uid := "rows_s2_b01:s2_b01:s2_b01_abacus_left:b01_left_anchor:0:0"
+	var expected_uid := "rows_normal_s2_b01:s2_b01:s2_b01_abacus_left:b01_left_anchor:0:0"
 	_check_equal(String(record.get("bullet_uid", "")), expected_uid, "Bullet UID algorithm drifted.")
 	_check_equal(String(record.get("stage2_bullet_uid", "")), expected_uid, "Approved bullet UID seam drifted.")
 	_check_equal(String(record.get("stage2_source_event_id", "")), "s2_b01", "Event seam drifted.")
@@ -292,6 +359,102 @@ func _assert_atomic_hard_state_transitions() -> void:
 	_check_equal(String(b16_bullet.get("route_id", "")), "mask6_survivor_left_first", "s2_b16 mask 6 did not choose the surviving-left route first.")
 	_check_equal(String((b16_bullet.reflection_plan[0] as Dictionary).surface_id), "h_b16_surviving_left", "s2_b16 did not bind the exact surviving mirror surface.")
 
+func _assert_mirror_survivor_guards() -> void:
+	var normal_left_selected := _new_b16_runtime("normal", "normal_mirror_left_route", "s2_b15_left_mirror")
+	var normal_left_output: Dictionary = normal_left_selected.advance(2274, 1)
+	var normal_left_bullet: Dictionary = _find_bullet(normal_left_output.bullet_constructions, "s2_b16_abacus_keeper", 0, 0)
+	_check_equal(String(normal_left_bullet.get("route_id", "")), "abacus_via_right", "Normal mask 5 did not put the surviving-right recovery route first.")
+
+	var left_selected := _new_b16_runtime("hard", "mirror_left_route", "s2_b15_left_mirror")
+	_check_equal(int(left_selected.telemetry_snapshot().hard_state.mirror_activation_mask), 5, "Left selection did not expose mask 5 while the right survivor was alive.")
+	var left_output: Dictionary = left_selected.advance(2274, 1)
+	var left_bullet: Dictionary = _find_bullet(left_output.bullet_constructions, "s2_b16_abacus_keeper", 0, 0)
+	_check_equal(String(left_bullet.get("route_id", "")), "mask5_survivor_right_first", "s2_b16 mask 5 did not select the surviving-right route first.")
+	_check_equal(String((left_bullet.get("reflection_plan", [{}])[0] as Dictionary).get("surface_id", "")), "h_b16_surviving_right", "s2_b16 mask 5 did not bind the surviving-right surface.")
+
+	var stale_carryover := _new_runtime("hard", "stale_carryover")
+	_check(bool(stale_carryover.activate_event("s2_b15", [], 2100, 0).ok), "Stale-carryover fixture could not activate s2_b15.")
+	_check(bool(stale_carryover.accept_defeat("s2_b15_right_mirror", 2101, 0).ok), "Stale-carryover fixture could not select the right mirror.")
+	var stale_entry: Dictionary = stale_carryover.activate_event("s2_b16", [], 2250, 0)
+	_check(not bool(stale_entry.get("ok", true)), "s2_b16 accepted a live survivor that was omitted from explicit carryover.")
+	_check_equal(String(stale_carryover.hard_error_snapshot().get("code", "")), "s2_b16_recovery_state_invalid", "Stale carryover failed with the wrong stable error code.")
+
+	var dead_survivor := _new_runtime("hard", "dead_survivor")
+	_check(bool(dead_survivor.activate_event("s2_b15", [], 2100, 0).ok), "Dead-survivor fixture could not activate s2_b15.")
+	_check(bool(dead_survivor.accept_defeat("s2_b15_right_mirror", 2101, 0).ok), "Dead-survivor fixture could not select the right mirror.")
+	var survivor_defeat: Dictionary = dead_survivor.accept_defeat("s2_b15_left_mirror", 2200, 0)
+	_check(bool(survivor_defeat.get("ok", false)), "Surviving mirror defeat failed.")
+	_check_equal(int(survivor_defeat.telemetry_snapshot.hard_state.mirror_activation_mask), 2, "Defeating the left survivor did not atomically clear the survivor-alive bit.")
+	var dead_baseline: Dictionary = dead_survivor.capture_snapshot()
+	_check(dead_survivor.validate_snapshot(dead_baseline), "Runtime rejected the reachable dead-survivor baseline snapshot.")
+	var stale_mask_snapshot: Dictionary = dead_baseline.duplicate(true)
+	stale_mask_snapshot.payload.hard_state.mirror_activation_mask = 6
+	_redigest_snapshot(stale_mask_snapshot)
+	_check(not dead_survivor.restore_snapshot(stale_mask_snapshot), "Runtime accepted a recomputed-digest stale survivor mask.")
+	_check_equal(dead_survivor.capture_snapshot(), dead_baseline, "Rejected stale-mask snapshot partially mutated runtime state.")
+	var dead_entry: Dictionary = dead_survivor.activate_event("s2_b16", [], 2250, 0)
+	_check(not bool(dead_entry.get("ok", true)), "s2_b16 selected a recovery route after the survivor died.")
+	_check_equal(String(dead_survivor.hard_error_snapshot().get("code", "")), "s2_b16_recovery_state_invalid", "Dead-survivor entry failed with the wrong stable error code.")
+
+	var dies_after_entry := _new_b16_runtime("hard", "dies_after_entry", "s2_b15_right_mirror")
+	var post_entry_removal: Dictionary = dies_after_entry.remove_source("s2_b15_left_mirror", 2251, 0, "survivor_removed_after_entry")
+	_check_equal(int(post_entry_removal.telemetry_snapshot.hard_state.mirror_activation_mask), 2, "Post-entry survivor removal left the alive bit set.")
+	var blocked_burst: Dictionary = dies_after_entry.advance(2274, 1)
+	_check(not bool(blocked_burst.get("ok", true)), "s2_b16 emitted after its entry survivor died.")
+	_check(_records_for_spawn(blocked_burst.bullet_constructions, "s2_b16_abacus_keeper").is_empty(), "s2_b16 silently chose a fabricated route after survivor death.")
+	_check_equal(String(dies_after_entry.hard_error_snapshot().get("code", "")), "s2_b16_recovery_state_invalid", "Post-entry survivor death failed with the wrong stable error code.")
+
+func _redigest_snapshot(snapshot: Dictionary) -> void:
+	snapshot.state_digest = _snapshot_canonical_value(snapshot.payload, 0).sha256_text()
+
+func _snapshot_canonical_value(value: Variant, depth: int) -> String:
+	if depth > MAX_CANONICAL_DEPTH:
+		return ""
+	match typeof(value):
+		TYPE_NIL:
+			return "n;"
+		TYPE_BOOL:
+			return "b1;" if bool(value) else "b0;"
+		TYPE_INT, TYPE_FLOAT:
+			var number := float(value)
+			if is_nan(number) or is_inf(number):
+				return ""
+			return "x%.9f;" % number
+		TYPE_STRING, TYPE_STRING_NAME:
+			var text := String(value)
+			return "s%d:%s;" % [text.length(), text]
+		TYPE_ARRAY:
+			var array: Array = value
+			if array.size() > MAX_CANONICAL_COLLECTION:
+				return ""
+			var result := "a%d[" % array.size()
+			for item in array:
+				var encoded := _snapshot_canonical_value(item, depth + 1)
+				if encoded.is_empty():
+					return ""
+				result += encoded
+			return result + "]"
+		TYPE_DICTIONARY:
+			var dictionary: Dictionary = value
+			if dictionary.size() > MAX_CANONICAL_COLLECTION:
+				return ""
+			var keys: Array[String] = []
+			for key in dictionary.keys():
+				if typeof(key) not in [TYPE_STRING, TYPE_STRING_NAME]:
+					return ""
+				keys.append(String(key))
+			keys.sort()
+			var result := "d%d{" % keys.size()
+			for key in keys:
+				var encoded_key := _snapshot_canonical_value(key, depth + 1)
+				var encoded_value := _snapshot_canonical_value(dictionary[key], depth + 1)
+				if encoded_key.is_empty() or encoded_value.is_empty():
+					return ""
+				result += encoded_key + encoded_value
+			return result + "}"
+		_:
+			return ""
+
 func _assert_snapshot_continuation(runtime: RefCounted, stage_run_uid: String) -> void:
 	var snapshot: Dictionary = runtime.capture_snapshot()
 	_check_equal(String(snapshot.get("schema", "")), "stage2_field_topology_runtime_snapshot_v1", "Snapshot schema ID drifted.")
@@ -304,6 +467,22 @@ func _assert_snapshot_continuation(runtime: RefCounted, stage_run_uid: String) -
 	forged.payload.source_states.s2_b13_blue_booth_master.next_burst_index = 999
 	_check(not restored.restore_snapshot(forged), "Runtime accepted a forged source cursor without a matching state digest.")
 	_check_equal(restored.capture_snapshot(), baseline, "Rejected snapshot partially mutated runtime state.")
+	var impossible_state: Dictionary = snapshot.duplicate(true)
+	impossible_state.payload.hard_state.blue_emission_state_id = "pre_red"
+	impossible_state.payload.hard_state.stage_front_revision_id = "stage_front_after_red_neighbor_flip"
+	_redigest_snapshot(impossible_state)
+	_check(not restored.restore_snapshot(impossible_state), "Runtime accepted a recomputed-digest unreachable Hard revision/state pair.")
+	_check_equal(restored.capture_snapshot(), baseline, "Rejected impossible Hard state partially mutated runtime state.")
+	var divergent_seam: Dictionary = snapshot.duplicate(true)
+	var active_uids: Array = divergent_seam.payload.active_bullets.keys()
+	active_uids.sort()
+	_check(not active_uids.is_empty(), "Snapshot seam-forgery fixture had no active bullet.")
+	if not active_uids.is_empty():
+		var active_uid := String(active_uids[0])
+		divergent_seam.payload.active_bullets[active_uid].stage2_routing = "forged_adapter_route"
+		_redigest_snapshot(divergent_seam)
+		_check(not restored.restore_snapshot(divergent_seam), "Runtime accepted a recomputed-digest divergent Stage 2 adapter seam.")
+		_check_equal(restored.capture_snapshot(), baseline, "Rejected divergent seam partially mutated runtime state.")
 	var forged_version: Dictionary = snapshot.duplicate(true)
 	forged_version.version = 2
 	_check(not restored.restore_snapshot(forged_version), "Runtime accepted an unknown snapshot version.")
@@ -363,6 +542,7 @@ func _run() -> void:
 	_assert_primitive_motion_semantics()
 	_assert_active_entity_carryover_and_removal()
 	_assert_atomic_hard_state_transitions()
+	_assert_mirror_survivor_guards()
 	_assert_fail_closed_contracts_caps_and_uids()
 	if failed:
 		quit(1)

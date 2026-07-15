@@ -64,6 +64,37 @@ const BULLET_SEAM_KEYS := [
 	"stage2_reflection_count", "stage2_bullet_spawn_tick", "stage2_first_reflection_tick",
 	"stage2_last_reflection_surface_id", "stage2_collision_enable_tick", "stage2_lifetime_end_tick",
 ]
+const BULLET_RECORD_KEYS := [
+	"stage_run_uid", "difficulty", "event_id", "bullet_source_spawn_id", "bullet_source_enemy_id",
+	"source_primitive", "source_routing_id", "topology_id", "topology_fingerprint", "emitter_id",
+	"burst_index", "shot_index", "bullet_uid", "bullet_spawn_tick", "collision_enable_tick",
+	"lifetime_end_tick", "reflection_count", "first_reflection_tick", "last_reflection_surface_id",
+	"graze_tick", "speed_px_per_second",
+	"stage2_bullet_uid", "stage2_source_event_id", "stage2_source_spawn_id", "stage2_source_enemy_id",
+	"stage2_primitive", "stage2_routing", "stage2_reflection_count", "stage2_bullet_spawn_tick",
+	"stage2_first_reflection_tick", "stage2_last_reflection_surface_id", "stage2_collision_enable_tick",
+	"stage2_lifetime_end_tick", "position", "velocity_px_per_second", "activation_velocity_px_per_second",
+	"motion_kind", "route_id", "route_points", "reflection_plan", "next_reflection_index", "removal_tick",
+	"edge_id", "lane_id", "seed_id", "state_binding",
+]
+const BULLET_RECONSTRUCTED_KEYS := [
+	"stage_run_uid", "difficulty", "event_id", "bullet_source_spawn_id", "bullet_source_enemy_id",
+	"source_primitive", "source_routing_id", "topology_id", "topology_fingerprint", "emitter_id",
+	"burst_index", "shot_index", "bullet_uid", "bullet_spawn_tick", "collision_enable_tick",
+	"lifetime_end_tick", "speed_px_per_second", "stage2_bullet_uid", "stage2_source_event_id",
+	"stage2_source_spawn_id", "stage2_source_enemy_id", "stage2_primitive", "stage2_routing",
+	"stage2_bullet_spawn_tick", "stage2_collision_enable_tick", "stage2_lifetime_end_tick",
+	"activation_velocity_px_per_second", "motion_kind", "route_id", "route_points", "reflection_plan",
+	"removal_tick", "edge_id", "lane_id", "seed_id", "state_binding",
+]
+const STATE_BINDING_KEYS := [
+	"stage_front_revision_id", "blue_emission_state_id", "yellow_emission_state_id",
+	"selected_mirror_spawn_id", "mirror_activation_mask",
+]
+const CALLBACK_KINDS := [
+	"activate_event", "remove_source", "accept_defeat", "clear_field_bullets",
+	"observe_graze", "advance",
+]
 const LANE_CENTERS := {"lane_left": 136.0, "lane_center": 360.0, "lane_right": 584.0}
 const COMBAT_BOUNDS := [24.0, 48.0, 696.0, 936.0]
 
@@ -289,6 +320,9 @@ func activate_event(event_id: String, active_entity_ids: Array, stage_tick: int,
 			_runtime_fail("active_entity_carryover_invalid", "event.%s.active_entity_ids.%s" % [event_id, active_id], "carryover must name one unique currently alive source", output)
 			return _finalize_output(output)
 		seen_active[active_id] = true
+	if event_id == "s2_b16" and not _s2_b16_entry_is_valid(seen_active):
+		_runtime_fail("s2_b16_recovery_state_invalid", "event.s2_b16.active_entity_ids", "selected mirror, live survivor, mask, and explicit carryover must agree at entry", output)
+		return _finalize_output(output)
 	_activated_events[event_id] = true
 	_current_event_id = event_id
 	var current_cap := int(((_budget_by_event[event_id] as Dictionary).peak_active_bullets as Dictionary)[_difficulty])
@@ -312,6 +346,8 @@ func activate_event(event_id: String, active_entity_ids: Array, stage_tick: int,
 			"spawn_id": spawn_id,
 			"enemy_id": String(row.enemy_id),
 			"execution_owner": _execution_owner(row),
+			"topology_id": String((row.profiles[_difficulty] as Dictionary).topology_id),
+			"topology_fingerprint": String((row.profiles[_difficulty] as Dictionary).topology_fingerprint),
 		})
 		_increment_count("source_activations", 1)
 	return _finalize_output(output)
@@ -511,7 +547,8 @@ func validate_snapshot(snapshot: Dictionary) -> bool:
 	var payload: Dictionary = snapshot.payload
 	if not _has_exact_keys(payload, SNAPSHOT_PAYLOAD_KEYS):
 		return false
-	if String(snapshot.state_digest) != _stable_digest(payload):
+	var computed_digest := _stable_digest(payload)
+	if computed_digest.is_empty() or String(snapshot.state_digest) != computed_digest:
 		return false
 	if String(payload.contract_digest) != CONTRACT_DIGEST or String(payload.difficulty) != _difficulty or String(payload.stage_run_uid) != _stage_run_uid:
 		return false
@@ -548,7 +585,7 @@ func validate_snapshot(snapshot: Dictionary) -> bool:
 	for spawn_id in payload.defeated_sources:
 		if not _row_by_spawn.has(String(spawn_id)):
 			return false
-	if not _has_exact_keys(payload.hard_state, HARD_STATE_KEYS) or not _valid_hard_state(payload.hard_state):
+	if not _has_exact_keys(payload.hard_state, HARD_STATE_KEYS):
 		return false
 	if not _has_exact_keys(payload.telemetry_counts, TELEMETRY_COUNT_KEYS):
 		return false
@@ -564,13 +601,18 @@ func validate_snapshot(snapshot: Dictionary) -> bool:
 	for uid_value in payload.grazed_uids:
 		if not used_lookup.has(String(uid_value)):
 			return false
-	if payload.active_bullets.size() > _stage_cap:
+	if not _validate_snapshot_cross_fields(payload):
+		return false
+	var active_cap := _stage_cap
+	if not String(payload.current_event_id).is_empty():
+		active_cap = mini(active_cap, int(((_budget_by_event[String(payload.current_event_id)] as Dictionary).peak_active_bullets as Dictionary)[_difficulty]))
+	if payload.active_bullets.size() > active_cap:
 		return false
 	for uid_value in payload.active_bullets.keys():
 		var uid := String(uid_value)
 		if not used_lookup.has(uid) or not (payload.active_bullets[uid] is Dictionary):
 			return false
-		if not _validate_bullet_snapshot(uid, payload.active_bullets[uid]):
+		if not _validate_bullet_snapshot(uid, payload.active_bullets[uid], payload):
 			return false
 	return true
 
@@ -1067,6 +1109,8 @@ func _warning_record(row: Dictionary, profile: Dictionary, burst_index: int, sta
 func _emit_burst(row: Dictionary, profile: Dictionary, burst_index: int, stage_tick: int, event_sequence: int, output: Dictionary) -> bool:
 	var shot_count := int(row.source.pattern.shots_per_burst)
 	var event_id := String(row.event_id)
+	if String(row.spawn_id) == "s2_b16_abacus_keeper" and not _s2_b16_recovery_is_live():
+		return _runtime_fail("s2_b16_recovery_state_invalid", "source.s2_b16_abacus_keeper.burst.%d" % burst_index, "recovery route cannot be selected after the survivor-alive bit becomes stale", output)
 	var cap_event_id := _current_event_id if not _current_event_id.is_empty() else event_id
 	var event_cap := int(((_budget_by_event[cap_event_id] as Dictionary).peak_active_bullets as Dictionary)[_difficulty])
 	var cap := mini(event_cap, _stage_cap)
@@ -1091,7 +1135,7 @@ func _emit_burst(row: Dictionary, profile: Dictionary, burst_index: int, stage_t
 	_increment_count("bullets_constructed", constructions.size())
 	return true
 
-func _construct_bullet(row: Dictionary, profile: Dictionary, burst_index: int, shot_index: int, spawn_tick: int) -> Dictionary:
+func _construct_bullet(row: Dictionary, profile: Dictionary, burst_index: int, shot_index: int, spawn_tick: int, state_override: Dictionary = {}) -> Dictionary:
 	var geometry: Dictionary = profile.geometry
 	var emitters: Array = geometry.emitter_anchors
 	var emitter: Dictionary = emitters[shot_index % emitters.size()]
@@ -1148,17 +1192,17 @@ func _construct_bullet(row: Dictionary, profile: Dictionary, burst_index: int, s
 		"edge_id": "",
 		"lane_id": "",
 		"seed_id": "",
-		"state_binding": _state_binding_for(row, burst_index),
+		"state_binding": _state_binding_for(row, burst_index, state_override),
 	}
 	match String(row.source.pattern.primitive):
 		"rebound_bead":
-			if not _populate_rebound_record(record, row, profile, shot_index):
+			if not _populate_rebound_record(record, row, profile, shot_index, state_override):
 				return {}
 		"grid_edge":
 			if not _populate_grid_record(record, row, profile, shot_index):
 				return {}
 		"lane_fan":
-			if not _populate_lane_record(record, row, profile, burst_index, shot_index):
+			if not _populate_lane_record(record, row, profile, burst_index, shot_index, state_override):
 				return {}
 		"delayed_seed":
 			if not _populate_delayed_record(record, row, profile, shot_index):
@@ -1167,12 +1211,12 @@ func _construct_bullet(row: Dictionary, profile: Dictionary, burst_index: int, s
 			return {}
 	return record
 
-func _populate_rebound_record(record: Dictionary, row: Dictionary, profile: Dictionary, shot_index: int) -> bool:
+func _populate_rebound_record(record: Dictionary, row: Dictionary, profile: Dictionary, shot_index: int, state_override: Dictionary = {}) -> bool:
 	var eligible_by_id := {}
 	var authored_eligible: Array = []
 	for route_value in profile.geometry.ordered_routes:
 		var candidate_route: Dictionary = route_value
-		if _route_is_eligible(candidate_route):
+		if _route_is_eligible(candidate_route, state_override):
 			authored_eligible.append(candidate_route)
 			eligible_by_id[String(candidate_route.route_id)] = candidate_route
 	var routes: Array = []
@@ -1186,6 +1230,15 @@ func _populate_rebound_record(record: Dictionary, row: Dictionary, profile: Dict
 		var eligible_route: Dictionary = route_value
 		if not selected_ids.has(String(eligible_route.route_id)):
 			routes.append(eligible_route)
+	if String(row.spawn_id) == "s2_b16_abacus_keeper" and _difficulty == "normal":
+		var state := _hard_state if state_override.is_empty() else state_override
+		var survivor_route_id := "abacus_via_right" if int(state.mirror_activation_mask) == 5 else "abacus_via_left"
+		for route_index in range(routes.size()):
+			if String((routes[route_index] as Dictionary).route_id) == survivor_route_id:
+				var survivor_route: Dictionary = routes[route_index]
+				routes.remove_at(route_index)
+				routes.push_front(survivor_route)
+				break
 	if routes.is_empty():
 		return false
 	var selected_route: Dictionary = routes[shot_index % routes.size()]
@@ -1250,9 +1303,9 @@ func _populate_grid_record(record: Dictionary, row: Dictionary, profile: Diction
 	record.removal_tick = mini(int(record.lifetime_end_tick), _linear_exit_tick(position, velocity, int(record.bullet_spawn_tick)))
 	return true
 
-func _populate_lane_record(record: Dictionary, row: Dictionary, profile: Dictionary, burst_index: int, shot_index: int) -> bool:
+func _populate_lane_record(record: Dictionary, row: Dictionary, profile: Dictionary, burst_index: int, shot_index: int, state_override: Dictionary = {}) -> bool:
 	var geometry: Dictionary = profile.geometry
-	var lanes: Array = _lane_sequence_for(row, geometry)
+	var lanes: Array = _lane_sequence_for(row, geometry, state_override)
 	if lanes.is_empty():
 		return false
 	var lane_id := String(lanes[burst_index % lanes.size()])
@@ -1368,6 +1421,11 @@ func _remove_source_internal(spawn_id: String, stage_tick: int, event_sequence: 
 	state.alive = false
 	state.removed_tick = stage_tick
 	_source_states[spawn_id] = state
+	if spawn_id == String(_hard_state.surviving_mirror_spawn_id):
+		var previous_mask := int(_hard_state.mirror_activation_mask)
+		_recompute_mirror_activation_mask()
+		if int(_hard_state.mirror_activation_mask) != previous_mask:
+			_append_transition(output, stage_tick, event_sequence, "surviving_mirror_removal_clears_alive_bit", "mirror_activation_mask_%d" % previous_mask, "mirror_activation_mask_%d" % int(_hard_state.mirror_activation_mask))
 	output.source_removals.append({
 		"stage_tick": stage_tick,
 		"event_sequence": event_sequence,
@@ -1391,7 +1449,7 @@ func _apply_defeat_transition(spawn_id: String, stage_tick: int, event_sequence:
 		var revision := "stage_front_after_left_horizontal_transform" if spawn_id == "s2_b15_left_mirror" else "stage_front_after_right_diagonal_transform"
 		_hard_state.selected_mirror_spawn_id = spawn_id
 		_hard_state.surviving_mirror_spawn_id = surviving
-		_hard_state.mirror_activation_mask = 5 if spawn_id == "s2_b15_left_mirror" else 6
+		_recompute_mirror_activation_mask()
 		if _difficulty == "hard":
 			_hard_state.yellow_emission_state_id = mapped_state
 			_hard_state.stage_front_revision_id = revision
@@ -1408,12 +1466,13 @@ func _append_transition(output: Dictionary, stage_tick: int, event_sequence: int
 	})
 	_increment_count("state_transitions", 1)
 
-func _route_is_eligible(route: Dictionary) -> bool:
-	if route.has("state_id") and String(route.state_id) != String(_hard_state.blue_emission_state_id):
+func _route_is_eligible(route: Dictionary, state_override: Dictionary = {}) -> bool:
+	var state := _hard_state if state_override.is_empty() else state_override
+	if route.has("state_id") and String(route.state_id) != String(state.blue_emission_state_id):
 		return false
 	if route.has("condition"):
 		var condition := String(route.condition)
-		var mask := int(_hard_state.mirror_activation_mask)
+		var mask := int(state.mirror_activation_mask)
 		if condition == "mirror_activation_mask == 5":
 			return mask == 5
 		if condition == "mirror_activation_mask == 6":
@@ -1421,24 +1480,70 @@ func _route_is_eligible(route: Dictionary) -> bool:
 		return false
 	return true
 
-func _lane_sequence_for(row: Dictionary, geometry: Dictionary) -> Array:
+func _mirror_base_mask(selected_spawn_id: String) -> int:
+	if selected_spawn_id == "s2_b15_left_mirror":
+		return 1
+	if selected_spawn_id == "s2_b15_right_mirror":
+		return 2
+	return 0
+
+func _opposite_mirror_spawn_id(selected_spawn_id: String) -> String:
+	if selected_spawn_id == "s2_b15_left_mirror":
+		return "s2_b15_right_mirror"
+	if selected_spawn_id == "s2_b15_right_mirror":
+		return "s2_b15_left_mirror"
+	return ""
+
+func _recompute_mirror_activation_mask() -> void:
+	var selected := String(_hard_state.selected_mirror_spawn_id)
+	var surviving := String(_hard_state.surviving_mirror_spawn_id)
+	var mask := _mirror_base_mask(selected)
+	if mask > 0 and _source_states.has(surviving) and bool((_source_states[surviving] as Dictionary).alive):
+		mask = mask | 4
+	_hard_state.mirror_activation_mask = mask
+
+func _s2_b16_entry_is_valid(explicit_active_ids: Dictionary) -> bool:
+	if not _activated_events.has("s2_b15"):
+		return false
+	var selected := String(_hard_state.selected_mirror_spawn_id)
+	var surviving := String(_hard_state.surviving_mirror_spawn_id)
+	if _mirror_base_mask(selected) == 0 or surviving.is_empty() or selected == surviving:
+		return false
+	if not _defeated_sources.has(selected) or not _source_states.has(selected) or bool((_source_states[selected] as Dictionary).alive):
+		return false
+	if _defeated_sources.has(surviving) or not _source_states.has(surviving) or not bool((_source_states[surviving] as Dictionary).alive):
+		return false
+	if explicit_active_ids.size() != 1 or not explicit_active_ids.has(surviving) or explicit_active_ids.has(selected):
+		return false
+	return int(_hard_state.mirror_activation_mask) == (_mirror_base_mask(selected) | 4)
+
+func _s2_b16_recovery_is_live() -> bool:
+	var selected := String(_hard_state.selected_mirror_spawn_id)
+	var surviving := String(_hard_state.surviving_mirror_spawn_id)
+	if _mirror_base_mask(selected) == 0 or not _source_states.has(surviving):
+		return false
+	return bool((_source_states[surviving] as Dictionary).alive) and int(_hard_state.mirror_activation_mask) == (_mirror_base_mask(selected) | 4)
+
+func _lane_sequence_for(row: Dictionary, geometry: Dictionary, state_override: Dictionary = {}) -> Array:
+	var state := _hard_state if state_override.is_empty() else state_override
 	if geometry.get("lane_sequence_by_state") is Dictionary:
-		var state_id := String(_hard_state.yellow_emission_state_id)
+		var state_id := String(state.yellow_emission_state_id)
 		var by_state: Dictionary = geometry.lane_sequence_by_state
 		if by_state.has(state_id):
 			return (by_state[state_id] as Array).duplicate()
 	return (geometry.lane_sequence as Array).duplicate()
 
-func _state_binding_for(row: Dictionary, burst_index: int) -> Dictionary:
+func _state_binding_for(row: Dictionary, burst_index: int, state_override: Dictionary = {}) -> Dictionary:
+	var state := _hard_state if state_override.is_empty() else state_override
 	var binding := {
-		"stage_front_revision_id": String(_hard_state.stage_front_revision_id),
-		"blue_emission_state_id": String(_hard_state.blue_emission_state_id),
-		"yellow_emission_state_id": String(_hard_state.yellow_emission_state_id),
-		"selected_mirror_spawn_id": String(_hard_state.selected_mirror_spawn_id),
-		"mirror_activation_mask": int(_hard_state.mirror_activation_mask),
+		"stage_front_revision_id": String(state.stage_front_revision_id),
+		"blue_emission_state_id": String(state.blue_emission_state_id),
+		"yellow_emission_state_id": String(state.yellow_emission_state_id),
+		"selected_mirror_spawn_id": String(state.selected_mirror_spawn_id),
+		"mirror_activation_mask": int(state.mirror_activation_mask),
 	}
 	if String(row.source.pattern.primitive) == "lane_fan":
-		var lanes := _lane_sequence_for(row, row.profiles[_difficulty].geometry)
+		var lanes := _lane_sequence_for(row, row.profiles[_difficulty].geometry, state)
 		if not lanes.is_empty():
 			binding["selected_lane_id"] = String(lanes[burst_index % lanes.size()])
 	return binding
@@ -1534,51 +1639,517 @@ func _validate_snapshot_string_set(values: Array) -> bool:
 		previous = value
 	return true
 
-func _valid_hard_state(state: Dictionary) -> bool:
-	if String(state.blue_emission_state_id) not in ["pre_red", "post_red"]:
+func _validate_snapshot_cross_fields(payload: Dictionary) -> bool:
+	var activated_lookup := {}
+	for event_id_value in payload.activated_events:
+		activated_lookup[String(event_id_value)] = true
+	var defeated_lookup := {}
+	for spawn_id_value in payload.defeated_sources:
+		defeated_lookup[String(spawn_id_value)] = true
+	if not _validate_snapshot_callback_cursor(payload):
 		return false
-	if String(state.yellow_emission_state_id) not in ["pre_mirror", "mapped_after_left_mirror", "mapped_after_right_mirror"]:
+	if not _validate_snapshot_current_event(payload, activated_lookup):
 		return false
-	if int(state.mirror_activation_mask) not in [0, 5, 6]:
+	if not _validate_snapshot_source_reachability(payload, activated_lookup, defeated_lookup):
 		return false
+	if not _validate_snapshot_hard_state(payload, activated_lookup, defeated_lookup):
+		return false
+	if not _validate_snapshot_used_uid_coverage(payload):
+		return false
+	return _validate_snapshot_telemetry(payload)
+
+func _validate_snapshot_callback_cursor(payload: Dictionary) -> bool:
+	var schedule_cursor := int(payload.schedule_cursor_tick)
+	var last_tick := int(payload.last_stage_tick)
+	if schedule_cursor > last_tick:
+		return false
+	if payload.processed_callbacks.is_empty():
+		return schedule_cursor == -1 and last_tick == -1 and int(payload.last_event_sequence) == -1
+	if last_tick < 0 or int(payload.last_event_sequence) < 0 or schedule_cursor < last_tick - 1:
+		return false
+	var maximum_tick := -1
+	var maximum_sequence := -1
+	var callback_keys := {}
+	for callback_id_value in payload.processed_callbacks:
+		var parts := String(callback_id_value).split(":", false)
+		if parts.size() != 4 or parts[0] not in CALLBACK_KINDS or not parts[1].is_valid_int() or not parts[2].is_valid_int() or not _valid_hex_digest(parts[3]):
+			return false
+		var tick := int(parts[1])
+		var sequence := int(parts[2])
+		if tick < 0 or tick > MAX_STAGE_TICK or sequence < 0:
+			return false
+		var callback_key := "%d:%d" % [tick, sequence]
+		if callback_keys.has(callback_key):
+			return false
+		callback_keys[callback_key] = true
+		if tick > maximum_tick or (tick == maximum_tick and sequence > maximum_sequence):
+			maximum_tick = tick
+			maximum_sequence = sequence
+	if maximum_tick != last_tick or maximum_sequence != int(payload.last_event_sequence):
+		return false
+	for event_id_value in payload.activated_events:
+		var event_id := String(event_id_value)
+		if not _snapshot_has_callback(payload.processed_callbacks, "activate_event", int(EVENT_TICKS[event_id])):
+			return false
+	for spawn_id_value in payload.defeated_sources:
+		var spawn_id := String(spawn_id_value)
+		var removed_tick := int((payload.source_states[spawn_id] as Dictionary).removed_tick)
+		if not _snapshot_has_callback_payload(payload.processed_callbacks, "accept_defeat", removed_tick, {"spawn_id": spawn_id}):
+			return false
+	for spawn_id in EXPECTED_SPAWN_IDS:
+		var source_state: Dictionary = payload.source_states[spawn_id]
+		if bool(source_state.activated) and not bool(source_state.alive) and spawn_id not in payload.defeated_sources:
+			if not _snapshot_has_callback(payload.processed_callbacks, "remove_source", int(source_state.removed_tick)):
+				return false
+	return true
+
+func _snapshot_has_callback(callback_ids: Array, kind: String, stage_tick: int) -> bool:
+	for callback_id_value in callback_ids:
+		var parts := String(callback_id_value).split(":", false)
+		if parts.size() == 4 and parts[0] == kind and int(parts[1]) == stage_tick:
+			return true
+	return false
+
+func _snapshot_has_callback_payload(callback_ids: Array, kind: String, stage_tick: int, callback_payload: Dictionary) -> bool:
+	return not _snapshot_callback_key(callback_ids, kind, stage_tick, callback_payload).is_empty()
+
+func _snapshot_callback_key(callback_ids: Array, kind: String, stage_tick: int, callback_payload: Dictionary) -> Array:
+	var expected_digest := _stable_digest(callback_payload)
+	for callback_id_value in callback_ids:
+		var parts := String(callback_id_value).split(":", false)
+		if parts.size() == 4 and parts[0] == kind and int(parts[1]) == stage_tick and parts[3] == expected_digest:
+			return [stage_tick, int(parts[2])]
+	return []
+
+func _callback_key_precedes(left: Array, right: Array) -> bool:
+	return int(left[0]) < int(right[0]) or (int(left[0]) == int(right[0]) and int(left[1]) < int(right[1]))
+
+func _snapshot_callback_sequences(callback_ids: Array, kind: String, stage_tick: int) -> Array:
+	var result: Array = []
+	for callback_id_value in callback_ids:
+		var parts := String(callback_id_value).split(":", false)
+		if parts.size() == 4 and parts[0] == kind and int(parts[1]) == stage_tick:
+			result.append(int(parts[2]))
+	result.sort()
+	return result
+
+func _validate_snapshot_current_event(payload: Dictionary, activated_lookup: Dictionary) -> bool:
+	var expected_current := ""
+	var greatest_tick := -1
+	for event_id_value in payload.activated_events:
+		var event_id := String(event_id_value)
+		var event_tick := int(EVENT_TICKS[event_id])
+		if event_tick > int(payload.last_stage_tick):
+			return false
+		if event_tick > greatest_tick:
+			greatest_tick = event_tick
+			expected_current = event_id
+	if String(payload.current_event_id) != expected_current:
+		return false
+	return expected_current.is_empty() or activated_lookup.has(expected_current)
+
+func _validate_snapshot_source_reachability(payload: Dictionary, activated_lookup: Dictionary, defeated_lookup: Dictionary) -> bool:
+	var states: Dictionary = payload.source_states
+	for spawn_id in EXPECTED_SPAWN_IDS:
+		var row: Dictionary = _row_by_spawn[spawn_id]
+		var state: Dictionary = states[spawn_id]
+		var event_was_activated := activated_lookup.has(String(row.event_id))
+		if bool(state.activated) != event_was_activated:
+			return false
+		if not event_was_activated:
+			if bool(state.alive) or int(state.activated_tick) != -1 or int(state.removed_tick) != -1 or int(state.next_warning_index) != 0 or int(state.next_burst_index) != 0:
+				return false
+			continue
+		if int(state.activated_tick) != int(EVENT_TICKS[String(row.event_id)]):
+			return false
+		if bool(state.alive):
+			if int(state.removed_tick) != -1 or defeated_lookup.has(spawn_id):
+				return false
+		else:
+			if int(state.removed_tick) < int(state.activated_tick) or int(state.removed_tick) > int(payload.last_stage_tick):
+				return false
+		if _execution_owner(row) == "phase_runtime":
+			if int(state.next_warning_index) != 0 or int(state.next_burst_index) != 0:
+				return false
+			continue
+		var profile: Dictionary = row.profiles[_difficulty]
+		var pattern: Dictionary = row.source.pattern
+		var first_burst := int(row.source.authored_tick) + int(pattern.start_delay_ticks)
+		var first_warning := first_burst - int(profile.warning_lead_ticks)
+		var through_tick := int(payload.schedule_cursor_tick)
+		var minimum_tick := through_tick
+		var maximum_tick := through_tick
+		if not bool(state.alive) and int(state.removed_tick) <= through_tick:
+			minimum_tick = int(state.removed_tick) - 1
+			maximum_tick = int(state.removed_tick)
+		var minimum_warnings := _due_schedule_count(first_warning, int(pattern.interval_ticks), minimum_tick)
+		var maximum_warnings := _due_schedule_count(first_warning, int(pattern.interval_ticks), maximum_tick)
+		var minimum_bursts := _due_schedule_count(first_burst, int(pattern.interval_ticks), minimum_tick)
+		var maximum_bursts := _due_schedule_count(first_burst, int(pattern.interval_ticks), maximum_tick)
+		var matches_before_removal := int(state.next_warning_index) == minimum_warnings and int(state.next_burst_index) == minimum_bursts
+		var matches_after_removal := int(state.next_warning_index) == maximum_warnings and int(state.next_burst_index) == maximum_bursts
+		if not matches_before_removal and not matches_after_removal:
+			return false
+	return true
+
+func _due_schedule_count(first_tick: int, interval_ticks: int, through_tick: int) -> int:
+	if through_tick < first_tick:
+		return 0
+	return floori(float(through_tick - first_tick) / float(interval_ticks)) + 1
+
+func _validate_snapshot_hard_state(payload: Dictionary, activated_lookup: Dictionary, defeated_lookup: Dictionary) -> bool:
+	var state: Dictionary = payload.hard_state
+	for key in ["stage_front_revision_id", "blue_emission_state_id", "yellow_emission_state_id", "selected_mirror_spawn_id", "surviving_mirror_spawn_id"]:
+		if typeof(state[key]) != TYPE_STRING:
+			return false
+	if typeof(state.mirror_activation_mask) != TYPE_INT:
+		return false
+	var blue_state := String(state.blue_emission_state_id)
+	var yellow_state := String(state.yellow_emission_state_id)
+	var revision := String(state.stage_front_revision_id)
 	var selected := String(state.selected_mirror_spawn_id)
 	var surviving := String(state.surviving_mirror_spawn_id)
-	if selected.is_empty():
-		return surviving.is_empty() and int(state.mirror_activation_mask) == 0
-	return selected in ["s2_b15_left_mirror", "s2_b15_right_mirror"] and surviving in ["s2_b15_left_mirror", "s2_b15_right_mirror"] and selected != surviving
-
-func _validate_bullet_snapshot(uid: String, bullet: Dictionary) -> bool:
-	for key in BULLET_SEAM_KEYS:
-		if not bullet.has(key):
-			return false
-	if String(bullet.get("bullet_uid", "")) != uid or String(bullet.stage2_bullet_uid) != uid:
+	var mask := int(state.mirror_activation_mask)
+	if blue_state not in ["pre_red", "post_red"] or yellow_state not in ["pre_mirror", "mapped_after_left_mirror", "mapped_after_right_mirror"]:
 		return false
-	var spawn_id := String(bullet.get("bullet_source_spawn_id", ""))
+	if mask not in [0, 1, 2, 5, 6]:
+		return false
+	var red_defeated := defeated_lookup.has("s2_b13_red_booth_master")
+	var blue_defeated := defeated_lookup.has("s2_b13_blue_booth_master")
+	if _difficulty == "normal":
+		if blue_state != "pre_red" or revision != "stage_front_initial":
+			return false
+	else:
+		var expected_blue := "post_red" if red_defeated else "pre_red"
+		if blue_state != expected_blue:
+			return false
+	if selected.is_empty():
+		if not surviving.is_empty() or mask != 0 or yellow_state != "pre_mirror":
+			return false
+		if _difficulty == "hard":
+			if blue_state == "pre_red" and revision != "stage_front_initial":
+				return false
+			if blue_state == "post_red":
+				var expected_revisions := ["stage_front_after_red_neighbor_flip"]
+				if blue_defeated:
+					var red_tick := int((payload.source_states["s2_b13_red_booth_master"] as Dictionary).removed_tick)
+					var blue_tick := int((payload.source_states["s2_b13_blue_booth_master"] as Dictionary).removed_tick)
+					var red_key := _snapshot_callback_key(payload.processed_callbacks, "accept_defeat", red_tick, {"spawn_id": "s2_b13_red_booth_master"})
+					var blue_key := _snapshot_callback_key(payload.processed_callbacks, "accept_defeat", blue_tick, {"spawn_id": "s2_b13_blue_booth_master"})
+					if _callback_key_precedes(red_key, blue_key):
+						expected_revisions = ["stage_front_after_blue_neighbor_flip"]
+				if revision not in expected_revisions:
+					return false
+	else:
+		if not activated_lookup.has("s2_b15") or not defeated_lookup.has(selected):
+			return false
+		var expected_survivor := _opposite_mirror_spawn_id(selected)
+		if expected_survivor.is_empty() or surviving != expected_survivor:
+			return false
+		if bool((payload.source_states[selected] as Dictionary).alive) or not bool((payload.source_states[selected] as Dictionary).activated):
+			return false
+		if not bool((payload.source_states[surviving] as Dictionary).activated):
+			return false
+		if defeated_lookup.has(surviving):
+			var selected_tick := int((payload.source_states[selected] as Dictionary).removed_tick)
+			var survivor_tick := int((payload.source_states[surviving] as Dictionary).removed_tick)
+			var selected_key := _snapshot_callback_key(payload.processed_callbacks, "accept_defeat", selected_tick, {"spawn_id": selected})
+			var survivor_key := _snapshot_callback_key(payload.processed_callbacks, "accept_defeat", survivor_tick, {"spawn_id": surviving})
+			if _callback_key_precedes(survivor_key, selected_key):
+				return false
+		var survivor_alive := bool((payload.source_states[surviving] as Dictionary).alive)
+		var expected_mask := _mirror_base_mask(selected) | (4 if survivor_alive else 0)
+		if mask != expected_mask:
+			return false
+		if _difficulty == "hard":
+			var expected_yellow := "mapped_after_left_mirror" if selected == "s2_b15_left_mirror" else "mapped_after_right_mirror"
+			var expected_revision := "stage_front_after_left_horizontal_transform" if selected == "s2_b15_left_mirror" else "stage_front_after_right_diagonal_transform"
+			if yellow_state != expected_yellow or revision != expected_revision:
+				return false
+		elif yellow_state != "pre_mirror":
+			return false
+	if activated_lookup.has("s2_b16"):
+		var b16_state: Dictionary = payload.source_states["s2_b16_abacus_keeper"]
+		if selected.is_empty() or not bool(b16_state.activated):
+			return false
+		var selected_state: Dictionary = payload.source_states[selected]
+		var survivor_state: Dictionary = payload.source_states[surviving]
+		var entry_tick := int(EVENT_TICKS.s2_b16)
+		var entry_activation_key := _snapshot_callback_key(payload.processed_callbacks, "activate_event", entry_tick, {"event_id": "s2_b16", "active_entity_ids": [surviving]})
+		if entry_activation_key.is_empty():
+			return false
+		if int(selected_state.removed_tick) > entry_tick:
+			return false
+		if int(survivor_state.removed_tick) >= 0 and int(survivor_state.removed_tick) < entry_tick:
+			return false
+		var minimum_entry_sequence := -1
+		if int(selected_state.removed_tick) == entry_tick:
+			var selected_entry_key := _snapshot_callback_key(payload.processed_callbacks, "accept_defeat", entry_tick, {"spawn_id": selected})
+			minimum_entry_sequence = int(selected_entry_key[1])
+		var maximum_entry_sequence := 2147483647
+		if int(survivor_state.removed_tick) == entry_tick:
+			var survivor_removal_sequences: Array = []
+			if defeated_lookup.has(surviving):
+				var survivor_entry_key := _snapshot_callback_key(payload.processed_callbacks, "accept_defeat", entry_tick, {"spawn_id": surviving})
+				survivor_removal_sequences = [int(survivor_entry_key[1])]
+			else:
+				survivor_removal_sequences = _snapshot_callback_sequences(payload.processed_callbacks, "remove_source", entry_tick)
+			if survivor_removal_sequences.is_empty():
+				return false
+			maximum_entry_sequence = int(survivor_removal_sequences[survivor_removal_sequences.size() - 1])
+		var entry_sequence := int(entry_activation_key[1])
+		if entry_sequence <= minimum_entry_sequence or entry_sequence >= maximum_entry_sequence:
+			return false
+		if int(b16_state.next_burst_index) > 0 and int(survivor_state.removed_tick) >= 0:
+			var b16_row: Dictionary = _row_by_spawn["s2_b16_abacus_keeper"]
+			var b16_pattern: Dictionary = b16_row.source.pattern
+			var last_burst_tick := int(b16_row.source.authored_tick) + int(b16_pattern.start_delay_ticks) + (int(b16_state.next_burst_index) - 1) * int(b16_pattern.interval_ticks)
+			if int(survivor_state.removed_tick) < last_burst_tick:
+				return false
+	return true
+
+func _validate_snapshot_used_uid_coverage(payload: Dictionary) -> bool:
+	var used_lookup := {}
+	for uid_value in payload.used_uids:
+		used_lookup[String(uid_value)] = true
+	var expected_count := 0
+	for spawn_id in EXPECTED_SPAWN_IDS:
+		var row: Dictionary = _row_by_spawn[spawn_id]
+		var state: Dictionary = payload.source_states[spawn_id]
+		if _execution_owner(row) != "field_topology_contract":
+			continue
+		var emitters: Array = (row.profiles[_difficulty] as Dictionary).geometry.emitter_anchors
+		var shot_count := int(row.source.pattern.shots_per_burst)
+		for burst_index in range(int(state.next_burst_index)):
+			for shot_index in range(shot_count):
+				var emitter: Dictionary = emitters[shot_index % emitters.size()]
+				var uid_result := make_bullet_uid(String(row.event_id), spawn_id, String(emitter.emitter_id), burst_index, shot_index)
+				if not bool(uid_result.ok) or not used_lookup.has(String(uid_result.bullet_uid)):
+					return false
+				expected_count += 1
+	return expected_count == used_lookup.size()
+
+func _validate_snapshot_telemetry(payload: Dictionary) -> bool:
+	var expected_activations := 0
+	var expected_removals := 0
+	var expected_warnings := 0
+	var expected_bursts := 0
+	for spawn_id in EXPECTED_SPAWN_IDS:
+		var state: Dictionary = payload.source_states[spawn_id]
+		if bool(state.activated):
+			expected_activations += 1
+		if int(state.removed_tick) >= 0:
+			expected_removals += 1
+		expected_warnings += int(state.next_warning_index)
+		expected_bursts += int(state.next_burst_index)
+	var counts: Dictionary = payload.telemetry_counts
+	if int(counts.source_activations) != expected_activations or int(counts.source_removals) != expected_removals:
+		return false
+	if int(counts.warnings) != expected_warnings or int(counts.bursts) != expected_bursts:
+		return false
+	if int(counts.bullets_constructed) != payload.used_uids.size():
+		return false
+	if int(counts.bullet_removals) != payload.used_uids.size() - payload.active_bullets.size():
+		return false
+	return int(counts.grazes_projected) == payload.grazed_uids.size()
+
+func _validate_bullet_snapshot(uid: String, bullet: Dictionary, payload: Dictionary) -> bool:
+	if not _has_exact_keys(bullet, BULLET_RECORD_KEYS) or not _is_canonical_value(bullet):
+		return false
+	for key in ["stage_run_uid", "difficulty", "event_id", "bullet_source_spawn_id", "bullet_source_enemy_id", "source_primitive", "source_routing_id", "topology_id", "topology_fingerprint", "emitter_id", "bullet_uid", "motion_kind", "route_id", "edge_id", "lane_id", "seed_id", "stage2_bullet_uid", "stage2_source_event_id", "stage2_source_spawn_id", "stage2_source_enemy_id", "stage2_primitive", "stage2_routing"]:
+		if typeof(bullet[key]) != TYPE_STRING:
+			return false
+	for key in ["burst_index", "shot_index", "bullet_spawn_tick", "collision_enable_tick", "lifetime_end_tick", "reflection_count", "next_reflection_index", "removal_tick", "stage2_reflection_count", "stage2_bullet_spawn_tick", "stage2_collision_enable_tick", "stage2_lifetime_end_tick"]:
+		if typeof(bullet[key]) != TYPE_INT:
+			return false
+	for key in ["first_reflection_tick", "stage2_first_reflection_tick", "graze_tick"]:
+		if bullet[key] != null and typeof(bullet[key]) != TYPE_INT:
+			return false
+	for key in ["last_reflection_surface_id", "stage2_last_reflection_surface_id"]:
+		if bullet[key] != null and typeof(bullet[key]) != TYPE_STRING:
+			return false
+	if typeof(bullet.speed_px_per_second) != TYPE_FLOAT or not (bullet.state_binding is Dictionary):
+		return false
+	for key in ["position", "velocity_px_per_second", "activation_velocity_px_per_second", "route_points", "reflection_plan"]:
+		if not (bullet[key] is Array):
+			return false
+	var spawn_id := String(bullet.bullet_source_spawn_id)
 	if not _row_by_spawn.has(spawn_id):
 		return false
 	var row: Dictionary = _row_by_spawn[spawn_id]
 	var profile: Dictionary = row.profiles[_difficulty]
-	if String(bullet.event_id) != String(row.event_id) or String(bullet.bullet_source_enemy_id) != String(row.enemy_id):
+	var source_state: Dictionary = payload.source_states[spawn_id]
+	if not bool(source_state.activated) or int(bullet.burst_index) < 0 or int(bullet.burst_index) >= int(source_state.next_burst_index):
 		return false
-	if String(bullet.source_primitive) != String(row.source.pattern.primitive) or String(bullet.source_routing_id) != String(row.source.pattern.routing):
-		return false
-	if String(bullet.topology_id) != String(profile.topology_id) or String(bullet.topology_fingerprint) != String(profile.topology_fingerprint):
-		return false
-	var expected_uid := make_bullet_uid(String(row.event_id), spawn_id, String(bullet.emitter_id), int(bullet.burst_index), int(bullet.shot_index))
-	if not bool(expected_uid.ok) or String(expected_uid.bullet_uid) != uid:
-		return false
-	if int(bullet.shot_index) < 0 or int(bullet.shot_index) >= int(row.source.pattern.shots_per_burst) or int(bullet.burst_index) < 0:
+	if int(bullet.shot_index) < 0 or int(bullet.shot_index) >= int(row.source.pattern.shots_per_burst):
 		return false
 	var expected_spawn_tick := int(row.source.authored_tick) + int(row.source.pattern.start_delay_ticks) + int(bullet.burst_index) * int(row.source.pattern.interval_ticks)
-	if int(bullet.bullet_spawn_tick) != expected_spawn_tick or int(bullet.lifetime_end_tick) != expected_spawn_tick + int(profile.lifetime_ticks):
+	if expected_spawn_tick > int(payload.schedule_cursor_tick):
 		return false
-	if int(bullet.collision_enable_tick) < expected_spawn_tick or int(bullet.collision_enable_tick) > int(bullet.lifetime_end_tick):
+	if expected_spawn_tick < int(source_state.activated_tick) or (int(source_state.removed_tick) >= 0 and expected_spawn_tick > int(source_state.removed_tick)):
 		return false
-	if int(bullet.reflection_count) != int(bullet.stage2_reflection_count) or int(bullet.next_reflection_index) != int(bullet.reflection_count):
+	var binding_state := _state_from_snapshot_binding(bullet.state_binding)
+	if binding_state.is_empty() or not _historical_binding_reachable(bullet.state_binding, payload, spawn_id, expected_spawn_tick):
 		return false
-	if int(bullet.reflection_count) == 0 and (bullet.first_reflection_tick != null or bullet.last_reflection_surface_id != null):
+	var expected := _construct_bullet(row, profile, int(bullet.burst_index), int(bullet.shot_index), expected_spawn_tick, binding_state)
+	if expected.is_empty():
 		return false
-	return _is_canonical_value(bullet)
+	for key in BULLET_RECONSTRUCTED_KEYS:
+		if bullet[key] != expected[key]:
+			return false
+	var uid_parts := uid.split(":", false)
+	if uid_parts.size() != 6 or uid_parts[0] != _stage_run_uid or uid_parts[1] != String(row.event_id) or uid_parts[2] != spawn_id or uid_parts[3] != String(bullet.emitter_id) or int(uid_parts[4]) != int(bullet.burst_index) or int(uid_parts[5]) != int(bullet.shot_index):
+		return false
+	if bullet.stage2_bullet_uid != uid or bullet.stage2_source_event_id != String(row.event_id) or bullet.stage2_source_spawn_id != spawn_id or bullet.stage2_source_enemy_id != String(row.enemy_id):
+		return false
+	if bullet.stage2_primitive != String(row.source.pattern.primitive) or bullet.stage2_routing != String(row.source.pattern.routing):
+		return false
+	if bullet.stage2_bullet_spawn_tick != bullet.bullet_spawn_tick or bullet.stage2_collision_enable_tick != bullet.collision_enable_tick or bullet.stage2_lifetime_end_tick != bullet.lifetime_end_tick:
+		return false
+	if int(bullet.removal_tick) <= int(payload.schedule_cursor_tick):
+		return false
+	var expected_reflections := 0
+	for turn_value in bullet.reflection_plan:
+		if int((turn_value as Dictionary).tick) <= int(payload.schedule_cursor_tick):
+			expected_reflections += 1
+	if bullet.reflection_count != expected_reflections or bullet.next_reflection_index != expected_reflections or bullet.stage2_reflection_count != expected_reflections:
+		return false
+	var expected_position: Array = expected.position.duplicate()
+	var expected_velocity: Array = expected.velocity_px_per_second.duplicate()
+	var expected_first: Variant = null
+	var expected_last: Variant = null
+	if expected_reflections > 0:
+		var last_turn: Dictionary = bullet.reflection_plan[expected_reflections - 1]
+		expected_position = (last_turn.waypoint as Array).duplicate()
+		expected_velocity = (last_turn.velocity_after_px_per_second as Array).duplicate()
+		expected_first = int((bullet.reflection_plan[0] as Dictionary).tick)
+		expected_last = String(last_turn.surface_id)
+	elif String(bullet.source_primitive) == "delayed_seed" and int(payload.schedule_cursor_tick) >= int(bullet.collision_enable_tick):
+		expected_velocity = (bullet.activation_velocity_px_per_second as Array).duplicate()
+	if bullet.position != expected_position or bullet.velocity_px_per_second != expected_velocity:
+		return false
+	if bullet.first_reflection_tick != expected_first or bullet.stage2_first_reflection_tick != expected_first or bullet.last_reflection_surface_id != expected_last or bullet.stage2_last_reflection_surface_id != expected_last:
+		return false
+	var was_grazed := uid in payload.grazed_uids
+	if was_grazed:
+		if typeof(bullet.graze_tick) != TYPE_INT or expected_reflections < 1 or int(bullet.graze_tick) < int(expected_first) or int(bullet.graze_tick) > int(payload.last_stage_tick):
+			return false
+		if String(row.source.pattern.primitive) != "rebound_bead" or "rebound_graze_uid" not in (row.source.score_route_hooks as Array):
+			return false
+		if not _snapshot_has_callback_payload(payload.processed_callbacks, "observe_graze", int(bullet.graze_tick), {"bullet_uid": uid}):
+			return false
+	elif bullet.graze_tick != null:
+		return false
+	return true
+
+func _state_from_snapshot_binding(binding: Dictionary) -> Dictionary:
+	var expected_keys: Array = STATE_BINDING_KEYS.duplicate()
+	if binding.has("selected_lane_id"):
+		expected_keys.append("selected_lane_id")
+	if not _has_exact_keys(binding, expected_keys):
+		return {}
+	for key in ["stage_front_revision_id", "blue_emission_state_id", "yellow_emission_state_id", "selected_mirror_spawn_id"]:
+		if typeof(binding[key]) != TYPE_STRING:
+			return {}
+	if typeof(binding.mirror_activation_mask) != TYPE_INT:
+		return {}
+	if binding.has("selected_lane_id") and (typeof(binding.selected_lane_id) != TYPE_STRING or not LANE_CENTERS.has(String(binding.selected_lane_id))):
+		return {}
+	var selected := String(binding.selected_mirror_spawn_id)
+	var mask := int(binding.mirror_activation_mask)
+	if selected.is_empty() and mask != 0:
+		return {}
+	if not selected.is_empty() and (selected not in ["s2_b15_left_mirror", "s2_b15_right_mirror"] or mask not in [_mirror_base_mask(selected), _mirror_base_mask(selected) | 4]):
+		return {}
+	if _difficulty == "normal":
+		if String(binding.blue_emission_state_id) != "pre_red" or String(binding.yellow_emission_state_id) != "pre_mirror" or String(binding.stage_front_revision_id) != "stage_front_initial":
+			return {}
+	else:
+		if String(binding.blue_emission_state_id) not in ["pre_red", "post_red"]:
+			return {}
+		if selected.is_empty():
+			if String(binding.yellow_emission_state_id) != "pre_mirror":
+				return {}
+			if String(binding.stage_front_revision_id) not in (["stage_front_initial"] if String(binding.blue_emission_state_id) == "pre_red" else ["stage_front_after_red_neighbor_flip", "stage_front_after_blue_neighbor_flip"]):
+				return {}
+		else:
+			var expected_yellow := "mapped_after_left_mirror" if selected == "s2_b15_left_mirror" else "mapped_after_right_mirror"
+			var expected_revision := "stage_front_after_left_horizontal_transform" if selected == "s2_b15_left_mirror" else "stage_front_after_right_diagonal_transform"
+			if String(binding.yellow_emission_state_id) != expected_yellow or String(binding.stage_front_revision_id) != expected_revision:
+				return {}
+	var surviving := _opposite_mirror_spawn_id(selected)
+	return {
+		"stage_front_revision_id": String(binding.stage_front_revision_id),
+		"blue_emission_state_id": String(binding.blue_emission_state_id),
+		"yellow_emission_state_id": String(binding.yellow_emission_state_id),
+		"selected_mirror_spawn_id": selected,
+		"surviving_mirror_spawn_id": surviving,
+		"mirror_activation_mask": mask,
+	}
+
+func _historical_binding_reachable(binding: Dictionary, payload: Dictionary, spawn_id: String, spawn_tick: int) -> bool:
+	var current_state: Dictionary = payload.hard_state
+	var historical_selected := String(binding.selected_mirror_spawn_id)
+	var current_selected := String(current_state.selected_mirror_spawn_id)
+	if not historical_selected.is_empty() and historical_selected != current_selected:
+		return false
+	var red_defeated := "s2_b13_red_booth_master" in payload.defeated_sources
+	var red_tick := int((payload.source_states["s2_b13_red_booth_master"] as Dictionary).removed_tick)
+	var blue_defeated := "s2_b13_blue_booth_master" in payload.defeated_sources
+	var blue_tick := int((payload.source_states["s2_b13_blue_booth_master"] as Dictionary).removed_tick)
+	if String(binding.blue_emission_state_id) == "post_red":
+		if _difficulty != "hard" or not red_defeated or red_tick > spawn_tick:
+			return false
+	elif _difficulty == "hard" and red_defeated and red_tick < spawn_tick:
+		return false
+	var revision := String(binding.stage_front_revision_id)
+	var red_transition_key: Array = []
+	var blue_transition_key: Array = []
+	if red_defeated:
+		red_transition_key = _snapshot_callback_key(payload.processed_callbacks, "accept_defeat", red_tick, {"spawn_id": "s2_b13_red_booth_master"})
+	if blue_defeated:
+		blue_transition_key = _snapshot_callback_key(payload.processed_callbacks, "accept_defeat", blue_tick, {"spawn_id": "s2_b13_blue_booth_master"})
+	if revision == "stage_front_after_blue_neighbor_flip":
+		if not blue_defeated or not red_defeated or blue_tick > spawn_tick:
+			return false
+		if not _callback_key_precedes(red_transition_key, blue_transition_key):
+			return false
+	elif revision == "stage_front_after_red_neighbor_flip":
+		if not red_defeated or red_tick > spawn_tick:
+			return false
+		if blue_defeated:
+			if _callback_key_precedes(red_transition_key, blue_transition_key) and blue_tick < spawn_tick:
+				return false
+	if historical_selected.is_empty():
+		if not current_selected.is_empty():
+			var current_selection_tick := int((payload.source_states[current_selected] as Dictionary).removed_tick)
+			if current_selection_tick < spawn_tick:
+				return false
+	else:
+		var historical_selection_tick := int((payload.source_states[historical_selected] as Dictionary).removed_tick)
+		if historical_selection_tick > spawn_tick:
+			return false
+		var surviving := _opposite_mirror_spawn_id(historical_selected)
+		var survivor_tick := int((payload.source_states[surviving] as Dictionary).removed_tick)
+		var base_mask := _mirror_base_mask(historical_selected)
+		var historical_mask := int(binding.mirror_activation_mask)
+		if survivor_tick < 0 or survivor_tick > spawn_tick:
+			if historical_mask != (base_mask | 4):
+				return false
+		elif survivor_tick < spawn_tick and historical_mask != base_mask:
+			return false
+	if spawn_id == "s2_b16_abacus_keeper" and int(binding.mirror_activation_mask) not in [5, 6]:
+		return false
+	return true
+
+func _valid_hex_digest(value: String) -> bool:
+	if value.length() != 64:
+		return false
+	for index in range(value.length()):
+		var code := value.unicode_at(index)
+		if not (code >= 48 and code <= 57) and not (code >= 97 and code <= 102):
+			return false
+	return true
 
 func _valid_fingerprint(value: String, primitive: String) -> bool:
 	var parts := value.split("|", true)
