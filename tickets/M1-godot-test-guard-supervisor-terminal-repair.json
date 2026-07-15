@@ -1,0 +1,57 @@
+{
+  "id": "M1-godot-test-guard-supervisor-terminal-repair",
+  "objective": "Repair only the final supervisor-terminal blockers returned by deep_reviewer run 20260714T210656Z-M1-godot-test-guard-final-adversarial-review-deep_reviewer-02852cd2 for candidate 5e98f8b2e3ef5ae6777e34c512a8b967a270b460. Preserve the frozen same-script supervisor/worker architecture and all approved containment, ABI, cleanup, capture, identity, deadline, and protocol mechanisms. Within exactly two files: remove synchronous Add-Type from the public supervisor bootstrap while keeping continuously bounded drains; make watcher job-handle use/attach/detach/close lifetime-safe; keep a durable non-owning mutex handle in an unconfirmed surviving worker and enforce exactly one emergency grace with fail-closed kill/wait errors; observe authenticated CLEANUP_BEGIN while the worker is live so any later deadline/loss is CleanupFailure; classify every same-image headless process with zero/duplicate/malformed project paths as Ambiguous while ignoring a verified different image before command parsing; validate immutable raw protocol frames and integral/state domains before assignment; cap the complete quoted worker command below the Windows limit; and track an unstarted worker so Start failure still emits exactly one LaunchFailure JSON. Add real deterministic evidence for every branch. Launch real Godot zero times and do not change fake_engine.py or any gameplay/audio/plan/bridge/config file.",
+  "mode": "write",
+  "allowed_paths": [
+    "tools/testing/invoke_godot_test.ps1",
+    "tools/testing/tests/test_invoke_godot_test.py"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "tools/agents/**",
+    "tools/testing/tests/fake_engine.py",
+    "AGENTS.md",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "content/**",
+    "docs/**",
+    "tests/**",
+    ".godot/**"
+  ],
+  "dependency_commit": "5e98f8b2e3ef5ae6777e34c512a8b967a270b460",
+  "acceptance_commands": [
+    "python -m unittest tools.testing.tests.test_invoke_godot_test -v",
+    "$ErrorActionPreference='Stop'; $tokens=$null; $errors=$null; $null=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/testing/invoke_godot_test.ps1'),[ref]$tokens,[ref]$errors); if($errors.Count -ne 0){throw ($errors|Out-String)}; Write-Host 'POWERSHELL_PARSE=pass'",
+    "$changed=@(git status --porcelain -uall|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $allowed=@('tools/testing/invoke_godot_test.ps1','tools/testing/tests/test_invoke_godot_test.py'); $outside=@($changed|Where-Object{$_-notin $allowed}); if($outside.Count -ne 0){throw \"Outside changes: $($outside -join ',')\"}; $temps=@(Get-ChildItem tools/testing/tests -Force -Directory -ErrorAction SilentlyContinue|Where-Object Name -Match '^(?:_test_work|\\.invoke_godot_test_|debug_)'); if($temps.Count -ne 0){throw \"Temporary test artifacts remain: $($temps.Name -join ',')\"}; Write-Host 'PATH_SCOPE=pass'",
+    "git diff --check 5e98f8b2e3ef5ae6777e34c512a8b967a270b460 -- tools/testing/invoke_godot_test.ps1 tools/testing/tests/test_invoke_godot_test.py"
+  ],
+  "output_requirements": [
+    "Map every failure in review run 20260714T210656Z-M1-godot-test-guard-final-adversarial-review-deep_reviewer-02852cd2 to exact repaired code and a deterministic test that reaches the real resource/state branch",
+    "Report supervisor S0-S6 and worker W0-W8 compliance, supervisor bootstrap bounds, watcher handle ownership, durable mutex lifetime, cleanup-phase precedence, command classifier ordering, immutable protocol validation, complete command bound, and unstarted Process handling",
+    "Report every focused test result, all four acceptance exits, exact changed files, zero temporary artifacts, and real Godot launch count zero",
+    "Do not report completion if any listed blocker remains a residual risk; another independent static review remains mandatory"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "GATE: REPAIR is authoritative and grants no real Godot smoke. The complete report is .agent-runs/20260714T210656Z-M1-godot-test-guard-final-adversarial-review-deep_reviewer-02852cd2/final.json in the main repository.",
+    "Supervisor bootstrap blocker at runner lines 92-97,327: do not synchronously compile/load ProtocolPump with Add-Type in the public supervisor. Use already-loaded framework APIs and bounded asynchronous reads whose initialization and operation remain inside the absolute deadline; add deterministic bootstrap stall/failure evidence.",
+    "Watcher lifetime blocker at lines 187,212-213,260: copying a raw job handle under Gate is insufficient. Duplicate a valid job handle under the gate or enforce one ownership protocol that keeps the handle live through TerminateJobObject, detach, and close; add forced concurrent supervisor-death/detach evidence.",
+    "Unconfirmed worker blocker at lines 331,335,345-347: before mutation, the worker must retain a non-owning handle to the named mutex so the object survives supervisor exit. Kill and wait exceptions must become deterministic CleanupFailure. Prove exactly one fixed grace, a truly surviving worker, and a sequential contender blocked until containment; never use pre-resource synthetic denial/abandonment as evidence.",
+    "Cleanup precedence blocker at lines 295,335,338,343: authenticate and record CLEANUP_BEGIN as frames arrive, not only after worker exit. Any deadline, worker loss, or uncertain termination after cleanup begins is CleanupFailure. Add a deterministic slow or unconfirmed retained-target cleanup case.",
+    "Classifier blocker at lines 226,229: after verifying the retained image, every same-image headless candidate requires exactly one absolute accessible project path before VerifiedOther/VerifiedTarget. Zero/duplicate/malformed paths are Ambiguous. A verified different image may be ignored before parsing its command line. Add real-process zero-path and collateral-image tests.",
+    "Protocol blocker at lines 329,339-343: validate an immutable raw READY/CLEANUP_BEGIN/FINAL frame against exact property sets, required types, integral domains, phase consistency, Success exit zero, cleanedPids only after CLEANUP_BEGIN, and project/log consistency before copying any value. Pre-deadline empty/missing/malformed protocol and worker Start failure are LaunchFailure; deadline is Timeout only before cleanup begins.",
+    "Transport/Start blocker at lines 62-85,326-327,345: cap argument count, UTF-8 aggregate, base64 transport, and the complete Windows-quoted worker command to a supported conservative bound. Track workerCreated and workerStarted separately; never HasExited/Kill/Wait an unstarted Process; always produce exactly one public JSON. Add aggregate-byte, quoted-command and genuine Start failure tests.",
+    "B11 evidence must additionally include watcher detach/close concurrency, cleanup deadline, empty frame, missing/fractional fields, cleanedPids without CLEANUP_BEGIN, and unconfirmed one-grace sequential contention. Fault seams may only pause or force failure after real authority/resource acquisition and cannot synthesize successful identities, handles, PIDs, paths, or cleanup authority.",
+    "Run targeted tests during repair. After the last code change, run the revised focused suite once plus parser/scope/diff gates. Do not run a full repository suite or launch Godot. After success, a different deep_reviewer must perform a read-only static gate before exactly one guarded smoke.",
+    "This is a new review-directed correction ticket for the same test_performance Agent identity after the prior implementation lineage closed successfully. Start at profile default gpt-5.6-terra/high. If this ticket itself fails, resume its same session/worktree at escalation level 1; after success later fresh tickets again use Terra/high."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
