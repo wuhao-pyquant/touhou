@@ -1,0 +1,33 @@
+{
+  "id": "M1-godot-test-guard-final-order-review",
+  "objective": "Perform the independent read-only final static gate for candidate 770181c954567c3610a8d276eca3b5715f9b68f4. Review the complete Godot guard delta and specifically close the only two blockers from GATE: REPAIR run 20260715T015036Z-M1-godot-test-guard-final-terminal-review-deep_reviewer-b8b40bc4. B1 requires proof in test 36 that the first supervisor has already exited with exactly one CleanupFailure JSON and a nonzero exit while its real worker remains alive and retains mutex exclusion, before a sequential contender is launched and returns LockContention, with worker termination only afterward. B2 requires one centralized authenticated CLEANUP_BEGIN parser after every relevant protocol-pump update and terminal drain, before pump/error/incomplete/frame-count/FINAL classification, preserving CleanupFailure precedence without a second grace. Change zero files, run zero tests, and launch Godot zero times. Return GATE: APPROVE only if exactly one guarded real-Godot smoke is now safe; otherwise return GATE: REPAIR with exact lines and the smallest correction.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": [
+    "**"
+  ],
+  "dependency_commit": "770181c954567c3610a8d276eca3b5715f9b68f4",
+  "acceptance_commands": [
+    "if((git rev-parse HEAD).Trim() -ne '770181c954567c3610a8d276eca3b5715f9b68f4'){throw 'Wrong candidate HEAD'}; Write-Host 'STATIC_REVIEW_HEAD=pass'",
+    "$changed=@(git diff --name-only 095653c19ee299208c4eb5387d6cada3bb1d65d2..HEAD); $expected=@('tools/testing/invoke_godot_test.ps1','tools/testing/tests/fake_engine.py','tools/testing/tests/test_invoke_godot_test.py'); if(Compare-Object $expected $changed){throw \"Unexpected candidate paths: $($changed -join ',')\"}; Write-Host 'STATIC_REVIEW_SCOPE=pass'",
+    "git diff 095653c19ee299208c4eb5387d6cada3bb1d65d2..HEAD --check",
+    "if(git status --porcelain){throw 'Reviewer worktree is not clean'}; Write-Host 'STATIC_REVIEW_CLEAN=pass'"
+  ],
+  "output_requirements": [
+    "State GATE: APPROVE or GATE: REPAIR in the summary; APPROVE is the only authorization for exactly one guarded real-Godot smoke",
+    "Map B1 and B2 from run 20260715T015036Z-M1-godot-test-guard-final-terminal-review-deep_reviewer-b8b40bc4 to exact final code and real ordering evidence, including the post-supervisor worker liveness and sequential LockContention sequence",
+    "Confirm the centralized cleanup parser is invoked after live and terminal pump updates before every relevant failure/final decision, rejects malformed or duplicate phase transitions, and adds no second cleanup grace",
+    "Reconfirm every previously approved guard invariant remains intact across S0-S6 and W0-W8; for any blocker cite exact file/line, mechanism, severity, and smallest correction",
+    "Report actual runtime identity, exact commands, zero changed files, tests not rerun, and real Godot launch count zero"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "Implementation run .agent-runs/20260715T020419Z-M1-godot-test-guard-terminal-order-repair-test_performance-18cf7498/final.json records 37/37 passing in 190.141 seconds plus parser/scope/diff gates and zero real Godot launches. Treat this only as supplied evidence; do not duplicate tests.",
+    "The authoritative preceding review is .agent-runs/20260715T015036Z-M1-godot-test-guard-final-terminal-review-deep_reviewer-b8b40bc4/final.json. It approved all earlier items except B1 and B2.",
+    "Candidate ancestry contains unrelated gameplay work. Review only the guard delta from 095653c19ee299208c4eb5387d6cada3bb1d65d2 through 770181c954567c3610a8d276eca3b5715f9b68f4 and never authorize whole-branch integration; release_lead will cherry-pick individual guard commits after approval.",
+    "Do not run Godot, project GDScript, fake-engine tests, or a repository suite. Read code, diffs, tickets, and existing evidence only.",
+    "Current main-worktree audio/**/*.import modifications are user/environment state outside this detached review and must not be inspected, reset, staged, or mentioned as candidate changes."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
