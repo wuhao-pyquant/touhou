@@ -2378,7 +2378,7 @@ func _stage2_begin_field_event(event: Dictionary) -> bool:
 			return false
 		if not _stage2_field_callback("clear_field_bullets", authored_tick, {"reason": "midboss_gate_exit"}):
 			return false
-	var carryover := _stage2_actual_live_carryover(event_id)
+	var carryover: Variant = _stage2_actual_live_carryover(event_id)
 	if carryover == null:
 		return false
 	if not _stage2_field_callback("activate_event", authored_tick, {"event_id": event_id, "active_entity_ids": carryover}):
@@ -2841,12 +2841,12 @@ func _stage2_field_point_is_valid(value: Variant) -> bool:
 	return true
 
 func _stage2_field_visual_for_primitive(primitive: String) -> Dictionary:
-	var family_id := {
+	var family_id: String = String({
 		"rebound_bead": "circle",
 		"grid_edge": "needle",
 		"lane_fan": "rice",
 		"delayed_seed": "spiral_seed",
-	}.get(primitive, "")
+	}.get(primitive, ""))
 	if String(family_id) == "" or game_database_ref == null:
 		return {}
 	var family: Dictionary = game_database_ref.bullet_family_by_id(String(family_id))
