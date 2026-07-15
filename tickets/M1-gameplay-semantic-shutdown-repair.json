@@ -1,0 +1,63 @@
+{
+  "id": "M1-gameplay-semantic-shutdown-repair",
+  "objective": "Repair the four semantic blockers from core_simulation static review run 20260714T171459Z-M1-gameplay-systems-static-review-core_simulation-5bc8ac02 and the deterministic shutdown leak exposed by the one authorized guarded smoke on candidate 770181c954567c3610a8d276eca3b5715f9b68f4. (1) A first unresolved player hit may prime one deathbomb window; later bullets and later ticks must neither refresh nor reopen it. (2) Use one explicit post-hit cap rule so persistent/piercing player shots retire at max_hits on both Boss and ordinary-enemy paths, while returning-blade outbound/return identity and cooldown remain deterministic. Validate gameplay-owned behavior, hit_ledger, and hit_count data before aggregate restore without changing BulletWorld's frozen public interface. (3) Forward StageDirector event drop_item_ids through the real wave-spawn path and distinguish a missing field, which may use the narrow legacy fallback, from an explicitly authored empty array, which means no drops. Authored trajectories must not consume gameplay RNG. (4) Reject impossible gameplay ledgers before mutation: active/highest multipliers in [1,2], highest >= active, total frames >= 1, captures <= attempts, coherent active-card fields and capture result shape. (5) Add an idempotent production shutdown path that releases script-owned RefCounted/runtime references and caches early enough for both the main scene and standalone test shells. Existing evidence proves the baseline main smoke leaked 8 ObjectDB/3 resources and the M1 candidate leaked 10/4; the guarded smoke failed FatalOutput with 10/4 despite engine exit 0. Fix the ownership lifecycle, not the guard: do not filter, suppress, redirect, whitelist, or reclassify warnings/errors. Add the smallest behavioral regressions for all five areas, but launch Godot zero times in this implementation ticket; executable verification requires a separate read-only gate and newly authorized guarded commands.",
+  "mode": "write",
+  "allowed_paths": [
+    "autoload/game_manager.gd",
+    "scripts/main.gd",
+    "scripts/player/player_shot_executor.gd",
+    "scripts/runtime/gameplay_score_system.gd",
+    "scripts/runtime/item_reward_system.gd",
+    "tests/assert_m1_gameplay_systems.gd",
+    "tests/assert_m1_shot_mechanics.gd",
+    "tests/assert_phase8_regressions.gd"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "tools/**",
+    "AGENTS.md",
+    "project.godot",
+    "content/**",
+    "docs/**",
+    "scenes/**",
+    "scripts/content/**",
+    "scripts/data/**",
+    "scripts/replay/**",
+    "scripts/runtime/bullet_world.gd",
+    "scripts/runtime/fixed_tick_clock.gd",
+    "scripts/runtime/deterministic_rng.gd",
+    "scripts/runtime/gameplay_input_buffer.gd",
+    "scripts/runtime/simulation_state_hasher.gd",
+    "scripts/ui/**",
+    "tests/fixtures/**",
+    ".godot/**"
+  ],
+  "dependency_commit": "770181c954567c3610a8d276eca3b5715f9b68f4",
+  "acceptance_commands": [
+    "git diff --check 770181c954567c3610a8d276eca3b5715f9b68f4 -- autoload/game_manager.gd scripts/main.gd scripts/player/player_shot_executor.gd scripts/runtime/gameplay_score_system.gd scripts/runtime/item_reward_system.gd tests/assert_m1_gameplay_systems.gd tests/assert_m1_shot_mechanics.gd tests/assert_phase8_regressions.gd",
+    "$changed=@(git status --porcelain -uall|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $allowed=@('autoload/game_manager.gd','scripts/main.gd','scripts/player/player_shot_executor.gd','scripts/runtime/gameplay_score_system.gd','scripts/runtime/item_reward_system.gd','tests/assert_m1_gameplay_systems.gd','tests/assert_m1_shot_mechanics.gd','tests/assert_phase8_regressions.gd'); $outside=@($changed|Where-Object{$_-notin $allowed}); if($outside.Count-ne 0){throw \"Outside changes: $($outside -join ',')\"}; Write-Host 'PATH_SCOPE=pass'",
+    "if(@(Get-Process|Where-Object ProcessName -Like 'Godot*').Count-ne 0){throw 'Godot process exists in implementation ticket'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Map all four review blockers and the shutdown leak to exact repaired production paths and deterministic regression assertions",
+    "Explain the missing-versus-explicit-empty drop contract and prove authored spawn/drop paths do not consume gameplay RNG",
+    "Report deathbomb first-hit ordering, shared max-hit retirement logic, gameplay-owned snapshot invariants, and unchanged-live-state rejection evidence",
+    "Report the idempotent shutdown ownership graph and why it releases the M0 baseline owners plus the M1 score-system owner; do not claim the leak is gone until guarded executable verification",
+    "Report exact changed files, diff/scope/process gates, Godot launch count zero, and leave independent static review plus minimal guarded verification as the only residual gates"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "Authoritative semantic findings are in .agent-runs/20260714T171459Z-M1-gameplay-systems-static-review-core_simulation-5bc8ac02/final.json. Preserve every item that review approved.",
+    "Guarded smoke evidence is C:/Users/e/AppData/Local/Temp/godot-m1-one-authorized-guarded-smoke.log.stderr: engine exit 0, 10 ObjectDB instances leaked, 4 resources still in use, runner category FatalOutput, and zero Godot processes before/after. The one authorization is consumed; do not launch Godot in this ticket.",
+    "Historical console evidence already contains the same 10/4 M1 leak, while the M0 fixture main smoke contains 8/3. This is lifecycle debt that older narrow regexes failed to reject, not a new guard regression.",
+    "Public simulation clocks, RNG, replay serialization, BulletWorld interface, guard scripts, Agent bridge, content data, and assets are frozen. Validate gameplay-owned per-bullet fields from Main rather than editing scripts/runtime/bullet_world.gd.",
+    "This is a fresh review-directed correction for the same gameplay_systems Agent identity after its prior successful ticket lineage closed. Start at the restored profile default gpt-5.6-sol/high. If it fails, resume this same session/worktree at escalation level 1."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
