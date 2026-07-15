@@ -20,6 +20,28 @@ TRACE_SCHEMA_VERSION = 1
 PLAYFIELD_WIDTH = 720
 PLAYFIELD_HEIGHT = 960
 
+# This is deliberately independent of the authored M1 card contract above.  The
+# Stage 2 producer is not available yet; these constants define the narrow v1
+# capture contract that its Release build must satisfy.
+STAGE2_CAPTURE_SCHEMA_VERSION = 1
+STAGE2_PHASE_ORDER = (
+    "stage_2_midboss_nonspell_1",
+    "stage_2_midboss_spell_1",
+    "stage_2_boss_nonspell_1",
+    "stage_2_boss_spell_1",
+    "stage_2_boss_spell_2",
+    "stage_2_boss_spell_3",
+)
+STAGE2_HEADER = {
+    "record_type": "m2_stage2_runtime_capture_header",
+    "schema_version": STAGE2_CAPTURE_SCHEMA_VERSION,
+    "evidence_kind": "real_runtime_capture",
+    "source": "main_bullet_world",
+    "build_kind": "release",
+    "stage_id": "youkai_market",
+    "simulation_hz": 60,
+}
+
 
 class ToolError(ValueError):
     """An input-contract error that must produce a nonzero CLI exit code."""
@@ -296,7 +318,8 @@ def _percentile(values: list[float], fraction: float) -> float:
     return ordered[max(0, math.ceil(fraction * len(ordered)) - 1)]
 
 
-def _heatmap_svg(grid: list[list[int]], cell_width: int, cell_height: int, maximum: int) -> str:
+def _heatmap_svg(grid: list[list[int]], cell_width: int, cell_height: int, maximum: int,
+                 title: str = "M1 trace occupancy heatmap") -> str:
     rectangles = []
     for row_index, row in enumerate(grid):
         for column_index, count in enumerate(row):
@@ -304,7 +327,7 @@ def _heatmap_svg(grid: list[list[int]], cell_width: int, cell_height: int, maxim
             rectangles.append('<rect x="%d" y="%d" width="%d" height="%d" fill="rgb(255,%d,%d)"/>' %
                               (column_index * cell_width, row_index * cell_height, cell_width, cell_height, shade, shade))
     return ('<svg xmlns="http://www.w3.org/2000/svg" width="720" height="960" viewBox="0 0 720 960">'
-            '<title>M1 trace occupancy heatmap</title><rect width="720" height="960" fill="rgb(255,255,255)"/>' +
+            '<title>%s</title><rect width="720" height="960" fill="rgb(255,255,255)"/>' % title +
             "".join(rectangles) + "</svg>\n")
 
 
@@ -334,6 +357,269 @@ def analyze(header: dict[str, Any], frames: list[dict[str, Any]], start: int, en
               "rows": rows, "cell_width": cell_width, "cell_height": cell_height, "occupancy": grid},
               "frame_time_ms": {"percentile_method": "nearest_rank", "p50": _percentile(times, .50), "p95": _percentile(times, .95), "p99": _percentile(times, .99)}}
     return result, _heatmap_svg(grid, cell_width, cell_height, maximum)
+
+
+def _nonnegative_int(value: Any, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ToolError("%s must be a nonnegative integer" % name)
+    return value
+
+
+def _stage2_header(header: dict[str, Any]) -> dict[str, Any]:
+    """Validate the identity claim before accepting any capture sample.
+
+    The v1 contract is JSONL with one header, contiguous `tick` samples and one
+    `render_frame` for every tick, event/phase-ledger records, then one complete
+    footer.  A tick contains `tick`, `simulation_time_s`, `phase_id`, and a
+    `bullets` list of `{id, x, y}`.  A render frame contains `frame_index`,
+    `tick`, `present_time_s`, and `frame_time_ms`.  Events contain `event`,
+    `tick`, and `time_s`; phase ledgers contain `phase_id`, `start_tick`,
+    `end_tick`, `time_to_clear_ms`, `score_delta`, `drop_count`, and
+    `capture_count`.
+
+    This intentionally rejects an authored preview, synthetic source, debug
+    build, missing windowed identity, or a headless claim.  Unknown record types
+    also fail closed so a partial/new producer cannot be misreported as v1
+    runtime evidence.
+    """
+    for key, expected in STAGE2_HEADER.items():
+        if header.get(key) != expected:
+            raise ToolError("stage2 header %s must equal %r" % (key, expected))
+    if header.get("playfield") != {"width": PLAYFIELD_WIDTH, "height": PLAYFIELD_HEIGHT}:
+        raise ToolError("stage2 header playfield must be exactly 720x960")
+    difficulty = header.get("difficulty")
+    if not isinstance(difficulty, str) or difficulty.lower() not in {"normal", "hard"}:
+        raise ToolError("stage2 header difficulty must identify Normal or Hard")
+    if not isinstance(header.get("run_seed"), int) or isinstance(header.get("run_seed"), bool):
+        raise ToolError("stage2 header run_seed must be an integer")
+    if header.get("runtime_evidence") is not True:
+        raise ToolError("stage2 header runtime_evidence must be true")
+    if header.get("execution_mode") != "windowed" or header.get("headless") is not False:
+        raise ToolError("stage2 header must declare execution_mode=windowed and headless=false")
+    normalized = dict(header)
+    normalized["difficulty"] = difficulty.lower()
+    return normalized
+
+
+def _stage2_bullet_samples(row: dict[str, Any], tick: int) -> list[dict[str, Any]]:
+    bullets = row.get("bullets")
+    if not isinstance(bullets, list):
+        raise ToolError("stage2 tick %d bullets must be a list" % tick)
+    identifiers: set[str] = set()
+    normalized: list[dict[str, Any]] = []
+    for bullet in bullets:
+        if not isinstance(bullet, dict) or not isinstance(bullet.get("id"), str) or not bullet["id"]:
+            raise ToolError("stage2 tick %d contains a bullet without a stable string id" % tick)
+        identifier = bullet["id"]
+        if identifier in identifiers:
+            raise ToolError("stage2 tick %d contains duplicate active bullet id %s" % (tick, identifier))
+        identifiers.add(identifier)
+        x = _finite_number(bullet.get("x"), "stage2 bullet.x")
+        y = _finite_number(bullet.get("y"), "stage2 bullet.y")
+        if not (0 <= x < PLAYFIELD_WIDTH and 0 <= y < PLAYFIELD_HEIGHT):
+            raise ToolError("stage2 tick %d contains an out-of-bounds active bullet" % tick)
+        normalized.append({"id": identifier, "x": x, "y": y})
+    return normalized
+
+
+def _stage2_expected_events() -> list[tuple[str, str | None]]:
+    expected: list[tuple[str, str | None]] = [("stage_started", None)]
+    for phase_id in STAGE2_PHASE_ORDER:
+        expected.extend((("phase_gate_open", phase_id), ("phase_started", phase_id), ("phase_cleared", phase_id)))
+    expected.append(("stage_cleared", None))
+    return expected
+
+
+def _stage2_curve_svg(curve: list[dict[str, int]], title: str) -> str:
+    maximum = max((sample["active_bullets"] for sample in curve), default=0)
+    denominator = max(1, len(curve) - 1)
+    points = " ".join("%d,%d" % (round(720 * index / denominator),
+                                  220 if maximum == 0 else 220 - round(200 * sample["active_bullets"] / maximum))
+                      for index, sample in enumerate(curve))
+    return ('<svg xmlns="http://www.w3.org/2000/svg" width="720" height="240" viewBox="0 0 720 240">'
+            '<title>%s</title><rect width="720" height="240" fill="rgb(255,255,255)"/>'
+            '<line x1="0" y1="220" x2="720" y2="220" stroke="rgb(100,100,100)"/>'
+            '<polyline fill="none" stroke="rgb(180,0,0)" stroke-width="2" points="%s"/></svg>\n' % (title, points))
+
+
+def read_stage2_capture(capture_path: Path) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]],
+                                                       list[dict[str, Any]], list[dict[str, Any]]]:
+    """Read the strict Stage 2 v1 real-runtime JSONL contract.
+
+    Return header, normalized ticks, normalized render frames, events, and
+    ordered phase ledgers.  Every violation raises ToolError for a nonzero CLI
+    exit; callers must not treat a returned report as actual game evidence.
+    """
+    records = _read_jsonl(capture_path)
+    if len(records) < 3 or records[0].get("record_type") != STAGE2_HEADER["record_type"]:
+        raise ToolError("stage2 capture must begin with its v1 runtime header")
+    header = _stage2_header(records[0])
+    if records[-1].get("record_type") != "footer":
+        raise ToolError("stage2 capture must end with one complete footer")
+    allowed_types = {STAGE2_HEADER["record_type"], "tick", "render_frame", "event", "phase_ledger", "footer"}
+    for index, record in enumerate(records):
+        record_type = record.get("record_type")
+        if record_type not in allowed_types:
+            raise ToolError("stage2 capture record %d has unknown record_type" % index)
+        if index and record_type == STAGE2_HEADER["record_type"]:
+            raise ToolError("stage2 capture contains a duplicate header")
+        if index != len(records) - 1 and record_type == "footer":
+            raise ToolError("stage2 capture footer must be the final record")
+        for key, required in (("evidence_kind", "real_runtime_capture"), ("source", "main_bullet_world"),
+                              ("build_kind", "release")):
+            if key in record and record[key] != required:
+                raise ToolError("stage2 capture record %d has a non-runtime %s claim" % (index, key))
+        if record.get("runtime_evidence") is False:
+            raise ToolError("stage2 capture record %d denies runtime evidence" % index)
+        if record.get("headless") is True or record.get("execution_mode") == "headless":
+            raise ToolError("stage2 capture record %d contains a headless claim" % index)
+
+    footer = records[-1]
+    if footer.get("complete") is not True:
+        raise ToolError("stage2 footer complete must be true")
+    for key in ("hard_error_count", "overflow_count", "out_of_bounds_count", "death_count"):
+        if _nonnegative_int(footer.get(key), "stage2 footer %s" % key) != 0:
+            raise ToolError("stage2 footer %s must be zero" % key)
+
+    ticks: list[dict[str, Any]] = []
+    renders: list[dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
+    ledgers: list[dict[str, Any]] = []
+    for record in records[1:-1]:
+        record_type = record["record_type"]
+        if record_type == "tick":
+            tick = _nonnegative_int(record.get("tick"), "stage2 tick")
+            if tick != len(ticks):
+                raise ToolError("stage2 ticks must begin at 0 and advance exactly once per simulation step")
+            phase_id = record.get("phase_id")
+            if phase_id not in STAGE2_PHASE_ORDER:
+                raise ToolError("stage2 tick %d has an unapproved phase_id" % tick)
+            simulation_time = _finite_number(record.get("simulation_time_s"), "stage2 simulation_time_s")
+            if simulation_time < 0 or not math.isclose(simulation_time, tick / 60, abs_tol=1e-9):
+                raise ToolError("stage2 tick %d has mismatched simulation_time_s" % tick)
+            ticks.append({"tick": tick, "phase_id": phase_id, "simulation_time_s": simulation_time,
+                          "bullets": _stage2_bullet_samples(record, tick)})
+        elif record_type == "render_frame":
+            frame_index = _nonnegative_int(record.get("frame_index"), "stage2 render frame_index")
+            if frame_index != len(renders):
+                raise ToolError("stage2 render frames must begin at 0 and advance exactly once")
+            tick = _nonnegative_int(record.get("tick"), "stage2 render tick")
+            present_time = _finite_number(record.get("present_time_s"), "stage2 present_time_s")
+            frame_time = _finite_number(record.get("frame_time_ms"), "stage2 frame_time_ms")
+            if present_time < 0 or frame_time < 0:
+                raise ToolError("stage2 render times must be nonnegative")
+            renders.append({"frame_index": frame_index, "tick": tick, "present_time_s": present_time,
+                            "frame_time_ms": frame_time})
+        elif record_type == "event":
+            event = record.get("event")
+            if not isinstance(event, str) or not event:
+                raise ToolError("stage2 event requires a nonempty event name")
+            tick = _nonnegative_int(record.get("tick"), "stage2 event tick")
+            time_s = _finite_number(record.get("time_s"), "stage2 event time_s")
+            if time_s < 0:
+                raise ToolError("stage2 event time_s must be nonnegative")
+            events.append({"event": event, "tick": tick, "time_s": time_s, "phase_id": record.get("phase_id")})
+        elif record_type == "phase_ledger":
+            phase_id = record.get("phase_id")
+            if phase_id not in STAGE2_PHASE_ORDER:
+                raise ToolError("stage2 phase ledger has an unapproved phase_id")
+            start_tick = _nonnegative_int(record.get("start_tick"), "stage2 phase ledger start_tick")
+            end_tick = _nonnegative_int(record.get("end_tick"), "stage2 phase ledger end_tick")
+            if end_tick < start_tick:
+                raise ToolError("stage2 phase ledger end_tick precedes start_tick")
+            time_to_clear = _finite_number(record.get("time_to_clear_ms"), "stage2 time_to_clear_ms")
+            if time_to_clear < 0:
+                raise ToolError("stage2 time_to_clear_ms must be nonnegative")
+            ledgers.append({"phase_id": phase_id, "start_tick": start_tick, "end_tick": end_tick,
+                            "time_to_clear_ms": time_to_clear,
+                            "score_delta": _nonnegative_int(record.get("score_delta"), "stage2 score_delta"),
+                            "drop_count": _nonnegative_int(record.get("drop_count"), "stage2 drop_count"),
+                            "capture_count": _nonnegative_int(record.get("capture_count"), "stage2 capture_count")})
+
+    if not ticks or not renders:
+        raise ToolError("stage2 capture requires tick and render-frame samples")
+    if len(renders) != len(ticks) or [frame["tick"] for frame in renders] != [tick["tick"] for tick in ticks]:
+        raise ToolError("stage2 capture requires exactly one render-frame sample for every tick")
+    if [ledger["phase_id"] for ledger in ledgers] != list(STAGE2_PHASE_ORDER):
+        raise ToolError("stage2 capture requires six ordered approved phase-ledger rows")
+    phase_runs: list[str] = []
+    for sample in ticks:
+        if not phase_runs or phase_runs[-1] != sample["phase_id"]:
+            phase_runs.append(sample["phase_id"])
+    if tuple(phase_runs) != STAGE2_PHASE_ORDER:
+        raise ToolError("stage2 tick samples must cover each approved phase exactly once in order")
+    for ledger in ledgers:
+        phase_ticks = [sample["tick"] for sample in ticks if sample["phase_id"] == ledger["phase_id"]]
+        if not phase_ticks or ledger["start_tick"] != phase_ticks[0] or ledger["end_tick"] != phase_ticks[-1]:
+            raise ToolError("stage2 phase ledger boundaries must match its captured tick samples")
+    tick_set = {sample["tick"] for sample in ticks}
+    if any(event["tick"] not in tick_set for event in events):
+        raise ToolError("stage2 event tick is not represented by a capture sample")
+    required_events = _stage2_expected_events()
+    observed_events = [(event["event"], event["phase_id"]) for event in events
+                       if event["event"] in {name for name, _phase_id in required_events}]
+    if observed_events != required_events:
+        raise ToolError("stage2 required stage/gate/phase events are missing, duplicated, or out of order")
+    return header, ticks, renders, events, ledgers
+
+
+def analyze_stage2_capture(header: dict[str, Any], ticks: list[dict[str, Any]], renders: list[dict[str, Any]],
+                           events: list[dict[str, Any]], ledgers: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, str]]:
+    """Produce deterministic v1 summary and 12x16 whole-stage/per-phase SVGs."""
+    def phase_analysis(samples: list[dict[str, Any]], title: str) -> tuple[dict[str, Any], str, str]:
+        grid = [[0 for _ in range(12)] for _ in range(16)]
+        curve: list[dict[str, int]] = []
+        for sample in samples:
+            curve.append({"tick": sample["tick"], "active_bullets": len(sample["bullets"])})
+            for bullet in sample["bullets"]:
+                grid[int(bullet["y"] // 60)][int(bullet["x"] // 60)] += 1
+        maximum = max(max(row) for row in grid)
+        return ({"active_bullet_curve": curve, "peak_active_bullets": max(item["active_bullets"] for item in curve),
+                 "heatmap": {"columns": 12, "rows": 16, "cell_width": 60, "cell_height": 60, "occupancy": grid}},
+                _heatmap_svg(grid, 60, 60, maximum, "%s occupancy heatmap" % title),
+                _stage2_curve_svg(curve, "%s active bullets" % title))
+
+    whole, whole_heatmap, whole_curve = phase_analysis(ticks, "M2 Stage 2 whole stage")
+    per_phase: list[dict[str, Any]] = []
+    artifacts = {"whole_stage_heatmap.svg": whole_heatmap, "whole_stage_active_bullets.svg": whole_curve}
+    for phase_id in STAGE2_PHASE_ORDER:
+        result, heatmap, curve = phase_analysis([sample for sample in ticks if sample["phase_id"] == phase_id], phase_id)
+        result["phase_id"] = phase_id
+        per_phase.append(result)
+        artifacts["%s_heatmap.svg" % phase_id] = heatmap
+        artifacts["%s_active_bullets.svg" % phase_id] = curve
+    frame_times = [frame["frame_time_ms"] for frame in renders]
+    warning_order = [{"tick": event["tick"], "event": event["event"], "phase_id": event["phase_id"]}
+                     for event in events if event["event"] == "warning"]
+    gate_order = [{"tick": event["tick"], "phase_id": event["phase_id"]}
+                  for event in events if event["event"] == "phase_gate_open"]
+    phase_event_order = [{"tick": event["tick"], "event": event["event"], "phase_id": event["phase_id"]}
+                         for event in events if event["event"] in {"phase_started", "phase_cleared"}]
+    summary = {"schema_version": STAGE2_CAPTURE_SCHEMA_VERSION, "command": "stage2-analyze",
+               "evidence_kind": "real_runtime_capture", "runtime_evidence": True,
+               "capture_identity": {key: header[key] for key in ("source", "build_kind", "stage_id", "simulation_hz", "playfield", "difficulty", "run_seed", "execution_mode", "headless")},
+               "sample_counts": {"ticks": len(ticks), "render_frames": len(renders)},
+               "whole_stage": whole, "per_phase": per_phase,
+               "render_frame_time_ms": {"percentile_method": "nearest_rank", "p50": _percentile(frame_times, .50),
+                                        "p95": _percentile(frame_times, .95), "p99": _percentile(frame_times, .99)},
+               "event_order": {"warnings": warning_order, "gates": gate_order, "phase_events": phase_event_order},
+               "time_to_clear_ms": [{"phase_id": ledger["phase_id"], "time_to_clear_ms": ledger["time_to_clear_ms"]} for ledger in ledgers],
+               "score_drop_capture_ledgers": ledgers,
+               "artifacts": ["summary.json", *sorted(artifacts)]}
+    return summary, artifacts
+
+
+def stage2_analyze(capture_path: Path, output_dir: Path) -> dict[str, Any]:
+    header, ticks, renders, events, ledgers = read_stage2_capture(capture_path)
+    summary, artifacts = analyze_stage2_capture(header, ticks, renders, events, ledgers)
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise ToolError("could not create stage2 output directory: %s" % error) from error
+    _write(output_dir / "summary.json", _json(summary) + "\n")
+    for filename in sorted(artifacts):
+        _write(output_dir / filename, artifacts[filename])
+    return summary
 
 
 def _write(path: Path, text: str) -> None:
@@ -372,22 +658,35 @@ def main(argv: list[str] | None = None) -> int:
                                 help="stable JSON telemetry destination")
     analyze_parser.add_argument("--output-svg", required=True, type=Path,
                                 help="deterministic 720x960 occupancy heatmap destination")
+    stage2_parser = commands.add_parser(
+        "stage2-analyze",
+        help="fail-closed analyzer for real Main/BulletWorld Release JSONL v1 captures",
+        description=("Accepts only the m2_stage2_runtime_capture_header v1 contract: real_runtime_capture, "
+                     "main_bullet_world, release, windowed/non-headless, 60 Hz, and 720x960. "
+                     "Writes deterministic summary.json plus whole-stage and per-phase 12x16 heatmaps and curves."))
+    stage2_parser.add_argument("--capture", required=True, type=Path,
+                               help="real-runtime JSONL capture; authored/synthetic inputs are rejected")
+    stage2_parser.add_argument("--output-dir", required=True, type=Path,
+                               help="directory for deterministic analysis artifacts")
     args = parser.parse_args(argv)
     try:
-        cards, content_hash = _load_cards(args.cards)
-        if args.command == "fingerprints":
-            result = fingerprints(cards, content_hash)
-        elif args.command == "sandbox":
-            result = sandbox(cards, content_hash, args.phase_id, args.difficulty, args.run_seed, args.seek_frame, args.window)
+        if args.command == "stage2-analyze":
+            result = stage2_analyze(args.capture, args.output_dir)
         else:
-            header, frames = read_trace(args.trace, cards, content_hash, args.phase_id, args.difficulty)
-            if args.command == "trace-seek":
-                result = trace_seek(header, frames, args.seek_frame)
+            cards, content_hash = _load_cards(args.cards)
+            if args.command == "fingerprints":
+                result = fingerprints(cards, content_hash)
+            elif args.command == "sandbox":
+                result = sandbox(cards, content_hash, args.phase_id, args.difficulty, args.run_seed, args.seek_frame, args.window)
             else:
-                end = len(frames) - 1 if args.end_frame is None else args.end_frame
-                result, svg = analyze(header, frames, args.start_frame, end, args.columns, args.rows)
-                _write(args.output_json, _json(result) + "\n")
-                _write(args.output_svg, svg)
+                header, frames = read_trace(args.trace, cards, content_hash, args.phase_id, args.difficulty)
+                if args.command == "trace-seek":
+                    result = trace_seek(header, frames, args.seek_frame)
+                else:
+                    end = len(frames) - 1 if args.end_frame is None else args.end_frame
+                    result, svg = analyze(header, frames, args.start_frame, end, args.columns, args.rows)
+                    _write(args.output_json, _json(result) + "\n")
+                    _write(args.output_svg, svg)
         print(_json(result))
         return 0
     except ToolError as error:
