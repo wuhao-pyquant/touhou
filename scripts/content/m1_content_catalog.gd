@@ -81,34 +81,90 @@ func stream_local_seed(run_seed: int, deterministic_stream_id: String) -> int:
 func canonical_structure_fingerprint(values: Dictionary) -> String:
 	return BossPhaseDefinition.canonical_structure_fingerprint(values)
 
-func _load_frozen_contracts() -> void:
-	var stage_root := _load_json_dictionary(STAGE_SOURCE_PATH, "stage beats")
-	var phase_root := _load_json_dictionary(PHASE_SOURCE_PATH, "phase cards")
-	if stage_root.is_empty() or phase_root.is_empty():
-		return
-	if String(stage_root.get("schema_version", "")) != STAGE_SCHEMA:
-		_load_errors.append("stage beats schema_version must be %s" % STAGE_SCHEMA)
-	if String(phase_root.get("schema_version", "")) != PHASE_SCHEMA:
-		_load_errors.append("phase cards schema_version must be %s" % PHASE_SCHEMA)
-	if int(stage_root.get("simulation_hz", 0)) != 60 or int(phase_root.get("simulation_hz", 0)) != 60:
-		_load_errors.append("M1 frozen sources must use the 60 Hz simulation clock")
-	_validate_difficulty_scope(stage_root, "stage beats")
-	_validate_difficulty_scope(phase_root, "phase cards")
-	if int(phase_root.get("phase_count", -1)) != EXPECTED_PHASE_COUNT:
-		_load_errors.append("phase cards phase_count must remain exactly %d" % EXPECTED_PHASE_COUNT)
-	_load_stages(stage_root)
-	_load_phases(phase_root)
-	_validate_catalog_totals(phase_root)
+func reload_from_roots(
+	stage_root: Variant,
+	phase_root: Variant,
+	legacy_content: Object = null,
+	game_database: Object = null
+) -> void:
+	_reset_catalog()
+	var resolved_legacy = legacy_content if legacy_content != null else _legacy_content_database()
+	var resolved_game_database = game_database if game_database != null else _game_database()
+	_load_contract_roots(stage_root, phase_root, resolved_legacy, resolved_game_database)
 
-func _load_json_dictionary(path: String, label: String) -> Dictionary:
+func _load_frozen_contracts() -> void:
+	var stage_root = _load_json_root(STAGE_SOURCE_PATH, "stage beats")
+	var phase_root = _load_json_root(PHASE_SOURCE_PATH, "phase cards")
+	_load_contract_roots(stage_root, phase_root, _legacy_content_database(), _game_database())
+
+func _load_contract_roots(
+	stage_root: Variant,
+	phase_root: Variant,
+	legacy_content: Object,
+	game_database: Object
+) -> void:
+	var roots_valid := true
+	if not (stage_root is Dictionary):
+		_load_errors.append("stage beats root must be a non-empty Dictionary")
+		roots_valid = false
+	elif stage_root.is_empty():
+		_load_errors.append("stage beats root must not be empty")
+		roots_valid = false
+	if not (phase_root is Dictionary):
+		_load_errors.append("phase cards root must be a non-empty Dictionary")
+		roots_valid = false
+	elif phase_root.is_empty():
+		_load_errors.append("phase cards root must not be empty")
+		roots_valid = false
+	if legacy_content == null or not legacy_content.has_method("midboss_definition") or not legacy_content.has_method("boss_definition"):
+		_load_errors.append("legacy stage content resolver is required")
+		roots_valid = false
+	if game_database == null or not game_database.has_method("bullet_family_by_id"):
+		_load_errors.append("GameDatabase bullet-family resolver is required")
+		roots_valid = false
+	if not roots_valid:
+		return
+	var stage_values: Dictionary = stage_root
+	var phase_values: Dictionary = phase_root
+	if String(stage_values.get("schema_version", "")) != STAGE_SCHEMA:
+		_load_errors.append("stage beats schema_version must be %s" % STAGE_SCHEMA)
+	if String(phase_values.get("schema_version", "")) != PHASE_SCHEMA:
+		_load_errors.append("phase cards schema_version must be %s" % PHASE_SCHEMA)
+	if int(stage_values.get("simulation_hz", 0)) != 60 or int(phase_values.get("simulation_hz", 0)) != 60:
+		_load_errors.append("M1 frozen sources must use the 60 Hz simulation clock")
+	_validate_difficulty_scope(stage_values, "stage beats")
+	_validate_difficulty_scope(phase_values, "phase cards")
+	if int(phase_values.get("phase_count", -1)) != EXPECTED_PHASE_COUNT:
+		_load_errors.append("phase cards phase_count must remain exactly %d" % EXPECTED_PHASE_COUNT)
+	_load_stages(stage_values)
+	_load_phases(phase_values, legacy_content, game_database)
+	_validate_catalog_totals(phase_values)
+
+func _load_json_root(path: String, label: String) -> Variant:
 	if not FileAccess.file_exists(path):
 		_load_errors.append("Missing frozen %s source: %s" % [label, path])
-		return {}
+		return null
 	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if not (parsed is Dictionary):
 		_load_errors.append("Frozen %s source is not a JSON object: %s" % [label, path])
-		return {}
+		return null
 	return parsed
+
+func _legacy_content_database() -> Object:
+	var script = load("res://scripts/data/stage_content_database.gd")
+	return null if script == null else script.new()
+
+func _game_database() -> Object:
+	var script = load("res://scripts/data/game_database.gd")
+	return null if script == null else script.new()
+
+func _reset_catalog() -> void:
+	_load_errors.clear()
+	_stage_timelines.clear()
+	_stage_by_index.clear()
+	_stage_by_id.clear()
+	_phase_definitions.clear()
+	_phase_by_id.clear()
 
 func _load_stages(root: Dictionary) -> void:
 	var source_stages = root.get("stages", [])
@@ -124,6 +180,22 @@ func _load_stages(root: Dictionary) -> void:
 		if not (source is Dictionary):
 			_load_errors.append("stages[%d] must be a Dictionary" % source_index)
 			continue
+		var stage_context := "stages[%d]" % source_index
+		_validate_array_field(source, "segments", stage_context)
+		_validate_array_field(source, "beats", stage_context)
+		_validate_dictionary_field(source, "midboss", stage_context)
+		_validate_dictionary_field(source, "preboss_climax", stage_context)
+		_validate_dictionary_field(source, "score_route", stage_context)
+		var source_segments = source.get("segments", [])
+		if source_segments is Array:
+			for segment_index in range(source_segments.size()):
+				if not (source_segments[segment_index] is Dictionary):
+					_load_errors.append("%s.segments[%d] must be a Dictionary" % [stage_context, segment_index])
+		var source_beats = source.get("beats", [])
+		if source_beats is Array:
+			for beat_index in range(source_beats.size()):
+				if not (source_beats[beat_index] is Dictionary):
+					_load_errors.append("%s.beats[%d] must be a Dictionary" % [stage_context, beat_index])
 		var timeline = StageTimeline.new()
 		timeline.configure_m1(source)
 		for error in timeline.validation_errors():
@@ -173,7 +245,7 @@ func _validate_stage_choreography(timeline, seen_beat_ids: Dictionary) -> void:
 	if not climax_found:
 		_load_errors.append("stage %d boss-front climax must reference its climax beat" % timeline.stage_index)
 
-func _load_phases(root: Dictionary) -> void:
+func _load_phases(root: Dictionary, legacy_content: Object, game_database: Object) -> void:
 	var source_phases = root.get("phases", [])
 	if not (source_phases is Array):
 		_load_errors.append("phase cards phases must be an Array")
@@ -183,6 +255,7 @@ func _load_phases(root: Dictionary) -> void:
 	var seen_ids := {}
 	var seen_streams := {}
 	var seen_fingerprints := {}
+	var seen_legacy_bindings := {}
 	var previous_stage_index := 0
 	var role_counts_by_stage := {}
 	for source_index in range(source_phases.size()):
@@ -190,6 +263,19 @@ func _load_phases(root: Dictionary) -> void:
 		if not (source is Dictionary):
 			_load_errors.append("phases[%d] must be a Dictionary" % source_index)
 			continue
+		var phase_context := "phases[%d]" % source_index
+		for key in ["emitters", "timeline", "bullet_motion_rules", "boss_movement"]:
+			_validate_array_field(source, key, phase_context)
+		for key in [
+			"source_identity",
+			"owner",
+			"normal_structure",
+			"hard_topology_change",
+			"score_route",
+			"telegraph_frames",
+			"structure_fingerprint_input",
+		]:
+			_validate_dictionary_field(source, key, phase_context)
 		var values: Dictionary = source.duplicate(true)
 		var fingerprint_input: Dictionary = _dictionary_copy(source.get("structure_fingerprint_input", {}))
 		var source_fingerprint := String(source.get("structure_fingerprint", ""))
@@ -198,8 +284,15 @@ func _load_phases(root: Dictionary) -> void:
 		var canonical_fingerprint := BossPhaseDefinition.canonical_structure_fingerprint(fingerprint_input)
 		values["source_structure_fingerprint"] = source_fingerprint
 		values["structure_fingerprint"] = canonical_fingerprint
+		var legacy_binding := _resolve_legacy_card_binding(source, legacy_content)
+		values["legacy_card_binding"] = legacy_binding
+		values["hit_points"] = float(legacy_binding.get("hit_points", 0.0))
+		values["timeout_ticks"] = int(legacy_binding.get("timeout_seconds", 0)) * 60
+		values["pattern_id"] = String(source.get("id", ""))
+		values["dialogue_hook_id"] = BossPhaseDefinition.expected_dialogue_hook_id(String(source.get("id", "")))
+		values["performance_hook_id"] = BossPhaseDefinition.expected_performance_hook_id(String(source.get("id", "")))
 		var phase = BossPhaseDefinition.new(values)
-		var pattern := _build_pattern_definition(source)
+		var pattern := _build_pattern_definition(source, game_database)
 		phase.attach_pattern_definition(pattern)
 		for error in phase.validation_errors():
 			_load_errors.append("phase %s: %s" % [phase.id, error])
@@ -210,23 +303,38 @@ func _load_phases(root: Dictionary) -> void:
 		_register_unique("phase id", phase.id, seen_ids)
 		_register_unique("deterministic stream", phase.deterministic_random_stream_id, seen_streams)
 		_register_unique("canonical structure fingerprint", phase.structure_fingerprint, seen_fingerprints)
+		_register_unique("legacy card binding", _legacy_binding_key(legacy_binding), seen_legacy_bindings)
 		_phase_definitions.append(phase)
 		_phase_by_id[phase.id] = phase
+	if seen_legacy_bindings.size() != EXPECTED_PHASE_COUNT:
+		_load_errors.append("all 40 M1 phases must map one-to-one onto legacy encounter cards")
 
-func _build_pattern_definition(source: Dictionary):
+func _build_pattern_definition(source: Dictionary, game_database: Object):
 	var normal: Dictionary = _dictionary_copy(source.get("normal_structure", {}))
+	var source_emitters := _dictionary_array_copy(source.get("emitters", []))
+	var bullet_family_metadata := {}
+	for emitter in source_emitters:
+		var bullet_family := String(emitter.get("bullet_family", ""))
+		if bullet_family.is_empty() or bullet_family_metadata.has(bullet_family):
+			continue
+		var metadata: Dictionary = game_database.bullet_family_by_id(bullet_family)
+		if not metadata.is_empty():
+			bullet_family_metadata[bullet_family] = metadata
 	var values := {
 		"id": String(source.get("id", "")),
 		"duration_ticks": int(normal.get("loop_frames", 0)),
-		"emitters": source.get("emitters", []).duplicate(true),
+		"emitters": source_emitters,
 		"tags": [String(source.get("encounter_role", "")), String(source.get("kind", "")), "m1_contract"],
 		"deterministic_random_stream_id": String(source.get("deterministic_random_stream_id", "")),
-		"timeline": source.get("timeline", []).duplicate(true),
-		"bullet_motion_rules": source.get("bullet_motion_rules", []).duplicate(true),
-		"boss_movement": source.get("boss_movement", []).duplicate(true),
+		"timeline": _dictionary_array_copy(source.get("timeline", [])),
+		"bullet_motion_rules": _dictionary_array_copy(source.get("bullet_motion_rules", [])),
+		"boss_movement": _dictionary_array_copy(source.get("boss_movement", [])),
 		"normal_structure": normal,
 		"hard_topology_change": _dictionary_copy(source.get("hard_topology_change", {})),
 		"telegraph_frames": _dictionary_copy(source.get("telegraph_frames", {})),
+		"warning_floor": PRODUCT_WARNING_MINIMUM.duplicate(true),
+		"bullet_family_metadata": bullet_family_metadata,
+		"bullet_metadata_source": "GameDatabase.bullet_family_by_id",
 	}
 	return PatternDefinition.new(values)
 
@@ -262,8 +370,10 @@ func _validate_emitter_fingerprint_input(phase) -> void:
 			String(emitter.get("composition_role", "")),
 		])
 	var frozen := PackedStringArray()
-	for entry in phase.structure_fingerprint_input.get("emitter_composition", []):
-		frozen.append(String(entry))
+	var frozen_entries = phase.structure_fingerprint_input.get("emitter_composition", [])
+	if frozen_entries is Array:
+		for entry in frozen_entries:
+			frozen.append(String(entry))
 	if actual != frozen:
 		_load_errors.append("phase %s role-qualified emitter composition drifted" % phase.id)
 
@@ -274,6 +384,65 @@ func _validate_warning_contract(phase) -> void:
 		_load_errors.append("phase %s violates the Normal warning product floor" % phase.id)
 	if hard_frames < int(PRODUCT_WARNING_MINIMUM.hard):
 		_load_errors.append("phase %s violates the Hard warning product floor" % phase.id)
+
+func _resolve_legacy_card_binding(source: Dictionary, legacy_content: Object) -> Dictionary:
+	var phase_id := String(source.get("id", ""))
+	var stage_index := int(source.get("stage_index", 0))
+	var encounter_role := String(source.get("encounter_role", ""))
+	var source_identity := _dictionary_copy(source.get("source_identity", {}))
+	var encounter_slot := String(source_identity.get("encounter_slot", ""))
+	var slot_parts := encounter_slot.split("_", false)
+	if slot_parts.size() != 3 or String(slot_parts[0]) != encounter_role or String(slot_parts[1]) != "card":
+		_load_errors.append("phase %s has an invalid legacy encounter slot" % phase_id)
+		return {}
+	var card_ordinal := int(slot_parts[2])
+	if card_ordinal <= 0:
+		_load_errors.append("phase %s legacy encounter slot must be one-based" % phase_id)
+		return {}
+	var encounter = (
+		legacy_content.midboss_definition(stage_index)
+		if encounter_role == "midboss"
+		else legacy_content.boss_definition(stage_index)
+	)
+	if not (encounter is Dictionary):
+		_load_errors.append("phase %s legacy encounter must resolve to a Dictionary" % phase_id)
+		return {}
+	var cards = encounter.get("cards", [])
+	if not (cards is Array) or card_ordinal > cards.size():
+		_load_errors.append("phase %s legacy encounter card is missing" % phase_id)
+		return {}
+	var card = cards[card_ordinal - 1]
+	if not (card is Dictionary):
+		_load_errors.append("phase %s legacy encounter card must be a Dictionary" % phase_id)
+		return {}
+	var legacy_pattern_id := String(source_identity.get("legacy_pattern_id", ""))
+	if String(card.get("name", "")) != String(source.get("display_name", "")):
+		_load_errors.append("phase %s display_name does not match its legacy card" % phase_id)
+	if String(card.get("kind", "")) != String(source.get("kind", "")):
+		_load_errors.append("phase %s kind does not match its legacy card" % phase_id)
+	if String(card.get("pattern", "")) != legacy_pattern_id:
+		_load_errors.append("phase %s legacy pattern alias drifted" % phase_id)
+	if float(card.get("hp", 0.0)) <= 0.0 or int(card.get("time", 0)) <= 0:
+		_load_errors.append("phase %s legacy HP/time must be positive" % phase_id)
+	return {
+		"stage_index": stage_index,
+		"encounter_role": encounter_role,
+		"encounter_slot": encounter_slot,
+		"legacy_pattern_id": legacy_pattern_id,
+		"display_name": String(card.get("name", "")),
+		"kind": String(card.get("kind", "")),
+		"hit_points": float(card.get("hp", 0.0)),
+		"timeout_seconds": int(card.get("time", 0)),
+	}
+
+func _legacy_binding_key(binding: Dictionary) -> String:
+	if binding.is_empty():
+		return ""
+	return "%d:%s:%s" % [
+		int(binding.get("stage_index", 0)),
+		String(binding.get("encounter_role", "")),
+		String(binding.get("encounter_slot", "")),
+	]
 
 func _validate_catalog_totals(phase_root: Dictionary) -> void:
 	if stage_count() != EXPECTED_STAGE_COUNT:
@@ -313,5 +482,21 @@ func _validate_difficulty_scope(root: Dictionary, label: String) -> void:
 	if not (scope is Array) or scope != ["Normal", "Hard"]:
 		_load_errors.append("%s difficulty_scope must remain exactly Normal, Hard" % label)
 
+func _validate_array_field(source: Dictionary, key: String, context: String) -> void:
+	if not (source.get(key) is Array):
+		_load_errors.append("%s.%s must be an Array" % [context, key])
+
+func _validate_dictionary_field(source: Dictionary, key: String, context: String) -> void:
+	if not (source.get(key) is Dictionary):
+		_load_errors.append("%s.%s must be a Dictionary" % [context, key])
+
 func _dictionary_copy(value: Variant) -> Dictionary:
 	return value.duplicate(true) if value is Dictionary else {}
+
+func _dictionary_array_copy(value: Variant) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if value is Array:
+		for entry in value:
+			if entry is Dictionary:
+				result.append(entry.duplicate(true))
+	return result

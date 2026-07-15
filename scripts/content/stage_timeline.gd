@@ -40,20 +40,22 @@ func configure(next_stage_id: String, source_events: Array) -> void:
 
 func configure_m1(values: Dictionary) -> void:
 	var authored_events: Array[Dictionary] = []
-	for source in values.get("beats", []):
-		if not (source is Dictionary):
-			continue
-		var payload: Dictionary = source.duplicate(true)
-		payload.erase("id")
-		payload.erase("frame")
-		payload.erase("kind")
-		authored_events.append({
-			"id": String(source.get("id", "")),
-			"tick": int(source.get("frame", -1)),
-			"frame": int(source.get("frame", -1)),
-			"kind": String(source.get("kind", "")),
-			"payload": payload,
-		})
+	var source_beats = values.get("beats", [])
+	if source_beats is Array:
+		for source in source_beats:
+			if not (source is Dictionary):
+				continue
+			var payload: Dictionary = source.duplicate(true)
+			payload.erase("id")
+			payload.erase("frame")
+			payload.erase("kind")
+			authored_events.append({
+				"id": String(source.get("id", "")),
+				"tick": int(source.get("frame", -1)),
+				"frame": int(source.get("frame", -1)),
+				"kind": String(source.get("kind", "")),
+				"payload": payload,
+			})
 	configure(String(values.get("stage_id", "")), authored_events)
 	stage_index = int(values.get("stage_index", 0))
 	display_name = String(values.get("display_name", ""))
@@ -61,9 +63,11 @@ func configure_m1(values: Dictionary) -> void:
 	midboss_id = String(values.get("midboss_id", ""))
 	boss_id = String(values.get("boss_id", ""))
 	approved_identity = String(values.get("approved_identity", ""))
-	for source in values.get("segments", []):
-		if source is Dictionary:
-			segments.append(source.duplicate(true))
+	var source_segments = values.get("segments", [])
+	if source_segments is Array:
+		for source in source_segments:
+			if source is Dictionary:
+				segments.append(source.duplicate(true))
 	var source_midboss = values.get("midboss", {})
 	if source_midboss is Dictionary:
 		midboss = source_midboss.duplicate(true)
@@ -108,12 +112,31 @@ func validation_errors() -> Array[String]:
 			elif seen_segments.has(segment_id):
 				errors.append("segments[%d].id must be unique" % index)
 			seen_segments[segment_id] = true
+			var beat_range = segments[index].get("beat_range", [])
+			if not (beat_range is Array) or beat_range.size() != 2:
+				errors.append("segments[%d].beat_range must contain two authored bounds" % index)
+			if String(segments[index].get("normal_route", "")).is_empty():
+				errors.append("segments[%d].normal_route is required" % index)
+			if String(segments[index].get("hard_route", "")).is_empty():
+				errors.append("segments[%d].hard_route is required" % index)
 		for index in range(events.size()):
-			var event_segment_id := String(events[index].get("payload", {}).get("segment", ""))
+			var payload: Dictionary = events[index].get("payload", {})
+			var event_segment_id := String(payload.get("segment", ""))
 			if not seen_segments.has(event_segment_id):
 				errors.append("events[%d] references unknown segment %s" % [index, event_segment_id])
-			if int(events[index].get("payload", {}).get("max_gap_after_frames", -1)) < 0:
+			if int(payload.get("max_gap_after_frames", -1)) < 0:
 				errors.append("events[%d].max_gap_after_frames must be non-negative" % index)
+			if String(payload.get("action", "")).is_empty() or String(payload.get("warning", "")).is_empty():
+				errors.append("events[%d] requires authored action and warning text" % index)
+		if normal_route.is_empty() or hard_route.is_empty():
+			errors.append("M1 stage requires Normal and Hard route contracts")
+		if not bool(midboss.get("fought", false)):
+			errors.append("M1 stage requires a fought midboss contract")
+		if not bool(preboss_climax.get("boss_front", false)):
+			errors.append("M1 stage requires a boss-front climax contract")
+		for key in ["decision", "reward", "risk", "evidence"]:
+			if String(score_route.get(key, "")).is_empty():
+				errors.append("score_route.%s is required for an M1 stage" % key)
 	return errors
 
 func is_valid() -> bool:

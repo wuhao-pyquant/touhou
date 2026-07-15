@@ -1,6 +1,7 @@
 extends RefCounted
 
 const VERSION := 1
+const DEFAULT_WARNING_FLOOR := {"normal": 12, "hard": 8}
 
 var id: String = ""
 var duration_ticks: int = 0
@@ -16,6 +17,9 @@ var boss_movement: Array[Dictionary] = []
 var normal_structure: Dictionary = {}
 var hard_topology_change: Dictionary = {}
 var warning_contract: Dictionary = {}
+var warning_floor: Dictionary = DEFAULT_WARNING_FLOOR.duplicate(true)
+var bullet_family_metadata: Dictionary = {}
+var bullet_metadata_source: String = ""
 
 func _init(values: Dictionary = {}) -> void:
 	configure(values)
@@ -24,28 +28,45 @@ func configure(values: Dictionary) -> void:
 	id = String(values.get("id", id))
 	duration_ticks = int(values.get("duration_ticks", duration_ticks))
 	emitters.clear()
-	for emitter in values.get("emitters", []):
-		if emitter is Dictionary:
-			emitters.append(emitter.duplicate(true))
+	var source_emitters = values.get("emitters", [])
+	if source_emitters is Array:
+		for emitter in source_emitters:
+			if emitter is Dictionary:
+				emitters.append(emitter.duplicate(true))
 	tags.clear()
-	for tag in values.get("tags", []):
-		tags.append(String(tag))
+	var source_tags = values.get("tags", [])
+	if source_tags is Array:
+		for tag in source_tags:
+			tags.append(String(tag))
 	deterministic_random_stream_id = String(values.get("deterministic_random_stream_id", ""))
 	ordered_timeline.clear()
-	for event in values.get("timeline", values.get("ordered_timeline", [])):
-		if event is Dictionary:
-			ordered_timeline.append(event.duplicate(true))
+	var source_timeline = values.get("timeline", values.get("ordered_timeline", []))
+	if source_timeline is Array:
+		for event in source_timeline:
+			if event is Dictionary:
+				ordered_timeline.append(event.duplicate(true))
 	bullet_motion_rules.clear()
-	for rule in values.get("bullet_motion_rules", []):
-		if rule is Dictionary:
-			bullet_motion_rules.append(rule.duplicate(true))
+	var source_motion_rules = values.get("bullet_motion_rules", [])
+	if source_motion_rules is Array:
+		for rule in source_motion_rules:
+			if rule is Dictionary:
+				bullet_motion_rules.append(rule.duplicate(true))
 	boss_movement.clear()
-	for movement in values.get("boss_movement", []):
-		if movement is Dictionary:
-			boss_movement.append(movement.duplicate(true))
+	var source_movement = values.get("boss_movement", [])
+	if source_movement is Array:
+		for movement in source_movement:
+			if movement is Dictionary:
+				boss_movement.append(movement.duplicate(true))
 	normal_structure = _dictionary_copy(values.get("normal_structure", {}))
 	hard_topology_change = _dictionary_copy(values.get("hard_topology_change", {}))
 	warning_contract = _dictionary_copy(values.get("telegraph_frames", values.get("warning_contract", {})))
+	warning_floor = DEFAULT_WARNING_FLOOR.duplicate(true)
+	var source_warning_floor = values.get("warning_floor", {})
+	if source_warning_floor is Dictionary:
+		for key in source_warning_floor:
+			warning_floor[key] = source_warning_floor[key]
+	bullet_family_metadata = _dictionary_copy(values.get("bullet_family_metadata", {}))
+	bullet_metadata_source = String(values.get("bullet_metadata_source", ""))
 
 func validation_errors() -> Array[String]:
 	var errors: Array[String] = []
@@ -80,7 +101,27 @@ func validation_errors() -> Array[String]:
 			errors.append("M1 pattern normal_structure is required")
 		if not has_authored_hard_topology_change():
 			errors.append("M1 pattern Hard mode must author a non-numeric topology change")
+		if bullet_metadata_source != "GameDatabase.bullet_family_by_id":
+			errors.append("M1 bullet metadata must resolve through GameDatabase.bullet_family_by_id")
+		for difficulty in ["normal", "hard"]:
+			var warning_frames := int(warning_contract.get(difficulty, 0))
+			var minimum_frames := int(warning_floor.get(difficulty, 0))
+			var catalog_floor := int(DEFAULT_WARNING_FLOOR.get(difficulty, 0))
+			if warning_frames <= 0:
+				errors.append("warning_contract.%s must be positive" % difficulty)
+			elif minimum_frames < catalog_floor or warning_frames < catalog_floor or warning_frames < minimum_frames:
+				errors.append("warning_contract.%s must meet the catalog floor" % difficulty)
 		for index in range(emitters.size()):
+			var bullet_family := String(emitters[index].get("bullet_family", ""))
+			if bullet_family.is_empty():
+				errors.append("emitters[%d].bullet_family is required" % index)
+			var metadata = bullet_family_metadata.get(bullet_family, {})
+			if not (metadata is Dictionary) or metadata.is_empty():
+				errors.append("emitters[%d].bullet_family must resolve in GameDatabase" % index)
+			elif String(metadata.get("id", "")) != bullet_family or typeof(metadata.get("color")) != TYPE_COLOR:
+				errors.append("emitters[%d].bullet_family metadata must retain its ID and Color" % index)
+			if String(emitters[index].get("visible_warning", "")).is_empty():
+				errors.append("emitters[%d].visible_warning is required" % index)
 			var schedule = emitters[index].get("schedule", {})
 			if not (schedule is Dictionary) or schedule.is_empty():
 				errors.append("emitters[%d].schedule is required for an M1 pattern" % index)
@@ -108,7 +149,11 @@ func validation_errors() -> Array[String]:
 			if int(movement.get("duration_frames", 0)) <= 0:
 				errors.append("boss_movement[%d].duration_frames must be positive" % index)
 		var motion_roles := {}
-		for rule in bullet_motion_rules:
+		for index in range(bullet_motion_rules.size()):
+			var rule := bullet_motion_rules[index]
+			for key in ["primitive", "applies_to", "rule", "visible_warning"]:
+				if String(rule.get(key, "")).is_empty():
+					errors.append("bullet_motion_rules[%d].%s is required" % [index, key])
 			motion_roles["%s:%s" % [rule.get("primitive", ""), rule.get("applies_to", "")]] = true
 		for index in range(emitters.size()):
 			var emitter := emitters[index]
@@ -143,6 +188,9 @@ func to_dict() -> Dictionary:
 		"normal_structure": normal_structure.duplicate(true),
 		"hard_topology_change": hard_topology_change.duplicate(true),
 		"warning_contract": warning_contract.duplicate(true),
+		"warning_floor": warning_floor.duplicate(true),
+		"bullet_family_metadata": bullet_family_metadata.duplicate(true),
+		"bullet_metadata_source": bullet_metadata_source,
 	}
 
 func _dictionary_copy(value: Variant) -> Dictionary:

@@ -102,6 +102,24 @@ const EXPECTED_LEGACY_PATTERN_IDS := [
 	"s6_faith_nonspell",
 ]
 
+const EXPECTED_LEGACY_HP := [
+	320, 420, 600, 900, 1300, 1600,
+	420, 520, 900, 1300, 1800, 2400,
+	520, 650, 1200, 1700, 2300, 3000,
+	650, 820, 1600, 2200, 2700, 3300,
+	780, 980, 1900, 2300, 2900, 3300, 3800, 2100,
+	900, 1150, 2400, 3000, 3600, 4200, 5000, 2700,
+]
+
+const EXPECTED_LEGACY_SECONDS := [
+	16, 18, 28, 32, 30, 25,
+	17, 19, 28, 32, 30, 25,
+	18, 20, 28, 30, 32, 28,
+	18, 21, 29, 31, 31, 28,
+	19, 22, 29, 31, 32, 31, 29, 24,
+	20, 23, 30, 32, 34, 32, 30, 25,
+]
+
 var failed := false
 
 func _check(condition: bool, message: String) -> void:
@@ -123,6 +141,7 @@ func _run() -> void:
 	_assert_stage_contracts(catalog)
 	_assert_phase_contracts(catalog)
 	_assert_phase_seed_contract(catalog)
+	_assert_catalog_fail_closed_contracts()
 	_assert_m0_constructor_compatibility()
 	_assert_stage_director_queries(catalog)
 
@@ -153,6 +172,8 @@ func _assert_stage_contracts(catalog) -> void:
 				"Stage %d segment beat grouping drifted." % timeline.stage_index
 			)
 		_check(timeline.max_non_transition_gap() <= 180, "Stage %d exceeds the 180-frame combat gap limit." % timeline.stage_index)
+		for key in ["decision", "reward", "risk", "evidence"]:
+			_check(not String(timeline.score_route.get(key, "")).is_empty(), "Stage %d score_route.%s is missing." % [timeline.stage_index, key])
 		if bool(timeline.midboss.get("fought", false)):
 			fought_midbosses += 1
 		if bool(timeline.preboss_climax.get("boss_front", false)):
@@ -172,6 +193,9 @@ func _assert_phase_contracts(catalog) -> void:
 	var warning_hard := 999999
 	var seen_fingerprints := {}
 	var seen_streams := {}
+	var seen_legacy_bindings := {}
+	var seen_dialogue_hooks := {}
+	var seen_performance_hooks := {}
 	for phase_index in range(phases.size()):
 		var phase = phases[phase_index]
 		actual_phase_ids.append(phase.id)
@@ -182,10 +206,28 @@ func _assert_phase_contracts(catalog) -> void:
 			nonspell_count += 1
 		_check(phase.is_valid(), "Phase %s is invalid: %s" % [phase.id, phase.validation_errors()])
 		_check(phase.pattern_definition != null and phase.pattern_definition.is_valid(), "Phase %s has no valid public PatternDefinition." % phase.id)
+		_check_equal(phase.hit_points, float(EXPECTED_LEGACY_HP[phase_index]), "Phase %s legacy HP binding drifted." % phase.id)
+		_check_equal(phase.timeout_ticks, int(EXPECTED_LEGACY_SECONDS[phase_index]) * 60, "Phase %s legacy timeout conversion drifted." % phase.id)
+		_check_equal(phase.pattern_id, phase.id, "Phase %s pattern_id must identify its M1 PatternDefinition." % phase.id)
+		_check_equal(phase.pattern_id, phase.pattern_definition.id, "Phase %s attached PatternDefinition identity drifted." % phase.id)
+		var binding_key := "%d:%s:%s" % [phase.stage_index, phase.encounter_role, phase.encounter_slot]
+		_check(not seen_legacy_bindings.has(binding_key), "Phase %s reused a legacy encounter card binding." % phase.id)
+		seen_legacy_bindings[binding_key] = true
+		_check_equal(float(phase.legacy_card_binding.get("hit_points", 0.0)), phase.hit_points, "Phase %s legacy binding HP drifted." % phase.id)
+		_check_equal(int(phase.legacy_card_binding.get("timeout_seconds", 0)) * 60, phase.timeout_ticks, "Phase %s legacy binding seconds drifted." % phase.id)
+		_check_equal(String(phase.legacy_card_binding.get("legacy_pattern_id", "")), EXPECTED_LEGACY_PATTERN_IDS[phase_index], "Phase %s legacy alias binding drifted." % phase.id)
 		_check_equal(phase.timeline.size(), 4, "Phase %s ordered timeline length drifted." % phase.id)
 		_check_equal(phase.boss_movement.size(), 3, "Phase %s Boss movement trace length drifted." % phase.id)
 		_check(not phase.capture_condition.is_empty(), "Phase %s lacks capture conditions." % phase.id)
 		_check(not phase.failure_condition.is_empty(), "Phase %s lacks failure conditions." % phase.id)
+		for key in ["decision", "reward", "risk", "evidence"]:
+			_check(not String(phase.score_route.get(key, "")).is_empty(), "Phase %s score_route.%s is missing." % [phase.id, key])
+		_check_equal(phase.dialogue_hook_id, BossPhaseDefinition.expected_dialogue_hook_id(phase.id), "Phase %s dialogue hook drifted." % phase.id)
+		_check_equal(phase.performance_hook_id, BossPhaseDefinition.expected_performance_hook_id(phase.id), "Phase %s performance hook drifted." % phase.id)
+		_check(not seen_dialogue_hooks.has(phase.dialogue_hook_id), "Phase %s reused a dialogue hook." % phase.id)
+		_check(not seen_performance_hooks.has(phase.performance_hook_id), "Phase %s reused a performance hook." % phase.id)
+		seen_dialogue_hooks[phase.dialogue_hook_id] = true
+		seen_performance_hooks[phase.performance_hook_id] = true
 		_check(phase.has_authored_hard_topology_change(), "Phase %s Hard mode is not an authored topology change." % phase.id)
 		_check(
 			String(phase.hard_topology_change.get("type", "")) not in ["speed", "count", "speed_and_count"],
@@ -198,6 +240,7 @@ func _assert_phase_contracts(catalog) -> void:
 		warning_hard = mini(warning_hard, int(phase.warning_contract.get("hard", 0)))
 		_check(int(phase.warning_contract.get("normal", 0)) >= 12, "Phase %s violates the Normal warning floor." % phase.id)
 		_check(int(phase.warning_contract.get("hard", 0)) >= 8, "Phase %s violates the Hard warning floor." % phase.id)
+		_assert_pattern_contract(phase)
 		var recomputed := BossPhaseDefinition.canonical_structure_fingerprint(phase.structure_fingerprint_input)
 		_check_equal(phase.structure_fingerprint, recomputed, "Phase %s canonical fingerprint drifted." % phase.id)
 		_check_equal(
@@ -211,6 +254,12 @@ func _assert_phase_contracts(catalog) -> void:
 		seen_streams[phase.deterministic_random_stream_id] = true
 		var expected_role := "midboss" if phase.encounter_slot.begins_with("midboss_card_") else "boss"
 		_check_equal(phase.encounter_role, expected_role, "Phase %s encounter role/slot mapping drifted." % phase.id)
+		var round_trip := BossPhaseDefinition.new(phase.to_dict())
+		round_trip.attach_pattern_definition(phase.pattern_definition)
+		_check(round_trip.is_valid(), "Phase %s did not survive public definition round-trip: %s" % [phase.id, round_trip.validation_errors()])
+		_check_equal(round_trip.dialogue_hook_id, phase.dialogue_hook_id, "Phase %s dialogue hook did not round-trip." % phase.id)
+		_check_equal(round_trip.performance_hook_id, phase.performance_hook_id, "Phase %s performance hook did not round-trip." % phase.id)
+		_check_equal(round_trip.score_route, phase.score_route, "Phase %s score route did not round-trip." % phase.id)
 	_check_equal(actual_phase_ids, EXPECTED_PHASE_IDS, "Phase identities or encounter order drifted.")
 	_check_equal(actual_legacy_ids, EXPECTED_LEGACY_PATTERN_IDS, "Legacy pattern encounter mapping drifted.")
 	_check_equal(spell_count, 26, "M1 spell count drifted.")
@@ -218,6 +267,31 @@ func _assert_phase_contracts(catalog) -> void:
 	_check_equal(warning_normal, 18, "Authored Normal warning minimum drifted.")
 	_check_equal(warning_hard, 12, "Authored Hard warning minimum drifted.")
 	_check_equal(seen_fingerprints.size(), 40, "Canonical fingerprints are not unique across all phases.")
+	_check_equal(seen_legacy_bindings.size(), 40, "Legacy encounter cards are not mapped one-to-one.")
+	_check_equal(seen_dialogue_hooks.size(), 40, "Dialogue binding seams are not unique.")
+	_check_equal(seen_performance_hooks.size(), 40, "Performance binding seams are not unique.")
+
+func _assert_pattern_contract(phase) -> void:
+	var pattern = phase.pattern_definition
+	_check_equal(pattern.warning_floor, {"normal": 12, "hard": 8}, "Phase %s warning floor drifted." % phase.id)
+	_check_equal(pattern.bullet_metadata_source, "GameDatabase.bullet_family_by_id", "Phase %s bullet metadata resolver drifted." % phase.id)
+	for emitter_index in range(pattern.emitters.size()):
+		var emitter: Dictionary = pattern.emitters[emitter_index]
+		var family_id := String(emitter.get("bullet_family", ""))
+		_check(not family_id.is_empty(), "Phase %s emitter %d lacks bullet_family." % [phase.id, emitter_index])
+		_check(emitter.get("schedule") is Dictionary, "Phase %s emitter %d lacks a schedule Dictionary." % [phase.id, emitter_index])
+		_check(not String(emitter.get("visible_warning", "")).is_empty(), "Phase %s emitter %d lacks visible_warning." % [phase.id, emitter_index])
+		var metadata = pattern.bullet_family_metadata.get(family_id, {})
+		_check(metadata is Dictionary and not metadata.is_empty(), "Phase %s emitter %d bullet family did not resolve." % [phase.id, emitter_index])
+		if metadata is Dictionary:
+			_check_equal(String(metadata.get("id", "")), family_id, "Phase %s emitter %d bullet metadata ID drifted." % [phase.id, emitter_index])
+			_check_equal(typeof(metadata.get("color")), TYPE_COLOR, "Phase %s emitter %d bullet metadata lacks Color." % [phase.id, emitter_index])
+	for rule_index in range(pattern.bullet_motion_rules.size()):
+		var rule: Dictionary = pattern.bullet_motion_rules[rule_index]
+		for key in ["primitive", "applies_to", "rule", "visible_warning"]:
+			_check(not String(rule.get(key, "")).is_empty(), "Phase %s motion rule %d lacks %s." % [phase.id, rule_index, key])
+	var pattern_round_trip := PatternDefinition.new(pattern.to_dict())
+	_check(pattern_round_trip.is_valid(), "Phase %s PatternDefinition did not round-trip: %s" % [phase.id, pattern_round_trip.validation_errors()])
 
 func _assert_phase_seed_contract(catalog) -> void:
 	var first_id := String(EXPECTED_PHASE_IDS[0])
@@ -238,6 +312,31 @@ func _assert_phase_seed_contract(catalog) -> void:
 	_check_equal(shared.randi(), control.randi(), "Shared RNG controls did not start in the same state.")
 	catalog.phase_local_seed(77, first_id)
 	_check_equal(shared.randi(), control.randi(), "Phase-local seed derivation consumed or mutated an unrelated gameplay RNG.")
+
+func _assert_catalog_fail_closed_contracts() -> void:
+	var empty_catalog := M1ContentCatalog.new()
+	empty_catalog.reload_from_roots({}, {})
+	_check(not empty_catalog.is_valid(), "Catalog accepted empty JSON roots.")
+	_check(not empty_catalog.validation_errors().is_empty(), "Empty JSON roots produced no validation evidence.")
+
+	var stage_root = JSON.parse_string(FileAccess.get_file_as_string(M1ContentCatalog.STAGE_SOURCE_PATH))
+	var phase_root = JSON.parse_string(FileAccess.get_file_as_string(M1ContentCatalog.PHASE_SOURCE_PATH))
+	_check(stage_root is Dictionary and phase_root is Dictionary, "Negative catalog fixtures could not load frozen roots.")
+	if not (stage_root is Dictionary) or not (phase_root is Dictionary):
+		return
+
+	var malformed_stage: Dictionary = stage_root.duplicate(true)
+	malformed_stage.stages[0]["segments"] = {"wrong": "shape"}
+	var malformed_stage_catalog := M1ContentCatalog.new()
+	malformed_stage_catalog.reload_from_roots(malformed_stage, phase_root)
+	_check(not malformed_stage_catalog.is_valid(), "Catalog accepted a wrong-shaped nested stage array.")
+
+	var malformed_phase: Dictionary = phase_root.duplicate(true)
+	malformed_phase.phases[0]["emitters"] = {"wrong": "shape"}
+	malformed_phase.phases[0]["score_route"] = []
+	var malformed_phase_catalog := M1ContentCatalog.new()
+	malformed_phase_catalog.reload_from_roots(stage_root, malformed_phase)
+	_check(not malformed_phase_catalog.is_valid(), "Catalog accepted wrong-shaped nested phase contracts.")
 
 func _assert_m0_constructor_compatibility() -> void:
 	var timeline := StageTimeline.new("stage_1", [
@@ -289,6 +388,19 @@ func _assert_stage_director_queries(catalog) -> void:
 		"m1_phase_local_seed",
 	]:
 		_check(director.has_method(method), "StageDirector is missing additive query %s." % method)
+	var legacy_aliases_before: Dictionary = director.pattern_aliases()
+	var legacy_stage_snapshots: Array[Dictionary] = []
+	for stage_index in range(1, 7):
+		var controller_before: Dictionary = director.stage_controller(stage_index)
+		var first_wave_timer := int(controller_before.waves[0].time)
+		legacy_stage_snapshots.append({
+			"controller": controller_before,
+			"boss_cards": director.boss_cards(stage_index),
+			"boss": director.boss_definition(stage_index),
+			"midboss": director.midboss_definition(stage_index),
+			"first_wave_timer": first_wave_timer,
+			"due_wave_events": director.due_wave_events(stage_index, first_wave_timer, {}),
+		})
 	_check_equal(director.m1_stage_segments(1).size(), 3, "StageDirector M1 segment query drifted.")
 	_check_equal(director.m1_stage_beats(1).size(), 18, "StageDirector M1 beat query drifted.")
 	_check_equal(director.m1_phase_definitions(1).size(), 6, "StageDirector M1 phase query drifted.")
@@ -298,6 +410,14 @@ func _assert_stage_director_queries(catalog) -> void:
 		catalog.phase_local_seed(41, EXPECTED_PHASE_IDS[0]),
 		"StageDirector M1 phase-local seed query drifted."
 	)
+	_check_equal(director.pattern_aliases(), legacy_aliases_before, "M1 queries mutated legacy pattern aliases.")
+	for stage_index in range(1, 7):
+		var before: Dictionary = legacy_stage_snapshots[stage_index - 1]
+		_check_equal(director.stage_controller(stage_index), before.controller, "M1 queries mutated stage %d legacy controller." % stage_index)
+		_check_equal(director.boss_cards(stage_index), before.boss_cards, "M1 queries mutated stage %d legacy boss cards." % stage_index)
+		_check_equal(director.boss_definition(stage_index), before.boss, "M1 queries mutated stage %d legacy boss definition." % stage_index)
+		_check_equal(director.midboss_definition(stage_index), before.midboss, "M1 queries mutated stage %d legacy midboss definition." % stage_index)
+		_check_equal(director.due_wave_events(stage_index, int(before.first_wave_timer), {}), before.due_wave_events, "M1 queries mutated stage %d legacy wave expansion." % stage_index)
 
 func _initialize() -> void:
 	call_deferred("_run")

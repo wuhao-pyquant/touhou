@@ -33,6 +33,9 @@ var structure_fingerprint_input: Dictionary = {}
 var structure_fingerprint: String = ""
 var source_structure_fingerprint: String = ""
 var pattern_definition: Object = null
+var legacy_card_binding: Dictionary = {}
+var dialogue_hook_id: String = ""
+var performance_hook_id: String = ""
 
 func _init(values: Dictionary = {}) -> void:
 	configure(values)
@@ -64,6 +67,9 @@ func configure(values: Dictionary) -> void:
 	structure_fingerprint_input = _dictionary_copy(values.get("structure_fingerprint_input", {}))
 	structure_fingerprint = String(values.get("structure_fingerprint", ""))
 	source_structure_fingerprint = String(values.get("source_structure_fingerprint", ""))
+	legacy_card_binding = _dictionary_copy(values.get("legacy_card_binding", {}))
+	dialogue_hook_id = String(values.get("dialogue_hook_id", ""))
+	performance_hook_id = String(values.get("performance_hook_id", ""))
 	pattern_definition = null
 
 func validation_errors() -> Array[String]:
@@ -74,15 +80,14 @@ func validation_errors() -> Array[String]:
 		errors.append("display_name is required")
 	if kind not in KINDS:
 		errors.append("kind must be nonspell or spell")
+	if hit_points <= 0.0:
+		errors.append("hit_points must be positive")
+	if timeout_ticks <= 0:
+		errors.append("timeout_ticks must be positive")
+	if pattern_id.is_empty():
+		errors.append("pattern_id is required")
 	if is_m1_contract():
 		_validate_m1(errors)
-	else:
-		if hit_points <= 0.0:
-			errors.append("hit_points must be positive")
-		if timeout_ticks <= 0:
-			errors.append("timeout_ticks must be positive")
-		if pattern_id.is_empty():
-			errors.append("pattern_id is required")
 	return errors
 
 func is_valid() -> bool:
@@ -126,13 +131,23 @@ static func derive_phase_local_seed(run_seed: int, stream_id: String) -> int:
 		derived = (derived << 8) | byte_value
 	return derived if derived != 0 else 1
 
+static func expected_dialogue_hook_id(phase_id: String) -> String:
+	return "m1.dialogue.phase.%s.v1" % phase_id
+
+static func expected_performance_hook_id(phase_id: String) -> String:
+	return "m1.performance.phase.%s.v1" % phase_id
+
 static func canonical_structure_fingerprint(values: Dictionary) -> String:
 	var emitter_parts := PackedStringArray()
-	for value in values.get("emitter_composition", []):
-		emitter_parts.append(String(value))
+	var emitter_values = values.get("emitter_composition", [])
+	if emitter_values is Array:
+		for value in emitter_values:
+			emitter_parts.append(String(value))
 	var event_parts := PackedStringArray()
-	for value in values.get("ordered_events", []):
-		event_parts.append(String(value))
+	var event_values = values.get("ordered_events", [])
+	if event_values is Array:
+		for value in event_values:
+			event_parts.append(String(value))
 	return "%s|E:%s|T:%s|M:%s|N:%s|H:%s|W:%s" % [
 		String(values.get("grammar", "")),
 		">".join(emitter_parts),
@@ -148,8 +163,10 @@ static func canonical_structure_fingerprint(values: Dictionary) -> String:
 # runtime consumers receive canonical_structure_fingerprint() above.
 static func legacy_source_fingerprint(values: Dictionary) -> String:
 	var event_parts := PackedStringArray()
-	for value in values.get("ordered_events", []):
-		event_parts.append(String(value))
+	var event_values = values.get("ordered_events", [])
+	if event_values is Array:
+		for value in event_values:
+			event_parts.append(String(value))
 	return "%s|%s|%s|N:%s|H:%s|W:%s" % [
 		String(values.get("grammar", "")),
 		">".join(event_parts),
@@ -188,6 +205,9 @@ func to_dict() -> Dictionary:
 		"structure_fingerprint_input": structure_fingerprint_input.duplicate(true),
 		"structure_fingerprint": structure_fingerprint,
 		"source_structure_fingerprint": source_structure_fingerprint,
+		"legacy_card_binding": legacy_card_binding.duplicate(true),
+		"dialogue_hook_id": dialogue_hook_id,
+		"performance_hook_id": performance_hook_id,
 	}
 
 func _validate_m1(errors: Array[String]) -> void:
@@ -199,6 +219,7 @@ func _validate_m1(errors: Array[String]) -> void:
 		errors.append("encounter_role must be midboss or boss")
 	if encounter_slot.is_empty():
 		errors.append("encounter_slot is required for an M1 phase")
+	_validate_legacy_card_binding(errors)
 	if deterministic_random_stream_id.is_empty():
 		errors.append("deterministic_random_stream_id is required for an M1 phase")
 	if emitters.is_empty():
@@ -217,6 +238,11 @@ func _validate_m1(errors: Array[String]) -> void:
 		errors.append("capture_condition is required for an M1 phase")
 	if failure_condition.is_empty():
 		errors.append("failure_condition is required for an M1 phase")
+	_validate_score_route(errors)
+	if dialogue_hook_id != expected_dialogue_hook_id(id):
+		errors.append("dialogue_hook_id must be the deterministic per-phase M1 binding")
+	if performance_hook_id != expected_performance_hook_id(id):
+		errors.append("performance_hook_id must be the deterministic per-phase M1 binding")
 	if int(warning_contract.get("normal", 0)) <= 0 or int(warning_contract.get("hard", 0)) <= 0:
 		errors.append("Normal and Hard warning frames are required")
 	for key in [
@@ -233,24 +259,58 @@ func _validate_m1(errors: Array[String]) -> void:
 	for key in ["grammar", "movement_graph", "normal_topology", "hard_transformation", "warning_contract"]:
 		if String(structure_fingerprint_input.get(key, "")).is_empty():
 			errors.append("structure_fingerprint_input.%s must not be empty" % key)
-	if structure_fingerprint_input.get("emitter_composition", []).is_empty():
+	var fingerprint_emitters = structure_fingerprint_input.get("emitter_composition", [])
+	if not (fingerprint_emitters is Array) or fingerprint_emitters.is_empty():
 		errors.append("structure_fingerprint_input.emitter_composition must not be empty")
-	if structure_fingerprint_input.get("ordered_events", []).size() != 4:
+	var fingerprint_events = structure_fingerprint_input.get("ordered_events", [])
+	if not (fingerprint_events is Array) or fingerprint_events.size() != 4:
 		errors.append("structure_fingerprint_input.ordered_events must contain four entries")
 	for key in ["grammar", "movement_graph", "normal_topology", "hard_transformation", "warning_contract"]:
 		var scalar := String(structure_fingerprint_input.get(key, ""))
 		if not _is_ascii_nfc_machine_text(scalar) or scalar.contains("|"):
 			errors.append("structure_fingerprint_input.%s must be unambiguous ASCII/NFC machine text" % key)
-	for value in structure_fingerprint_input.get("emitter_composition", []):
-		if not _is_ascii_nfc_machine_text(String(value)) or String(value).contains("|") or String(value).contains(">"):
-			errors.append("emitter composition values must be unambiguous ASCII/NFC machine text")
-	for value in structure_fingerprint_input.get("ordered_events", []):
-		if not _is_ascii_nfc_machine_text(String(value)) or String(value).contains("|") or String(value).contains(">"):
-			errors.append("ordered event values must be unambiguous ASCII/NFC machine text")
+	if fingerprint_emitters is Array:
+		for value in fingerprint_emitters:
+			if not _is_ascii_nfc_machine_text(String(value)) or String(value).contains("|") or String(value).contains(">"):
+				errors.append("emitter composition values must be unambiguous ASCII/NFC machine text")
+	if fingerprint_events is Array:
+		for value in fingerprint_events:
+			if not _is_ascii_nfc_machine_text(String(value)) or String(value).contains("|") or String(value).contains(">"):
+				errors.append("ordered event values must be unambiguous ASCII/NFC machine text")
 	if structure_fingerprint != recompute_structure_fingerprint():
 		errors.append("structure_fingerprint drifted from canonical M1 input")
-	if pattern_definition != null and pattern_definition.has_method("is_valid") and not pattern_definition.is_valid():
+	if pattern_definition == null:
+		errors.append("M1 phase must attach its PatternDefinition")
+	elif not pattern_definition.has_method("is_valid") or not pattern_definition.is_valid():
 		errors.append("attached PatternDefinition is invalid")
+	elif pattern_id != String(pattern_definition.id):
+		errors.append("pattern_id must identify the attached M1 PatternDefinition")
+
+func _validate_legacy_card_binding(errors: Array[String]) -> void:
+	for key in ["stage_index", "encounter_role", "encounter_slot", "legacy_pattern_id", "display_name", "kind", "hit_points", "timeout_seconds"]:
+		if not legacy_card_binding.has(key):
+			errors.append("legacy_card_binding.%s is required" % key)
+	if int(legacy_card_binding.get("stage_index", 0)) != stage_index:
+		errors.append("legacy_card_binding.stage_index must match the phase")
+	if String(legacy_card_binding.get("encounter_role", "")) != encounter_role:
+		errors.append("legacy_card_binding.encounter_role must match the phase")
+	if String(legacy_card_binding.get("encounter_slot", "")) != encounter_slot:
+		errors.append("legacy_card_binding.encounter_slot must match the phase")
+	if String(legacy_card_binding.get("legacy_pattern_id", "")) != String(source_identity.get("legacy_pattern_id", "")):
+		errors.append("legacy_card_binding must retain the source_identity legacy alias")
+	if String(legacy_card_binding.get("display_name", "")) != display_name:
+		errors.append("legacy_card_binding.display_name must match the phase")
+	if String(legacy_card_binding.get("kind", "")) != kind:
+		errors.append("legacy_card_binding.kind must match the phase")
+	if float(legacy_card_binding.get("hit_points", 0.0)) != hit_points:
+		errors.append("hit_points must match the bound legacy card")
+	if int(legacy_card_binding.get("timeout_seconds", 0)) * 60 != timeout_ticks:
+		errors.append("timeout_ticks must convert the bound legacy card seconds at 60 Hz")
+
+func _validate_score_route(errors: Array[String]) -> void:
+	for key in ["decision", "reward", "risk", "evidence"]:
+		if String(score_route.get(key, "")).is_empty():
+			errors.append("score_route.%s is required for an M1 phase" % key)
 
 func _dictionary_copy(value: Variant) -> Dictionary:
 	return value.duplicate(true) if value is Dictionary else {}
