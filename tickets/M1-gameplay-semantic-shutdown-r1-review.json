@@ -1,0 +1,35 @@
+{
+  "id": "M1-gameplay-semantic-shutdown-r1-review",
+  "objective": "Perform the second independent strictly read-only static gate for candidate 56a1e0180b828a348287dbeaa9111d570bb1ed36. Reconfirm the four gameplay blockers and the shutdown ownership graph already reviewed at e80bfab659618904fa7cf51f6e1580ad0a3f6818, then decide whether the sole GATE: REPAIR blocker from run 20260715T030756Z-M1-gameplay-semantic-shutdown-review-core_simulation-1159870c is closed. The delta from e80bfab must be limited to scripts/main.gd and tests/assert_phase8_regressions.gd. Verify _quit_runtime_safe submits a normal SceneTree quit request without destructive teardown in the current _process frame; _exit_tree and NOTIFICATION_PREDELETE remain the exclusive automatic teardown hooks; explicit standalone shutdown remains idempotent; the injected quit target cannot alter ordinary menu behavior or permit use-after-free; and the regression exercises function behavior rather than only source text. Do not launch Godot or any import-producing executable, run no tests, and edit no files. Return GATE: APPROVE only if exactly these four serial guarded launches are safe: assert_m1_gameplay_systems.gd once, assert_m1_shot_mechanics.gd once, assert_phase8_regressions.gd once, then scenes/main.tscn --quit-after 5 once. Otherwise return GATE: REPAIR and authorize zero Godot launches.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": [
+    "**"
+  ],
+  "dependency_commit": "56a1e0180b828a348287dbeaa9111d570bb1ed36",
+  "acceptance_commands": [
+    "if((git rev-parse HEAD).Trim() -ne '56a1e0180b828a348287dbeaa9111d570bb1ed36'){throw 'Wrong candidate HEAD'}; Write-Host 'STATIC_REVIEW_HEAD=pass'",
+    "$changed=@(git diff --name-only 770181c954567c3610a8d276eca3b5715f9b68f4..HEAD); $expected=@('autoload/game_manager.gd','scripts/main.gd','scripts/runtime/gameplay_score_system.gd','scripts/runtime/item_reward_system.gd','tests/assert_m1_gameplay_systems.gd','tests/assert_m1_shot_mechanics.gd','tests/assert_phase8_regressions.gd'); if(Compare-Object $expected $changed){throw \"Unexpected full candidate paths: $($changed -join ',')\"}; Write-Host 'STATIC_REVIEW_SCOPE=pass'",
+    "$changed=@(git diff --name-only e80bfab659618904fa7cf51f6e1580ad0a3f6818..HEAD); $expected=@('scripts/main.gd','tests/assert_phase8_regressions.gd'); if(Compare-Object $expected $changed){throw \"Unexpected repair delta paths: $($changed -join ',')\"}; Write-Host 'STATIC_REVIEW_REPAIR_SCOPE=pass'",
+    "git diff 770181c954567c3610a8d276eca3b5715f9b68f4..HEAD --check",
+    "if(git status --porcelain){throw 'Reviewer worktree is not clean'}; Write-Host 'STATIC_REVIEW_CLEAN=pass'",
+    "if(@(Get-Process -ErrorAction SilentlyContinue | Where-Object ProcessName -Like 'Godot*').Count-ne 0){throw 'Godot process exists during read-only review'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Begin with GATE: APPROVE or GATE: REPAIR and explicitly state that no Godot command or test was run",
+    "Map the prior quit-order blocker to exact repaired production and behavioral-test lines and confirm whether the same-frame null dereference is impossible",
+    "Reconfirm all four gameplay semantic closures and fallback/autoload/RefCounted ownership conclusions without re-planning or broadening scope",
+    "Distinguish static approval from the unverified historical 10 ObjectDB and 4 resources leak; only guarded execution may close that risk",
+    "On APPROVE authorize exactly the four serial guarded launches named in the objective; on REPAIR authorize zero launches",
+    "Report actual runtime identity, all acceptance exit codes, zero changed files, and Godot process count zero"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "The authoritative first review is .agent-runs/20260715T030756Z-M1-gameplay-semantic-shutdown-review-core_simulation-1159870c/final.json. It approved all four gameplay blockers and most ownership logic, but rejected eager shutdown in _quit_runtime_safe.",
+    "Repair run 20260715T031431Z-M1-gameplay-semantic-shutdown-repair-gameplay_systems-r1-74334496 resumed the original gameplay_systems thread/worktree at gpt-5.6-sol/xhigh, changed no path outside the original seven-file ticket, launched Godot zero times, and reported that the next fresh ticket returns to Sol/high. Treat that as supplied evidence only.",
+    "The prior guarded main smoke had engine exit 0 but guard FatalOutput for 10 ObjectDB instances and 4 resources still in use, with no signal 11, C++ backtrace, access violation, popup, or residual process. Leak closure remains unverified.",
+    "Do not inspect, reset, stage, or mention main-worktree audio/**/*.import modifications."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
