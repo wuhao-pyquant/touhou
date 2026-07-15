@@ -1,0 +1,730 @@
+﻿{
+  "schema_version": 1,
+  "artifact_id": "m2_stage2_yokai_market_choreography_v1",
+  "dependency_commit": "f6e1c809cc2155468c8e621361459fe809c8fe6a",
+  "source_bindings": [
+    {
+      "path": "content/design/m1_stage_beats.json",
+      "hash_algorithm": "sha256",
+      "raw_sha256": "173f1acab5cd9b5bc7197b4aa9bd50154c0ee047cede15c19945b40e4975b2b2"
+    },
+    {
+      "path": "content/design/m1_phase_cards.json",
+      "hash_algorithm": "sha256",
+      "raw_sha256": "5f8f3887ef56455f2d01ecc83a67572c14cbdf6eee8dac6b0cc2906023b7387c"
+    }
+  ],
+  "difficulty_scope": ["normal", "hard"],
+  "stage": {
+    "stage_index": 2,
+    "stage_id": "yokai_market",
+    "display_name": "妖怪市集",
+    "location": "妖怪市集的摊棚街",
+    "tick_rate": 60,
+    "playfield": {
+      "width": 720,
+      "height": 960,
+      "origin": "top_left",
+      "combat_bounds": [24, 48, 696, 936]
+    },
+    "midboss": {
+      "owner_id": "abacus_tsukumogami",
+      "entry_tick": 900,
+      "phase_ids": ["stage_2_midboss_nonspell_1", "stage_2_midboss_spell_1"],
+      "gate_event_id": "s2_b06",
+      "resume_event_id": "s2_b12"
+    },
+    "boss": {
+      "owner_id": "oni_market_leader",
+      "entry_tick": 2700,
+      "phase_ids": ["stage_2_boss_nonspell_1", "stage_2_boss_spell_1", "stage_2_boss_spell_2", "stage_2_boss_spell_3"],
+      "gate_event_id": "s2_b18"
+    },
+    "route_identity": {
+      "normal": "读取珠色与横杆，按红蓝黄公开顺序保持相邻开放巷。",
+      "hard": "侧棚反弹、邻旗翻转与镜轴选择把直巷改成状态化折线路网；击破顺序改写下一条可达边。",
+      "score_decision": "连续三组按标价牌从高到低击破，且每枚反弹珠至少擦弹一次。",
+      "score_reward": "price_chain 每组令点物价值增加 25%，第三组生成 night_festival_seal。",
+      "score_risk": "高价目标位于即将关闭的摊巷深处。",
+      "telemetry_hooks": ["kill_order", "booth_lane_state", "rebound_graze_uid", "price_chain"]
+    },
+    "budget_contract": {
+      "meaning": "作者上限与最窄可读路线预算；不是最终性能或手感结论。",
+      "stage_peak_active_bullets": {"normal": 156, "hard": 204},
+      "minimum_safe_route_width_px": {"normal": 112, "hard": 84}
+    },
+    "segments": [
+      {
+        "id": "s2_ledger_entry",
+        "name": "开市算账",
+        "beat_ids": ["s2_b01", "s2_b02", "s2_b03", "s2_b04", "s2_b05", "s2_b06"],
+        "start_tick": 0,
+        "end_tick": 899,
+        "spatial_problem": "读算盘珠一次反弹后的终点，而非追逐即时缺口。",
+        "normal_route": "外侧珠先落，中央珠后反弹。",
+        "hard_route": "反弹面由水平边改为标色摊棚侧面，路线折向相邻巷。",
+        "peak_active_bullets": {"normal": 72, "hard": 96},
+        "minimum_safe_route_width_px": {"normal": 144, "hard": 108}
+      },
+      {
+        "id": "s2_booth_lane_auction",
+        "name": "摊巷竞价",
+        "beat_ids": ["s2_b07", "s2_b08", "s2_b09", "s2_b10", "s2_b11", "s2_b12"],
+        "start_tick": 900,
+        "end_tick": 1799,
+        "spatial_problem": "在三条摊位巷中按旗色选择击破顺序。",
+        "normal_route": "红蓝黄固定顺序逐巷开放。",
+        "hard_route": "击破列头翻转相邻出口，第二目标由新图决定。",
+        "peak_active_bullets": {"normal": 118, "hard": 154},
+        "minimum_safe_route_width_px": {"normal": 128, "hard": 96}
+      },
+      {
+        "id": "s2_closing_bell_order",
+        "name": "收市钟序",
+        "beat_ids": ["s2_b13", "s2_b14", "s2_b15", "s2_b16", "s2_b17", "s2_b18"],
+        "start_tick": 1800,
+        "end_tick": 2700,
+        "spatial_problem": "保留低威胁敌维持安全巷；误杀会同时关闭两路。",
+        "normal_route": "先击破持镜敌，再处理算盘敌。",
+        "hard_route": "两侧镜面交换珠路，最后存活摊主决定最终安全巷。",
+        "peak_active_bullets": {"normal": 156, "hard": 204},
+        "minimum_safe_route_width_px": {"normal": 112, "hard": 84}
+      }
+    ],
+    "events": [
+      {
+        "id": "s2_b01",
+        "authored_tick": 0,
+        "segment_id": "s2_ledger_entry",
+        "event_type": "formation",
+        "warning": {"lead_ticks": 24, "visual": "反弹横杆与对应珠同色闪烁。", "future_path_px": 120},
+        "formation": {
+          "id": "s2_f01_three_abacus_row",
+          "active_entity_ids": []
+        },
+        "spawns": [
+            {"id": "s2_b01_abacus_left", "enemy_id": "market_abacus_frame", "position": [156, 96], "movement": {"path": "vertical_settle", "to": [156, 232], "duration_ticks": 42}, "pattern": {"primitive": "rebound_bead", "start_delay_ticks": 24, "interval_ticks": 48, "shots_per_burst": 3, "speed": 168, "routing": "outer_horizontal_bar_once"}, "drop_item_ids": ["point_small", "point_small"]},
+            {"id": "s2_b01_abacus_center", "enemy_id": "market_abacus_frame", "position": [360, 72], "movement": {"path": "vertical_settle", "to": [360, 208], "duration_ticks": 48}, "pattern": {"primitive": "rebound_bead", "start_delay_ticks": 48, "interval_ticks": 48, "shots_per_burst": 3, "speed": 162, "routing": "center_horizontal_bar_once"}, "drop_item_ids": ["power_small", "point_small"]},
+            {"id": "s2_b01_abacus_right", "enemy_id": "market_abacus_frame", "position": [564, 96], "movement": {"path": "vertical_settle", "to": [564, 232], "duration_ticks": 42}, "pattern": {"primitive": "rebound_bead", "start_delay_ticks": 24, "interval_ticks": 48, "shots_per_burst": 3, "speed": 168, "routing": "outer_horizontal_bar_once"}, "drop_item_ids": ["point_small", "point_small"]}
+        ],
+        "completion": {"condition": "three_abacus_frames_destroyed_or_deadline", "clear_hostile_bullets": false},
+        "deadline_tick": 144,
+        "score_route_hooks": ["rebound_graze_uid", "price_chain_group_1"],
+        "telemetry_hooks": ["formation_spawn", "rebound_surface_id", "drop_item_ids"]
+      },
+      {
+        "id": "s2_b02",
+        "authored_tick": 150,
+        "segment_id": "s2_ledger_entry",
+        "event_type": "rebound",
+        "warning": {"lead_ticks": 24, "visual": "珠尾预画反弹后 120px 路径。", "future_path_px": 120},
+        "formation": {
+          "id": "s2_f02_m_route",
+          "active_entity_ids": []
+        },
+        "spawns": [
+            {"id": "s2_b02_left_clerk", "enemy_id": "abacus_clerk", "position": [180, 84], "movement": {"path": "lane_drop_left", "to": [180, 270], "duration_ticks": 54}, "pattern": {"primitive": "rebound_bead", "start_delay_ticks": 24, "interval_ticks": 54, "shots_per_burst": 4, "speed": 174, "routing": "left_outward_then_destroy"}, "drop_item_ids": ["point_small", "price_token_1"]},
+            {"id": "s2_b02_center_clerk", "enemy_id": "abacus_clerk", "position": [360, 60], "movement": {"path": "lane_drop_center", "to": [360, 240], "duration_ticks": 60}, "pattern": {"primitive": "rebound_bead", "start_delay_ticks": 54, "interval_ticks": 54, "shots_per_burst": 4, "speed": 168, "routing": "center_inward_then_destroy"}, "drop_item_ids": ["power_small", "price_token_2"]},
+            {"id": "s2_b02_right_clerk", "enemy_id": "abacus_clerk", "position": [540, 84], "movement": {"path": "lane_drop_right", "to": [540, 270], "duration_ticks": 54}, "pattern": {"primitive": "rebound_bead", "start_delay_ticks": 24, "interval_ticks": 54, "shots_per_burst": 4, "speed": 174, "routing": "right_outward_then_destroy"}, "drop_item_ids": ["point_small", "price_token_1"]}
+        ],
+        "completion": {"condition": "m_route_clerks_destroyed_or_deadline", "clear_hostile_bullets": false},
+        "deadline_tick": 294,
+        "score_route_hooks": ["rebound_graze_uid", "m_route_cross"],
+        "telemetry_hooks": ["rebound_tick", "rebound_target_lane", "second_surface_destroy"]
+      },
+      {
+        "id": "s2_b03",
+        "authored_tick": 300,
+        "segment_id": "s2_ledger_entry",
+        "event_type": "kill_order",
+        "warning": {"lead_ticks": 24, "visual": "红蓝标价牌与对应算盘边框保持同色。", "future_path_px": 120},
+        "formation": {
+          "id": "s2_f03_red_blue_ledger",
+          "active_entity_ids": []
+        },
+        "spawns": [
+            {"id": "s2_b03_red_ledger", "enemy_id": "price_tag_yokai_red", "position": [228, 116], "movement": {"path": "short_booth_arc", "to": [204, 248], "duration_ticks": 48}, "pattern": {"primitive": "grid_edge", "start_delay_ticks": 24, "interval_ticks": 60, "shots_per_burst": 5, "speed": 156, "routing": "left_lane_edge"}, "drop_item_ids": ["point_small", "price_token_3"]},
+            {"id": "s2_b03_blue_ledger", "enemy_id": "price_tag_yokai_blue", "position": [492, 116], "movement": {"path": "short_booth_arc", "to": [516, 248], "duration_ticks": 48}, "pattern": {"primitive": "grid_edge", "start_delay_ticks": 24, "interval_ticks": 60, "shots_per_burst": 5, "speed": 156, "routing": "right_lane_edge"}, "drop_item_ids": ["point_small", "price_token_2"]}
+        ],
+        "completion": {"condition": "red_then_blue_or_simultaneous_center_open", "clear_hostile_bullets": false},
+        "deadline_tick": 444,
+        "score_route_hooks": ["kill_order", "price_chain_group_2"],
+        "telemetry_hooks": ["first_kill_id", "kill_delta_ticks", "lane_open_state"]
+      },
+      {
+        "id": "s2_b04",
+        "authored_tick": 450,
+        "segment_id": "s2_ledger_entry",
+        "event_type": "booth_lane",
+        "warning": {"lead_ticks": 30, "visual": "两条摊棚边以无碰撞虚线定位。", "future_path_px": 0},
+        "formation": {
+          "id": "s2_f04_three_readable_lanes",
+          "active_entity_ids": []
+        },
+        "spawns": [
+            {"id": "s2_b04_left_booth_edge", "enemy_id": "booth_edge_keeper", "position": [276, 72], "movement": {"path": "booth_edge_settle", "to": [276, 360], "duration_ticks": 60}, "pattern": {"primitive": "grid_edge", "start_delay_ticks": 30, "interval_ticks": 72, "shots_per_burst": 6, "speed": 150, "routing": "vertical_edge_left"}, "drop_item_ids": ["point_small", "point_small"]},
+            {"id": "s2_b04_right_booth_edge", "enemy_id": "booth_edge_keeper", "position": [444, 72], "movement": {"path": "booth_edge_settle", "to": [444, 360], "duration_ticks": 60}, "pattern": {"primitive": "grid_edge", "start_delay_ticks": 30, "interval_ticks": 72, "shots_per_burst": 6, "speed": 150, "routing": "vertical_edge_right"}, "drop_item_ids": ["point_small", "point_small"]}
+        ],
+        "completion": {"condition": "lane_edges_finish_two_bursts_or_destroyed", "clear_hostile_bullets": false},
+        "deadline_tick": 594,
+        "score_route_hooks": ["booth_lane_state", "center_lane_entry"],
+        "telemetry_hooks": ["grid_preview_tick", "grid_collision_disabled", "lane_width_px"]
+      },
+      {
+        "id": "s2_b05",
+        "authored_tick": 600,
+        "segment_id": "s2_ledger_entry",
+        "event_type": "rebound",
+        "warning": {"lead_ticks": 18, "visual": "唯一可反弹摊边由白转金并画出相邻巷折线。", "future_path_px": 120},
+        "formation": {
+          "id": "s2_f05_sidewall_transfer",
+          "active_entity_ids": ["s2_b04_left_booth_edge", "s2_b04_right_booth_edge"]
+        },
+        "spawns": [
+            {"id": "s2_b05_left_bead_seller", "enemy_id": "bead_seller", "position": [120, 132], "movement": {"path": "left_lane_hold", "to": [120, 216], "duration_ticks": 36}, "pattern": {"primitive": "rebound_bead", "start_delay_ticks": 18, "interval_ticks": 42, "shots_per_burst": 5, "speed": 186, "routing": "left_wall_to_center_once"}, "drop_item_ids": ["power_small", "price_token_2"]},
+            {"id": "s2_b05_right_bead_seller", "enemy_id": "bead_seller", "position": [600, 132], "movement": {"path": "right_lane_hold", "to": [600, 216], "duration_ticks": 36}, "pattern": {"primitive": "rebound_bead", "start_delay_ticks": 18, "interval_ticks": 42, "shots_per_burst": 5, "speed": 186, "routing": "right_wall_to_center_once"}, "drop_item_ids": ["power_small", "price_token_2"]}
+        ],
+        "completion": {"condition": "both_sellers_destroyed_or_second_surface_despawn", "clear_hostile_bullets": false},
+        "deadline_tick": 744,
+        "score_route_hooks": ["rebound_graze_uid", "price_chain_group_3"],
+        "telemetry_hooks": ["first_surface_id", "second_surface_destroy", "destination_lane"]
+      },
+      {
+        "id": "s2_b06",
+        "authored_tick": 750,
+        "segment_id": "s2_ledger_entry",
+        "event_type": "midboss_gate",
+        "warning": {"lead_ticks": 45, "visual": "中央九颗算珠依次点亮并把市声压低。", "future_path_px": 0},
+        "formation": {
+          "id": "s2_f06_midboss_entry",
+          "active_entity_ids": []
+        },
+        "spawns": [
+            {"id": "s2_midboss_abacus_tsukumogami", "enemy_id": "abacus_tsukumogami", "position": [360, -64], "movement": {"path": "midboss_center_entry", "to": [360, 176], "duration_ticks": 60}, "pattern": {"primitive": "rebound_bead", "start_delay_ticks": 150, "interval_ticks": 60, "shots_per_burst": 3, "speed": 0, "routing": "phase_owned"}, "drop_item_ids": ["point_large", "power_large"]}
+        ],
+        "encounter_gate": {"action": "pause_stage_wave_clock", "owner_id": "abacus_tsukumogami", "phase_ids": ["stage_2_midboss_nonspell_1", "stage_2_midboss_spell_1"], "resume_event_id": "s2_b12", "clear_on_entry": true, "clear_on_exit": true},
+        "completion": {"condition": "both_midboss_phases_resolved_by_clear_or_timeout", "clear_hostile_bullets": true},
+        "deadline_tick": 899,
+        "score_route_hooks": ["midboss_gate_enter", "midboss_capture_mask"],
+        "telemetry_hooks": ["stage_clock_pause_tick", "phase_sequence_start", "gate_owner_id"]
+      },
+      {
+        "id": "s2_b07",
+        "authored_tick": 900,
+        "segment_id": "s2_booth_lane_auction",
+        "event_type": "midboss_phase_start",
+        "warning": {"lead_ticks": 24, "visual": "奇列青框、偶列金框先描画。", "future_path_px": 120},
+        "formation": {"id": "s2_f07_midboss_odd_even", "active_entity_ids": ["s2_midboss_abacus_tsukumogami"]},
+        "spawns": [],
+        "completion": {"condition": "stage_2_midboss_nonspell_1_started", "clear_hostile_bullets": false},
+        "deadline_tick": 1044,
+        "score_route_hooks": ["column_parity", "price_chain"],
+        "telemetry_hooks": ["phase_id", "topology_id", "odd_even_lane_state"]
+      },
+      {
+        "id": "s2_b08",
+        "authored_tick": 1050,
+        "segment_id": "s2_booth_lane_auction",
+        "event_type": "midboss_route_commit",
+        "warning": {"lead_ticks": 20, "visual": "较慢列头一侧的算盘图标与 Boss 目标点同步闪烁。", "future_path_px": 0},
+        "formation": {"id": "s2_f08_midboss_slow_side", "active_entity_ids": ["s2_midboss_abacus_tsukumogami"]},
+        "spawns": [],
+        "completion": {"condition": "midboss_reaches_slow_kill_side_target", "clear_hostile_bullets": false},
+        "deadline_tick": 1194,
+        "score_route_hooks": ["slow_column_id", "close_range_damage_window"],
+        "telemetry_hooks": ["boss_move_from", "boss_move_to", "lane_exit"]
+      },
+      {
+        "id": "s2_b09",
+        "authored_tick": 1200,
+        "segment_id": "s2_booth_lane_auction",
+        "event_type": "midboss_spell_start",
+        "warning": {"lead_ticks": 30, "visual": "冻结珠为无碰撞白影，并显示横杆触发箭头。", "future_path_px": 120},
+        "formation": {"id": "s2_f09_midboss_rebound_ladder", "active_entity_ids": ["s2_midboss_abacus_tsukumogami"]},
+        "spawns": [],
+        "completion": {"condition": "stage_2_midboss_spell_1_started", "clear_hostile_bullets": true},
+        "deadline_tick": 1344,
+        "score_route_hooks": ["rung_id", "rebound_graze_uid"],
+        "telemetry_hooks": ["warning_spawn_tick", "collision_enable_tick", "rebound_surface_id"]
+      },
+      {
+        "id": "s2_b10",
+        "authored_tick": 1350,
+        "segment_id": "s2_booth_lane_auction",
+        "event_type": "midboss_cancel_choice",
+        "warning": {"lead_ticks": 18, "visual": "可取消珠以虚线连向对应算盘。", "future_path_px": 120},
+        "formation": {"id": "s2_f10_cancel_link", "active_entity_ids": ["s2_midboss_abacus_tsukumogami"]},
+        "spawns": [],
+        "completion": {"condition": "left_or_right_abacus_cancel_choice_committed", "clear_hostile_bullets": false},
+        "deadline_tick": 1494,
+        "score_route_hooks": ["cancel_side", "rung_alternation"],
+        "telemetry_hooks": ["linked_bullet_uid", "cancel_tick", "open_lane_id"]
+      },
+      {
+        "id": "s2_b11",
+        "authored_tick": 1500,
+        "segment_id": "s2_booth_lane_auction",
+        "event_type": "score_window",
+        "warning": {"lead_ticks": 30, "visual": "3-2-1 价值牌常驻；上收点线在正确击破后转金。", "future_path_px": 0},
+        "formation": {"id": "s2_f11_midboss_auction_window", "active_entity_ids": ["s2_midboss_abacus_tsukumogami"]},
+        "spawns": [],
+        "completion": {"condition": "three_two_one_order_or_window_expiry", "clear_hostile_bullets": false},
+        "deadline_tick": 1644,
+        "score_route_hooks": ["kill_order_3_2_1", "auction_collect_window", "price_chain"],
+        "telemetry_hooks": ["price_page_tick", "collect_line_cross_tick", "point_value_multiplier"]
+      },
+      {
+        "id": "s2_b12",
+        "authored_tick": 1650,
+        "segment_id": "s2_booth_lane_auction",
+        "event_type": "stage_resume",
+        "warning": {"lead_ticks": 60, "visual": "中Boss 退场后，大字三色价格牌公布下一段顺序。", "future_path_px": 0},
+        "formation": {
+          "id": "s2_f12_resume_flags",
+          "active_entity_ids": []
+        },
+        "spawns": [
+            {"id": "s2_b12_red_flag_runner", "enemy_id": "booth_flag_runner_red", "position": [168, 60], "movement": {"path": "raise_flag", "to": [168, 192], "duration_ticks": 48}, "pattern": {"primitive": "lane_fan", "start_delay_ticks": 60, "interval_ticks": 90, "shots_per_burst": 3, "speed": 144, "routing": "left_lane_down"}, "drop_item_ids": ["point_small", "price_token_3"]},
+            {"id": "s2_b12_blue_flag_runner", "enemy_id": "booth_flag_runner_blue", "position": [360, 60], "movement": {"path": "raise_flag", "to": [360, 192], "duration_ticks": 48}, "pattern": {"primitive": "rebound_bead", "start_delay_ticks": 60, "interval_ticks": 90, "shots_per_burst": 3, "speed": 144, "routing": "center_lane_once"}, "drop_item_ids": ["point_small", "price_token_2"]},
+            {"id": "s2_b12_yellow_flag_runner", "enemy_id": "booth_flag_runner_yellow", "position": [552, 60], "movement": {"path": "raise_flag", "to": [552, 192], "duration_ticks": 48}, "pattern": {"primitive": "lane_fan", "start_delay_ticks": 60, "interval_ticks": 90, "shots_per_burst": 3, "speed": 132, "routing": "right_lane_down"}, "drop_item_ids": ["point_small", "price_token_1"]}
+        ],
+        "encounter_resume": {"action": "resume_stage_wave_clock", "from_gate_event_id": "s2_b06", "required_phase_ids": ["stage_2_midboss_nonspell_1", "stage_2_midboss_spell_1"], "resume_tick": 1650, "clear_hostile_bullets": true},
+        "completion": {"condition": "three_flags_visible_and_midboss_exit_clear_complete", "clear_hostile_bullets": true},
+        "deadline_tick": 1794,
+        "score_route_hooks": ["midboss_resume", "published_kill_order"],
+        "telemetry_hooks": ["stage_clock_resume_tick", "midboss_resolution", "next_flag_order"]
+      },
+      {
+        "id": "s2_b13",
+        "authored_tick": 1800,
+        "segment_id": "s2_closing_bell_order",
+        "event_type": "booth_lane",
+        "warning": {"lead_ticks": 30, "visual": "红墙、蓝反弹、黄封口三种图标常驻摊旗。", "future_path_px": 120},
+        "formation": {
+          "id": "s2_f13_three_attack_booths",
+          "active_entity_ids": []
+        },
+        "spawns": [
+            {"id": "s2_b13_red_booth_master", "enemy_id": "booth_master_red", "position": [156, 132], "movement": {"path": "left_booth_hold", "to": [156, 210], "duration_ticks": 36}, "pattern": {"primitive": "grid_edge", "start_delay_ticks": 30, "interval_ticks": 66, "shots_per_burst": 7, "speed": 174, "routing": "left_vertical_wall"}, "drop_item_ids": ["point_small", "price_token_3"]},
+            {"id": "s2_b13_blue_booth_master", "enemy_id": "booth_master_blue", "position": [360, 108], "movement": {"path": "center_booth_hold", "to": [360, 192], "duration_ticks": 42}, "pattern": {"primitive": "rebound_bead", "start_delay_ticks": 30, "interval_ticks": 54, "shots_per_burst": 6, "speed": 180, "routing": "center_to_adjacent_once"}, "drop_item_ids": ["power_small", "price_token_2"]},
+            {"id": "s2_b13_yellow_booth_master", "enemy_id": "booth_master_yellow", "position": [564, 132], "movement": {"path": "right_booth_hold", "to": [564, 210], "duration_ticks": 36}, "pattern": {"primitive": "lane_fan", "start_delay_ticks": 30, "interval_ticks": 78, "shots_per_burst": 4, "speed": 150, "routing": "right_lane_cap"}, "drop_item_ids": ["point_small", "price_token_1"]}
+        ],
+        "completion": {"condition": "one_booth_master_destroyed_or_deadline", "clear_hostile_bullets": false},
+        "deadline_tick": 1944,
+        "score_route_hooks": ["kill_order", "price_chain_group_1"],
+        "telemetry_hooks": ["booth_attack_icon", "lane_state_before_kill", "first_kill_id"]
+      },
+      {
+        "id": "s2_b14",
+        "authored_tick": 1950,
+        "segment_id": "s2_closing_bell_order",
+        "event_type": "kill_order",
+        "warning": {"lead_ticks": 24, "visual": "击破后受影响巷先闪红，正确开放巷转白。", "future_path_px": 0},
+        "formation": {"id": "s2_f14_neighbor_flag_effect", "active_entity_ids": ["s2_b13_red_booth_master", "s2_b13_blue_booth_master", "s2_b13_yellow_booth_master"]},
+        "spawns": [],
+        "completion": {"condition": "neighbor_flag_effect_committed", "clear_hostile_bullets": false},
+        "deadline_tick": 2094,
+        "score_route_hooks": ["kill_order", "price_chain_group_2", "booth_lane_state"],
+        "telemetry_hooks": ["killed_flag", "affected_lane_ids", "reachable_lane_graph"]
+      },
+      {
+        "id": "s2_b15",
+        "authored_tick": 2100,
+        "segment_id": "s2_closing_bell_order",
+        "event_type": "rebound",
+        "warning": {"lead_ticks": 30, "visual": "镜面投射完整折线；实体珠出现前镜路无碰撞。", "future_path_px": 180},
+        "formation": {
+          "id": "s2_f15_mirror_transfer",
+          "active_entity_ids": []
+        },
+        "spawns": [
+            {"id": "s2_b15_left_mirror", "enemy_id": "water_mirror_yokai", "position": [228, 120], "movement": {"path": "left_mirror_hold", "to": [228, 240], "duration_ticks": 42}, "pattern": {"primitive": "rebound_bead", "start_delay_ticks": 30, "interval_ticks": 60, "shots_per_burst": 5, "speed": 186, "routing": "horizontal_mirror_to_right_lane_once"}, "drop_item_ids": ["point_small", "mirror_token_left"]},
+            {"id": "s2_b15_right_mirror", "enemy_id": "water_mirror_yokai", "position": [492, 120], "movement": {"path": "right_mirror_hold", "to": [492, 240], "duration_ticks": 42}, "pattern": {"primitive": "delayed_seed", "start_delay_ticks": 30, "interval_ticks": 60, "shots_per_burst": 5, "speed": 174, "routing": "diagonal_mirror_to_left_lane_after_delay"}, "drop_item_ids": ["point_small", "mirror_token_right"]}
+        ],
+        "completion": {"condition": "one_mirror_destroyed_and_selected_route_committed", "clear_hostile_bullets": false},
+        "deadline_tick": 2244,
+        "score_route_hooks": ["source_graze", "mirror_choice"],
+        "telemetry_hooks": ["mirror_axis", "source_lane", "mapped_lane", "activation_tick"]
+      },
+      {
+        "id": "s2_b16",
+        "authored_tick": 2250,
+        "segment_id": "s2_closing_bell_order",
+        "event_type": "kill_order",
+        "warning": {"lead_ticks": 24, "visual": "持镜敌与受控算盘敌之间显示同色因果线。", "future_path_px": 120},
+        "formation": {
+          "id": "s2_f16_mirror_before_abacus",
+          "active_entity_ids": ["s2_b15_left_mirror", "s2_b15_right_mirror"]
+        },
+        "spawns": [
+            {"id": "s2_b16_abacus_keeper", "enemy_id": "closing_abacus_keeper", "position": [360, 96], "movement": {"path": "center_lane_hold", "to": [360, 216], "duration_ticks": 42}, "pattern": {"primitive": "rebound_bead", "start_delay_ticks": 24, "interval_ticks": 48, "shots_per_burst": 7, "speed": 192, "routing": "both_mirrors_if_killed_first"}, "drop_item_ids": ["power_large", "price_token_3"]}
+        ],
+        "completion": {"condition": "mirror_then_abacus_or_recoverable_outer_route", "clear_hostile_bullets": false},
+        "deadline_tick": 2394,
+        "score_route_hooks": ["kill_order", "price_chain_group_3"],
+        "telemetry_hooks": ["first_kill_role", "mirror_activation_mask", "center_lane_preserved"]
+      },
+      {
+        "id": "s2_b17",
+        "authored_tick": 2400,
+        "segment_id": "s2_closing_bell_order",
+        "event_type": "score_window",
+        "warning": {"lead_ticks": 30, "visual": "价格牌每 60 帧从 3 翻至 1，正确目标带金边。", "future_path_px": 0},
+        "formation": {"id": "s2_f17_price_countdown", "active_entity_ids": ["s2_b13_red_booth_master", "s2_b13_blue_booth_master", "s2_b13_yellow_booth_master", "s2_b16_abacus_keeper"]},
+        "spawns": [],
+        "completion": {"condition": "price_chain_completed_or_countdown_expired", "clear_hostile_bullets": false},
+        "deadline_tick": 2544,
+        "score_route_hooks": ["price_page_tick", "rebound_graze_uid", "price_chain"],
+        "telemetry_hooks": ["current_price", "kill_tick", "graze_tick", "chain_multiplier"]
+      },
+      {
+        "id": "s2_b18",
+        "authored_tick": 2550,
+        "segment_id": "s2_closing_bell_order",
+        "event_type": "boss_gate",
+        "warning": {"lead_ticks": 30, "visual": "正确下一摊带金边；错误影响巷以红影预画。", "future_path_px": 180},
+        "formation": {"id": "s2_f18_three_booth_closing_chain", "active_entity_ids": ["s2_b13_red_booth_master", "s2_b13_blue_booth_master", "s2_b13_yellow_booth_master"]},
+        "spawns": [],
+        "encounter_gate": {"action": "complete_boss_front_then_pause_stage_wave_clock", "owner_id": "oni_market_leader", "phase_ids": ["stage_2_boss_nonspell_1", "stage_2_boss_spell_1", "stage_2_boss_spell_2", "stage_2_boss_spell_3"], "boss_entry_tick": 2700, "boss_front": true, "clear_on_entry": true},
+        "completion": {"condition": "three_booth_masters_defeated_in_published_order_and_final_open_lane_crossed", "fallback_condition": "wrong_order_outer_route_crossed_without_score_chain", "clear_hostile_bullets": true, "boss_front_complete": true},
+        "deadline_tick": 2700,
+        "score_route_hooks": ["final_kill_order", "price_chain_complete", "night_festival_seal_spawn"],
+        "telemetry_hooks": ["booth_lane_state", "final_lane_cross_tick", "boss_gate_open_tick", "boss_front_complete"]
+      }
+    ]
+  },
+  "phases": [
+    {
+      "id": "stage_2_midboss_nonspell_1",
+      "display_name": "算符「市集の横列」",
+      "kind": "nonspell",
+      "encounter_role": "midboss",
+      "encounter_slot": "midboss_card_1",
+      "owner": {"id": "abacus_tsukumogami", "display_name": "算盘付丧神"},
+      "legacy_pattern_id": "s2_market_nonspell",
+      "deterministic_random_stream_id": "danmaku.m1.s2.midboss.nonspell.1.v1",
+      "design_intent": "奇偶算盘列分拍下放，击破列头改变下一条开放巷。",
+      "base_hp": 16000,
+      "timeout_ticks": 1020,
+      "loop_ticks": 684,
+      "warning_ticks": {"normal": 30, "hard": 18},
+      "peak_active_bullet_budget": {"normal": 84, "hard": 112},
+      "minimum_safe_route_width_px": {"normal": 136, "hard": 104},
+      "boss_movement": [
+        {"tick": 0, "event": "enter", "from": [360, -64], "to": [360, 176], "duration_ticks": 60, "easing": "cubic_out", "warning_lead_ticks": 30},
+        {"tick": 156, "event": "route_commit", "from": [360, 176], "to": [311, 186], "duration_ticks": 48, "easing": "sine_in_out", "warning_lead_ticks": 18},
+        {"tick": 426, "event": "second_commit", "from": [311, 186], "to": [269, 232], "duration_ticks": 54, "easing": "sine_in_out", "warning_lead_ticks": 18}
+      ],
+      "timeline": [
+        {"tick": 0, "event": "phase_enter", "action": "color_parity", "warning": "奇偶列框分别着色；30 tick 内无弹幕碰撞。"},
+        {"tick": 66, "event": "first_commit", "action": "odd_rebound", "warning": "珠尾绘出唯一一次反弹折线。"},
+        {"tick": 336, "event": "topology_shift", "action": "break_cancels", "warning": "列头与受控珠用细线连接。"},
+        {"tick": 684, "event": "loop_boundary", "action": "even_opens_neighbor", "warning": "开放巷白边提前 24 tick。"}
+      ],
+      "capture_condition": {"type": "nonspell_resolution", "condition": "hp_zero_or_timeout", "deadline_ticks": 1020, "awards_spell_capture": false},
+      "failure_condition": {"condition": "miss_or_bomb_or_wrong_order", "effect": "clear_price_chain"},
+      "score_route": {"decision": "按高价奇列、低价偶列、高价偶列顺序击破。", "reward": "正确三列价格链给额外点物。", "risk": "第二目标移到远侧巷。", "hooks": ["column_parity", "kill_order", "lane_exit", "price_chain"]},
+      "difficulties": {
+        "normal": {
+          "topology_id": "s2_mb_ns1_n_odd_even_row_release",
+          "route_graph": {"nodes": ["odd_row", "odd_open_lane", "even_row", "even_neighbor_lane"], "directed_edges": [["odd_row", "odd_open_lane"], ["odd_open_lane", "even_row"], ["even_row", "even_neighbor_lane"]], "kill_transform": "destroyed_row_opens_its_own_lane"},
+          "safe_route_width_px": 136,
+          "peak_active_bullets": 84,
+          "emitters": [
+            {"id": "s2_mb_ns1_n_odd_beads", "primitive": "rebound_bead", "start_tick": 66, "interval_ticks": 60, "bursts_per_loop": 5, "shots_per_burst": 3, "anchor": "boss_right_satellite", "family": "circle", "color_rgba": [0.20, 0.88, 0.90, 1.0], "radius": 7, "lifetime_ticks": 480, "speed": 168, "angle_deg": 90, "angle_step_deg": 14, "spread_deg": 28, "routing": {"mode": "odd_even_own_lane", "lane_ids": ["left", "center", "right"], "surface_ids": ["odd_bar", "even_bar"], "max_reflections": 1, "turn_angle_deg": 74, "target_rule": "phase_geometry"}, "warning": {"lead_ticks": 24, "visual": "同色触发横杆与未来 120px 路径", "collision_disabled_during_warning": true}, "motion": {"type": "linear_then_single_reflection", "acceleration": 0, "destroy_on_second_surface": true}},
+            {"id": "s2_mb_ns1_n_lane_borders", "primitive": "grid_edge", "start_tick": 96, "interval_ticks": 90, "bursts_per_loop": 2, "shots_per_burst": 4, "anchor": "arena_top_edge", "family": "arrow", "color_rgba": [0.96, 0.72, 0.18, 1.0], "radius": 6, "lifetime_ticks": 420, "speed": 150, "angle_deg": 90, "angle_step_deg": 0, "spread_deg": 0, "routing": {"mode": "static_three_lane_edges", "lane_x": [216, 360, 504], "edge_length_px": 672, "target_rule": "arena_grid"}, "warning": {"lead_ticks": 30, "visual": "完整无碰撞格框", "collision_disabled_during_warning": true}, "motion": {"type": "linear_grid_edge", "acceleration": 0, "grid_is_collidable": false}}
+          ]
+        },
+        "hard": {
+          "topology_id": "s2_mb_ns1_h_parity_lane_swap",
+          "route_graph": {"nodes": ["odd_row", "swap_hub", "even_left_exit", "even_right_exit"], "directed_edges": [["odd_row", "swap_hub"], ["swap_hub", "even_right_exit"], ["swap_hub", "even_left_exit"]], "kill_transform": "odd_kill_swaps_even_left_and_even_right_exits"},
+          "topology_change": "击破奇列不开放原巷，而是交换两条偶列出口；交叉箭头在提交前可读。",
+          "safe_route_width_px": 104,
+          "peak_active_bullets": 112,
+          "emitters": [
+            {"id": "s2_mb_ns1_h_swap_beads", "primitive": "rebound_bead", "start_tick": 66, "interval_ticks": 60, "bursts_per_loop": 5, "shots_per_burst": 4, "anchor": "boss_right_satellite", "family": "circle", "color_rgba": [0.20, 0.88, 0.90, 1.0], "radius": 7, "lifetime_ticks": 510, "speed": 174, "angle_deg": 90, "angle_step_deg": 18, "spread_deg": 36, "routing": {"mode": "parity_exit_swap", "lane_ids": ["left", "center", "right"], "surface_ids": ["odd_bar", "even_left_side", "even_right_side"], "max_reflections": 1, "turn_angle_deg": 90, "target_rule": "swap_even_exit_after_odd_kill"}, "warning": {"lead_ticks": 18, "visual": "同色交叉出口箭头与未来 120px 路径", "collision_disabled_during_warning": true}, "motion": {"type": "linear_then_single_reflection", "acceleration": 0, "destroy_on_second_surface": true}},
+            {"id": "s2_mb_ns1_h_cross_borders", "primitive": "grid_edge", "start_tick": 96, "interval_ticks": 90, "bursts_per_loop": 2, "shots_per_burst": 5, "anchor": "arena_top_edge", "family": "arrow", "color_rgba": [0.96, 0.72, 0.18, 1.0], "radius": 6, "lifetime_ticks": 450, "speed": 156, "angle_deg": 90, "angle_step_deg": 0, "spread_deg": 0, "routing": {"mode": "swapped_exit_edges", "lane_x": [204, 360, 516], "edge_length_px": 690, "target_rule": "post_kill_swap_graph"}, "warning": {"lead_ticks": 18, "visual": "交换前后的完整无碰撞格框", "collision_disabled_during_warning": true}, "motion": {"type": "linear_grid_edge", "acceleration": 0, "grid_is_collidable": false}}
+          ]
+        }
+      }
+    },
+    {
+      "id": "stage_2_midboss_spell_1",
+      "display_name": "珠符「跳ねるそろばん玉」",
+      "kind": "spell",
+      "encounter_role": "midboss",
+      "encounter_slot": "midboss_card_2",
+      "owner": {"id": "abacus_tsukumogami", "display_name": "算盘付丧神"},
+      "legacy_pattern_id": "s2_coin_bubble",
+      "deterministic_random_stream_id": "danmaku.m1.s2.midboss.spell.1.v1",
+      "design_intent": "珠沿三层横杆仅反弹一次，形成可预读的阶梯通路。",
+      "base_hp": 22000,
+      "timeout_ticks": 1140,
+      "loop_ticks": 720,
+      "warning_ticks": {"normal": 30, "hard": 18},
+      "peak_active_bullet_budget": {"normal": 104, "hard": 132},
+      "minimum_safe_route_width_px": {"normal": 128, "hard": 96},
+      "boss_movement": [
+        {"tick": 0, "event": "enter", "from": [360, -64], "to": [360, 176], "duration_ticks": 60, "easing": "cubic_out", "warning_lead_ticks": 30},
+        {"tick": 138, "event": "route_commit", "from": [360, 176], "to": [394, 222], "duration_ticks": 48, "easing": "sine_in_out", "warning_lead_ticks": 18},
+        {"tick": 438, "event": "second_commit", "from": [394, 222], "to": [406, 168], "duration_ticks": 54, "easing": "sine_in_out", "warning_lead_ticks": 18}
+      ],
+      "timeline": [
+        {"tick": 0, "event": "phase_enter", "action": "light_rungs", "warning": "三层横杆逐层点亮；30 tick 内无碰撞。"},
+        {"tick": 48, "event": "first_commit", "action": "outer_bounce", "warning": "上层各珠的未来 120px 路线先画出。"},
+        {"tick": 348, "event": "topology_shift", "action": "inner_bounce", "warning": "中层触发点闪金 18 tick。"},
+        {"tick": 720, "event": "loop_boundary", "action": "breakable_lower_gap", "warning": "击破所得下层缺口以白框保持。"}
+      ],
+      "capture_condition": {"type": "spell_capture", "condition": "hp_zero_and_no_miss_no_bomb", "deadline_ticks": 1140, "timeout_awards_capture": false},
+      "failure_condition": {"condition": "miss_or_bomb", "effect": "lose_capture_and_reset_rung_alternation"},
+      "score_route": {"decision": "每层珠反弹后擦弹一次且不重复同侧。", "reward": "三层 alternating graze 生成 night_festival_seal。", "risk": "反弹后必须切入内侧。", "hooks": ["rung_id", "rebound_tick", "graze_side", "rung_alternation"]},
+      "difficulties": {
+        "normal": {
+          "topology_id": "s2_mb_sp1_n_alternating_rebound_ladder",
+          "route_graph": {"nodes": ["upper_outer", "middle_inner", "lower_break_gap"], "directed_edges": [["upper_outer", "middle_inner"], ["middle_inner", "lower_break_gap"]], "reflection_axis": "three_horizontal_rungs"},
+          "safe_route_width_px": 128,
+          "peak_active_bullets": 104,
+          "emitters": [
+            {"id": "s2_mb_sp1_n_three_rung_beads", "primitive": "rebound_bead", "start_tick": 48, "interval_ticks": 60, "bursts_per_loop": 2, "shots_per_burst": 5, "anchor": "arena_top_edge", "family": "circle", "color_rgba": [0.94, 0.68, 0.20, 1.0], "radius": 8, "lifetime_ticks": 540, "speed": 176, "angle_deg": 90, "angle_step_deg": 12, "spread_deg": 48, "routing": {"mode": "three_horizontal_rungs", "rung_y": [264, 432, 600], "max_reflections": 1, "turn_angle_deg": 78, "target_rule": "outer_then_inner_then_break_gap"}, "warning": {"lead_ticks": 30, "visual": "横杆触点与未来 120px 路径", "collision_disabled_during_warning": true}, "motion": {"type": "linear_then_single_reflection", "acceleration": 0, "destroy_on_second_surface": true}},
+            {"id": "s2_mb_sp1_n_rung_end_fans", "primitive": "lane_fan", "start_tick": 78, "interval_ticks": 48, "bursts_per_loop": 3, "shots_per_burst": 6, "anchor": "shared_gate_nodes", "family": "talisman", "color_rgba": [0.28, 0.80, 0.92, 1.0], "radius": 5, "lifetime_ticks": 390, "speed": 158, "angle_deg": 90, "angle_step_deg": 9, "spread_deg": 45, "routing": {"mode": "rung_end_caps", "anchor_offsets": [[-216, 0], [216, 0]], "target_rule": "close_inactive_rung_end"}, "warning": {"lead_ticks": 24, "visual": "同色无碰撞扇区边线", "collision_disabled_during_warning": true}, "motion": {"type": "linear_fan", "acceleration": 0}}
+          ]
+        },
+        "hard": {
+          "topology_id": "s2_mb_sp1_h_rung_to_booth_reflection",
+          "route_graph": {"nodes": ["upper_rung", "left_side_booth", "right_side_booth", "lower_gap"], "directed_edges": [["upper_rung", "left_side_booth"], ["upper_rung", "right_side_booth"], ["left_side_booth", "lower_gap"], ["right_side_booth", "lower_gap"]], "reflection_axis": "color_selected_side_booth"},
+          "topology_change": "中层横杆改为青/金侧棚反弹面，直阶梯分叉成左右折路。",
+          "safe_route_width_px": 96,
+          "peak_active_bullets": 132,
+          "emitters": [
+            {"id": "s2_mb_sp1_h_side_booth_beads", "primitive": "rebound_bead", "start_tick": 48, "interval_ticks": 60, "bursts_per_loop": 2, "shots_per_burst": 6, "anchor": "arena_top_edge", "family": "circle", "color_rgba": [0.94, 0.68, 0.20, 1.0], "radius": 8, "lifetime_ticks": 570, "speed": 182, "angle_deg": 90, "angle_step_deg": 14, "spread_deg": 56, "routing": {"mode": "color_selected_side_booth", "surface_x": [216, 504], "surface_color_map": {"cyan": "left", "gold": "right"}, "max_reflections": 1, "turn_angle_deg": 90, "target_rule": "upper_to_colored_side_to_lower"}, "warning": {"lead_ticks": 18, "visual": "青金侧棚与完整折路", "collision_disabled_during_warning": true}, "motion": {"type": "linear_then_single_reflection", "acceleration": 0, "destroy_on_second_surface": true}},
+            {"id": "s2_mb_sp1_h_branch_end_fans", "primitive": "lane_fan", "start_tick": 78, "interval_ticks": 48, "bursts_per_loop": 3, "shots_per_burst": 7, "anchor": "shared_gate_nodes", "family": "talisman", "color_rgba": [0.28, 0.80, 0.92, 1.0], "radius": 5, "lifetime_ticks": 420, "speed": 164, "angle_deg": 90, "angle_step_deg": 10, "spread_deg": 60, "routing": {"mode": "branch_opposite_end_caps", "anchor_offsets": [[-228, 0], [228, 0]], "target_rule": "close_unselected_branch"}, "warning": {"lead_ticks": 18, "visual": "两分支扇区和选中颜色箭头", "collision_disabled_during_warning": true}, "motion": {"type": "linear_fan", "acceleration": 0}}
+          ]
+        }
+      }
+    },
+    {
+      "id": "stage_2_boss_nonspell_1",
+      "display_name": "市符「妖市の値切り」",
+      "kind": "nonspell",
+      "encounter_role": "boss",
+      "encounter_slot": "boss_card_1",
+      "owner": {"id": "oni_market_leader", "display_name": "市集の鬼頭"},
+      "legacy_pattern_id": "s2_market_nonspell",
+      "deterministic_random_stream_id": "danmaku.m1.s2.boss.nonspell.1.v1",
+      "design_intent": "三摊价值与攻击图标公开，击破顺序直接控制巷道邻接。",
+      "base_hp": 28000,
+      "timeout_ticks": 1680,
+      "loop_ticks": 690,
+      "warning_ticks": {"normal": 30, "hard": 18},
+      "peak_active_bullet_budget": {"normal": 128, "hard": 168},
+      "minimum_safe_route_width_px": {"normal": 120, "hard": 90},
+      "boss_movement": [
+        {"tick": 0, "event": "enter", "from": [360, -64], "to": [360, 176], "duration_ticks": 60, "easing": "cubic_out", "warning_lead_ticks": 30},
+        {"tick": 144, "event": "route_commit", "from": [360, 176], "to": [477, 150], "duration_ticks": 48, "easing": "sine_in_out", "warning_lead_ticks": 18},
+        {"tick": 384, "event": "second_commit", "from": [477, 150], "to": [543, 200], "duration_ticks": 54, "easing": "sine_in_out", "warning_lead_ticks": 18}
+      ],
+      "timeline": [
+        {"tick": 0, "event": "phase_enter", "action": "show_prices", "warning": "三摊价值与攻击图标显示 30 tick。"},
+        {"tick": 54, "event": "first_commit", "action": "highest_closes_neighbor", "warning": "受影响邻巷闪红 24 tick。"},
+        {"tick": 294, "event": "topology_shift", "action": "kill_flips_flags", "warning": "相邻两旗以交叉价格带连接。"},
+        {"tick": 690, "event": "loop_boundary", "action": "survivor_sets_exit", "warning": "最后存活摊决定的出口白箭头常驻。"}
+      ],
+      "capture_condition": {"type": "nonspell_resolution", "condition": "hp_zero_or_timeout", "deadline_ticks": 1680, "awards_spell_capture": false},
+      "failure_condition": {"condition": "miss_or_bomb_or_wrong_kill", "effect": "break_price_chain_but_preserve_outer_survival_route"},
+      "score_route": {"decision": "每张价格牌翻页前击破当前正确目标。", "reward": "三摊无断链维持 price_chain 倍率。", "risk": "正确目标可能在即将关闭的深巷。", "hooks": ["price_page_tick", "kill_order", "lane_state", "price_chain"]},
+      "difficulties": {
+        "normal": {
+          "topology_id": "s2_boss_ns1_n_public_three_target_order",
+          "route_graph": {"nodes": ["red_booth", "blue_booth", "yellow_booth", "boss_exit"], "directed_edges": [["red_booth", "blue_booth"], ["blue_booth", "yellow_booth"], ["yellow_booth", "boss_exit"]], "kill_transform": "fixed_red_blue_yellow_order"},
+          "safe_route_width_px": 120,
+          "peak_active_bullets": 128,
+          "emitters": [
+            {"id": "s2_boss_ns1_n_booth_edges", "primitive": "grid_edge", "start_tick": 54, "interval_ticks": 90, "bursts_per_loop": 3, "shots_per_burst": 7, "anchor": "shared_gate_nodes", "family": "arrow", "color_rgba": [0.92, 0.28, 0.22, 1.0], "radius": 6, "lifetime_ticks": 480, "speed": 164, "angle_deg": 90, "angle_step_deg": 0, "spread_deg": 0, "routing": {"mode": "fixed_red_blue_yellow_edges", "lane_x": [168, 360, 552], "kill_order": ["red", "blue", "yellow"], "target_rule": "close_current_neighbor"}, "warning": {"lead_ticks": 30, "visual": "三摊完整格框与攻击图标", "collision_disabled_during_warning": true}, "motion": {"type": "linear_grid_edge", "acceleration": 0, "grid_is_collidable": false}},
+            {"id": "s2_boss_ns1_n_blue_coins", "primitive": "rebound_bead", "start_tick": 84, "interval_ticks": 60, "bursts_per_loop": 4, "shots_per_burst": 8, "anchor": "boss_center", "family": "circle", "color_rgba": [0.24, 0.52, 0.94, 1.0], "radius": 7, "lifetime_ticks": 510, "speed": 180, "angle_deg": 90, "angle_step_deg": 10, "spread_deg": 70, "routing": {"mode": "blue_booth_to_current_open_lane", "surface_ids": ["left_booth_edge", "right_booth_edge"], "max_reflections": 1, "turn_angle_deg": 82, "target_rule": "published_next_lane"}, "warning": {"lead_ticks": 24, "visual": "蓝摊边与未来 120px 珠路", "collision_disabled_during_warning": true}, "motion": {"type": "linear_then_single_reflection", "acceleration": 0, "destroy_on_second_surface": true}}
+          ]
+        },
+        "hard": {
+          "topology_id": "s2_boss_ns1_h_neighbor_flag_flip",
+          "route_graph": {"nodes": ["selected_booth", "clockwise_neighbor", "counterclockwise_neighbor", "survivor_exit"], "directed_edges": [["selected_booth", "clockwise_neighbor"], ["selected_booth", "counterclockwise_neighbor"], ["swapped_neighbor_roles", "survivor_exit"]], "kill_transform": "kill_selected_node_swaps_attack_and_exit_roles_of_both_neighbors"},
+          "topology_change": "击破一摊会翻转相邻两旗的攻击/出口职责，第二目标由提交后的图决定。",
+          "safe_route_width_px": 90,
+          "peak_active_bullets": 168,
+          "emitters": [
+            {"id": "s2_boss_ns1_h_flipping_booth_edges", "primitive": "grid_edge", "start_tick": 54, "interval_ticks": 90, "bursts_per_loop": 3, "shots_per_burst": 8, "anchor": "shared_gate_nodes", "family": "arrow", "color_rgba": [0.92, 0.28, 0.22, 1.0], "radius": 6, "lifetime_ticks": 510, "speed": 170, "angle_deg": 90, "angle_step_deg": 0, "spread_deg": 0, "routing": {"mode": "neighbor_flag_role_swap", "lane_x": [156, 360, 564], "dependency_direction": "both_neighbors", "target_rule": "post_kill_flag_graph"}, "warning": {"lead_ticks": 18, "visual": "旧/新格框和交叉价格带", "collision_disabled_during_warning": true}, "motion": {"type": "linear_grid_edge", "acceleration": 0, "grid_is_collidable": false}},
+            {"id": "s2_boss_ns1_h_rerouted_blue_coins", "primitive": "rebound_bead", "start_tick": 84, "interval_ticks": 60, "bursts_per_loop": 4, "shots_per_burst": 9, "anchor": "boss_center", "family": "circle", "color_rgba": [0.24, 0.52, 0.94, 1.0], "radius": 7, "lifetime_ticks": 540, "speed": 186, "angle_deg": 90, "angle_step_deg": 11, "spread_deg": 77, "routing": {"mode": "post_flip_neighbor_exit", "surface_ids": ["active_attack_neighbor", "active_exit_neighbor"], "max_reflections": 1, "turn_angle_deg": 90, "target_rule": "survivor_defined_exit"}, "warning": {"lead_ticks": 18, "visual": "受翻转旗色控制的完整未来珠路", "collision_disabled_during_warning": true}, "motion": {"type": "linear_then_single_reflection", "acceleration": 0, "destroy_on_second_surface": true}}
+          ]
+        }
+      }
+    },
+    {
+      "id": "stage_2_boss_spell_1",
+      "display_name": "泡符「銅貨の泡涌き」",
+      "kind": "spell",
+      "encounter_role": "boss",
+      "encounter_slot": "boss_card_2",
+      "owner": {"id": "oni_market_leader", "display_name": "市集の鬼頭"},
+      "legacy_pattern_id": "s2_coin_bubble",
+      "deterministic_random_stream_id": "danmaku.m1.s2.boss.spell.1.v1",
+      "design_intent": "铜货泡在摊边反弹后交换内外层，空隙随层交换而非速度变化。",
+      "base_hp": 32000,
+      "timeout_ticks": 1920,
+      "loop_ticks": 630,
+      "warning_ticks": {"normal": 30, "hard": 18},
+      "peak_active_bullet_budget": {"normal": 144, "hard": 184},
+      "minimum_safe_route_width_px": {"normal": 112, "hard": 88},
+      "boss_movement": [
+        {"tick": 0, "event": "enter", "from": [360, -64], "to": [360, 176], "duration_ticks": 60, "easing": "cubic_out", "warning_lead_ticks": 30},
+        {"tick": 150, "event": "route_commit", "from": [360, 176], "to": [560, 186], "duration_ticks": 48, "easing": "sine_in_out", "warning_lead_ticks": 18},
+        {"tick": 420, "event": "second_commit", "from": [560, 186], "to": [260, 232], "duration_ticks": 54, "easing": "sine_in_out", "warning_lead_ticks": 18}
+      ],
+      "timeline": [
+        {"tick": 0, "event": "phase_enter", "action": "number_two_layers", "warning": "内外圈铜货泡编号显示 30 tick。"},
+        {"tick": 60, "event": "first_commit", "action": "outer_rebounds_in", "warning": "反弹前显示同号内圈入口。"},
+        {"tick": 330, "event": "topology_shift", "action": "bell_releases_inner", "warning": "换层钟缩圈预告 24 tick。"},
+        {"tick": 630, "event": "loop_boundary", "action": "swap_roles", "warning": "下一外放缺口显示价格牌。"}
+      ],
+      "capture_condition": {"type": "spell_capture", "condition": "hp_zero_and_no_miss_no_bomb", "deadline_ticks": 1920, "timeout_awards_capture": false},
+      "failure_condition": {"condition": "miss_or_bomb_or_wrong_number", "effect": "lose_capture_and_break_exchange_route_bonus"},
+      "score_route": {"decision": "每次换层擦过同编号铜货泡并穿过其缺口。", "reward": "完整三节点循环生成 night_festival_seal。", "risk": "需要在内圈短暂停留。", "hooks": ["coin_uid", "layer_before", "layer_after", "gap_cross"]},
+      "difficulties": {
+        "normal": {
+          "topology_id": "s2_boss_sp1_n_two_layer_exchange",
+          "route_graph": {"nodes": ["outer_ring", "inner_ring"], "directed_edges": [["outer_ring", "inner_ring"], ["inner_ring", "outer_ring"]], "bell_transform": "swap_inner_outer_roles"},
+          "safe_route_width_px": 112,
+          "peak_active_bullets": 144,
+          "emitters": [
+            {"id": "s2_boss_sp1_n_coin_bubbles", "primitive": "rebound_bead", "start_tick": 60, "interval_ticks": 60, "bursts_per_loop": 4, "shots_per_burst": 9, "anchor": "boss_center", "family": "circle", "color_rgba": [0.90, 0.54, 0.16, 1.0], "radius": 9, "lifetime_ticks": 540, "speed": 170, "angle_deg": 0, "angle_step_deg": 40, "spread_deg": 360, "routing": {"mode": "two_layer_number_exchange", "ring_radius_px": [126, 246], "surface_ids": ["left_booth", "right_booth"], "max_reflections": 1, "turn_angle_deg": 180, "target_rule": "same_number_opposite_layer"}, "warning": {"lead_ticks": 30, "visual": "同号内外入口箭头与未来珠路", "collision_disabled_during_warning": true}, "motion": {"type": "radial_then_single_reflection", "acceleration": 0, "destroy_on_second_surface": true}},
+            {"id": "s2_boss_sp1_n_exchange_bell", "primitive": "rhythm_pulse", "start_tick": 90, "interval_ticks": 60, "bursts_per_loop": 5, "shots_per_burst": 3, "anchor": "boss_left_satellite", "family": "star", "color_rgba": [0.96, 0.82, 0.32, 1.0], "radius": 6, "lifetime_ticks": 360, "speed": 142, "angle_deg": 90, "angle_step_deg": 120, "spread_deg": 240, "routing": {"mode": "two_layer_swap_clock", "beat_ticks": 60, "phase_source": "simulation_tick", "target_rule": "announce_next_numbered_gap"}, "warning": {"lead_ticks": 24, "visual": "拍灯、缩圈与编号", "collision_disabled_during_warning": true}, "motion": {"type": "linear_radial_pulse", "acceleration": 0}}
+          ]
+        },
+        "hard": {
+          "topology_id": "s2_boss_sp1_h_three_booth_exchange_cycle",
+          "route_graph": {"nodes": ["left_booth", "inner_ring", "right_booth"], "directed_edges": [["left_booth", "inner_ring"], ["inner_ring", "right_booth"], ["right_booth", "left_booth"]], "bell_transform": "advance_one_directed_cycle_edge"},
+          "topology_change": "二层互换改为左摊→内圈→右摊→左摊的有向三节点循环。",
+          "safe_route_width_px": 88,
+          "peak_active_bullets": 184,
+          "emitters": [
+            {"id": "s2_boss_sp1_h_three_node_coins", "primitive": "rebound_bead", "start_tick": 60, "interval_ticks": 60, "bursts_per_loop": 4, "shots_per_burst": 10, "anchor": "boss_center", "family": "circle", "color_rgba": [0.90, 0.54, 0.16, 1.0], "radius": 9, "lifetime_ticks": 570, "speed": 176, "angle_deg": 0, "angle_step_deg": 36, "spread_deg": 360, "routing": {"mode": "directed_three_node_exchange", "node_positions": [[180, 384], [360, 510], [540, 384]], "max_reflections": 1, "turn_angle_deg": 120, "target_rule": "same_number_next_cycle_node"}, "warning": {"lead_ticks": 18, "visual": "三节点编号与下一跳箭头", "collision_disabled_during_warning": true}, "motion": {"type": "linear_then_single_reflection", "acceleration": 0, "destroy_on_second_surface": true}},
+            {"id": "s2_boss_sp1_h_cycle_bell", "primitive": "rhythm_pulse", "start_tick": 90, "interval_ticks": 60, "bursts_per_loop": 5, "shots_per_burst": 4, "anchor": "boss_left_satellite", "family": "star", "color_rgba": [0.96, 0.82, 0.32, 1.0], "radius": 6, "lifetime_ticks": 390, "speed": 148, "angle_deg": 90, "angle_step_deg": 90, "spread_deg": 270, "routing": {"mode": "three_node_cycle_clock", "beat_ticks": 60, "phase_source": "simulation_tick", "target_rule": "advance_directed_cycle"}, "warning": {"lead_ticks": 18, "visual": "三节点缩圈和下一跳编号", "collision_disabled_during_warning": true}, "motion": {"type": "linear_radial_pulse", "acceleration": 0}}
+          ]
+        }
+      }
+    },
+    {
+      "id": "stage_2_boss_spell_2",
+      "display_name": "道具「迷子の道具屋」",
+      "kind": "spell",
+      "encounter_role": "boss",
+      "encounter_slot": "boss_card_3",
+      "owner": {"id": "oni_market_leader", "display_name": "市集の鬼頭"},
+      "legacy_pattern_id": "s2_object_mist",
+      "deterministic_random_stream_id": "danmaku.m1.s2.boss.spell.2.v1",
+      "design_intent": "三个道具摊分别封行、封列或旋门，玩家通过击破摊主选择迷宫形状。",
+      "base_hp": 36000,
+      "timeout_ticks": 1800,
+      "loop_ticks": 690,
+      "warning_ticks": {"normal": 30, "hard": 18},
+      "peak_active_bullet_budget": {"normal": 148, "hard": 192},
+      "minimum_safe_route_width_px": {"normal": 108, "hard": 84},
+      "boss_movement": [
+        {"tick": 0, "event": "enter", "from": [360, -64], "to": [360, 176], "duration_ticks": 60, "easing": "cubic_out", "warning_lead_ticks": 30},
+        {"tick": 156, "event": "route_commit", "from": [360, 176], "to": [223, 222], "duration_ticks": 48, "easing": "sine_in_out", "warning_lead_ticks": 18},
+        {"tick": 456, "event": "second_commit", "from": [223, 222], "to": [397, 168], "duration_ticks": 54, "easing": "sine_in_out", "warning_lead_ticks": 18}
+      ],
+      "timeline": [
+        {"tick": 0, "event": "phase_enter", "action": "declare_inventory", "warning": "三摊图标声明各自格线作用 30 tick。"},
+        {"tick": 66, "event": "first_commit", "action": "fill_ghost_grid", "warning": "库存影有倒计时与空心芯，预告态无碰撞。"},
+        {"tick": 366, "event": "topology_shift", "action": "break_removes_and_rotates", "warning": "将删除格边变白，并预览旋后格框 24 tick。"},
+        {"tick": 690, "event": "loop_boundary", "action": "two_booths_form_exit", "warning": "旋门箭头显示重接方向。"}
+      ],
+      "capture_condition": {"type": "spell_capture", "condition": "hp_zero_and_no_miss_no_bomb", "deadline_ticks": 1800, "timeout_awards_capture": false},
+      "failure_condition": {"condition": "miss_or_bomb", "effect": "lose_capture"},
+      "score_route": {"decision": "三轮分别选择不同摊并穿过新开格角。", "reward": "三种选择集齐给予 inventory_route_bonus。", "risk": "非最短路线要求横跨 Boss 下方。", "hooks": ["chosen_booth_mask", "rotated_neighbor", "corner_cross", "inventory_route_bonus"]},
+      "difficulties": {
+        "normal": {
+          "topology_id": "s2_boss_sp2_n_choose_one_of_three_walls",
+          "route_graph": {"nodes": ["row_booth", "column_booth", "turn_booth", "center_exit"], "directed_edges": [["row_booth", "center_exit"], ["column_booth", "center_exit"], ["turn_booth", "center_exit"]], "kill_transform": "remove_selected_wall_set_only"},
+          "safe_route_width_px": 108,
+          "peak_active_bullets": 148,
+          "emitters": [
+            {"id": "s2_boss_sp2_n_inventory_edges", "primitive": "grid_edge", "start_tick": 66, "interval_ticks": 90, "bursts_per_loop": 5, "shots_per_burst": 4, "anchor": "boss_left_satellite", "family": "arrow", "color_rgba": [0.42, 0.84, 0.46, 1.0], "radius": 6, "lifetime_ticks": 510, "speed": 158, "angle_deg": 90, "angle_step_deg": 90, "spread_deg": 270, "routing": {"mode": "three_inventory_wall_sets", "grid_columns": 5, "grid_rows": 6, "selected_set_action": "remove", "target_rule": "preserve_other_two_sets"}, "warning": {"lead_ticks": 30, "visual": "三套完整无碰撞格框和摊图标", "collision_disabled_during_warning": true}, "motion": {"type": "linear_grid_edge", "acceleration": 0, "grid_is_collidable": false}},
+            {"id": "s2_boss_sp2_n_route_markers", "primitive": "delayed_seed", "start_tick": 96, "interval_ticks": 84, "bursts_per_loop": 2, "shots_per_burst": 5, "anchor": "boss_right_satellite", "family": "spiral_seed", "color_rgba": [0.82, 0.84, 0.92, 0.92], "radius": 7, "lifetime_ticks": 450, "speed": 152, "angle_deg": 90, "angle_step_deg": 18, "spread_deg": 72, "routing": {"mode": "selected_wall_corner_markers", "activation_delay_ticks": 30, "target_rule": "corners_of_preserved_sets"}, "warning": {"lead_ticks": 30, "visual": "形状徽记、倒计时环与 18 tick 渐变", "collision_disabled_during_warning": true}, "motion": {"type": "delayed_linear", "acceleration": 0, "collision_enable_on_activation_tick": true}}
+          ]
+        },
+        "hard": {
+          "topology_id": "s2_boss_sp2_h_inventory_dependency_maze",
+          "route_graph": {"nodes": ["chosen_booth", "clockwise_successor", "counterclockwise_survivor", "rotated_exit"], "directed_edges": [["chosen_booth", "clockwise_successor"], ["clockwise_successor_rotated", "rotated_exit"], ["counterclockwise_survivor", "rotated_exit"]], "kill_transform": "remove_chosen_node_and_rotate_clockwise_successor_90_degrees"},
+          "topology_change": "删除一摊同时把顺时针邻摊的格边旋转 90°，出口重接到新格角。",
+          "safe_route_width_px": 84,
+          "peak_active_bullets": 192,
+          "emitters": [
+            {"id": "s2_boss_sp2_h_dependency_edges", "primitive": "grid_edge", "start_tick": 66, "interval_ticks": 90, "bursts_per_loop": 5, "shots_per_burst": 5, "anchor": "boss_left_satellite", "family": "arrow", "color_rgba": [0.42, 0.84, 0.46, 1.0], "radius": 6, "lifetime_ticks": 540, "speed": 164, "angle_deg": 90, "angle_step_deg": 90, "spread_deg": 270, "routing": {"mode": "remove_and_rotate_successor", "grid_columns": 6, "grid_rows": 6, "rotation_deg": 90, "dependency_direction": "clockwise", "target_rule": "post_rotation_corner_exit"}, "warning": {"lead_ticks": 18, "visual": "旧/新完整格框与顺时针依赖箭头", "collision_disabled_during_warning": true}, "motion": {"type": "linear_grid_edge", "acceleration": 0, "grid_is_collidable": false}},
+            {"id": "s2_boss_sp2_h_rotated_route_markers", "primitive": "delayed_seed", "start_tick": 96, "interval_ticks": 84, "bursts_per_loop": 2, "shots_per_burst": 6, "anchor": "boss_right_satellite", "family": "spiral_seed", "color_rgba": [0.82, 0.84, 0.92, 0.92], "radius": 7, "lifetime_ticks": 480, "speed": 158, "angle_deg": 90, "angle_step_deg": 15, "spread_deg": 75, "routing": {"mode": "rotated_successor_corner_markers", "activation_delay_ticks": 18, "rotation_deg": 90, "target_rule": "post_rotation_corners"}, "warning": {"lead_ticks": 18, "visual": "旋后形状徽记、倒计时环与 18 tick 渐变", "collision_disabled_during_warning": true}, "motion": {"type": "delayed_linear", "acceleration": 0, "collision_enable_on_activation_tick": true}}
+          ]
+        }
+      }
+    },
+    {
+      "id": "stage_2_boss_spell_3",
+      "display_name": "鏡符「計り直しの水鏡」",
+      "kind": "spell",
+      "encounter_role": "boss",
+      "encounter_slot": "boss_card_4",
+      "owner": {"id": "oni_market_leader", "display_name": "市集の鬼頭"},
+      "legacy_pattern_id": "s2_abacus_mirror",
+      "deterministic_random_stream_id": "danmaku.m1.s2.boss.spell.3.v1",
+      "design_intent": "水镜先复制上一轮珠路，再把复制路映射到相邻巷，要求比较旧路与新路。",
+      "base_hp": 40000,
+      "timeout_ticks": 1500,
+      "loop_ticks": 636,
+      "warning_ticks": {"normal": 30, "hard": 18},
+      "peak_active_bullet_budget": {"normal": 156, "hard": 204},
+      "minimum_safe_route_width_px": {"normal": 104, "hard": 80},
+      "boss_movement": [
+        {"tick": 0, "event": "enter", "from": [360, -64], "to": [360, 176], "duration_ticks": 60, "easing": "cubic_out", "warning_lead_ticks": 30},
+        {"tick": 138, "event": "route_commit", "from": [360, 176], "to": [306, 150], "duration_ticks": 48, "easing": "sine_in_out", "warning_lead_ticks": 18},
+        {"tick": 378, "event": "second_commit", "from": [306, 150], "to": [534, 200], "duration_ticks": 54, "easing": "sine_in_out", "warning_lead_ticks": 18}
+      ],
+      "timeline": [
+        {"tick": 0, "event": "phase_enter", "action": "run_source", "warning": "源珠路实线运行，镜路尚未启用。"},
+        {"tick": 48, "event": "first_commit", "action": "record_ghost", "warning": "无碰撞记录影带空心芯和 60 tick 倒计时。"},
+        {"tick": 288, "event": "topology_shift", "action": "flip_into_neighbor", "warning": "翻转轴与目标巷提前 30 tick 显示。"},
+        {"tick": 636, "event": "loop_boundary", "action": "swap_source_copy", "warning": "实体化前 18 tick 由白转蓝。"}
+      ],
+      "capture_condition": {"type": "spell_capture", "condition": "hp_zero_and_no_miss_no_bomb", "deadline_ticks": 1500, "timeout_awards_capture": false},
+      "failure_condition": {"condition": "miss_or_bomb", "effect": "lose_capture"},
+      "score_route": {"decision": "每轮擦过源珠后击破相反镜片并穿原巷。", "reward": "三次 remeasure_chain 给予终符路线奖。", "risk": "必须贴近镜片选择变换。", "hooks": ["source_graze", "mirror_choice", "original_lane_cross", "remeasure_chain"]},
+      "difficulties": {
+        "normal": {
+          "topology_id": "s2_boss_sp3_n_record_then_adjacent_mirror",
+          "route_graph": {"nodes": ["source_lane", "adjacent_mirror_lane", "original_lane_exit"], "directed_edges": [["source_lane", "adjacent_mirror_lane"], ["adjacent_mirror_lane", "original_lane_exit"]], "mirror_transform": "fixed_adjacent_lane_reflection"},
+          "safe_route_width_px": 104,
+          "peak_active_bullets": 156,
+          "emitters": [
+            {"id": "s2_boss_sp3_n_source_beads", "primitive": "rebound_bead", "start_tick": 48, "interval_ticks": 60, "bursts_per_loop": 2, "shots_per_burst": 6, "anchor": "boss_right_satellite", "family": "circle", "color_rgba": [0.24, 0.72, 0.92, 1.0], "radius": 8, "lifetime_ticks": 540, "speed": 184, "angle_deg": 90, "angle_step_deg": 12, "spread_deg": 60, "routing": {"mode": "source_abacus_lane", "lane_ids": ["left", "center", "right"], "surface_ids": ["source_bar"], "max_reflections": 1, "turn_angle_deg": 82, "target_rule": "record_for_adjacent_mirror"}, "warning": {"lead_ticks": 30, "visual": "源横杆与未来 120px 路径", "collision_disabled_during_warning": true}, "motion": {"type": "linear_then_single_reflection", "acceleration": 0, "destroy_on_second_surface": true}},
+            {"id": "s2_boss_sp3_n_mirror_copy", "primitive": "delayed_seed", "start_tick": 78, "interval_ticks": 84, "bursts_per_loop": 3, "shots_per_burst": 7, "anchor": "arena_top_edge", "family": "spiral_seed", "color_rgba": [0.88, 0.94, 1.0, 0.88], "radius": 7, "lifetime_ticks": 510, "speed": 176, "angle_deg": 90, "angle_step_deg": 12, "spread_deg": 72, "routing": {"mode": "fixed_adjacent_mirror_copy", "activation_delay_ticks": 60, "axis_deg": 90, "lane_delta": 1, "target_rule": "copy_source_into_adjacent_lane"}, "warning": {"lead_ticks": 30, "visual": "空心镜影、倒计时环和完整目标巷", "collision_disabled_during_warning": true}, "motion": {"type": "delayed_linear", "acceleration": 0, "collision_enable_on_activation_tick": true}}
+          ]
+        },
+        "hard": {
+          "topology_id": "s2_boss_sp3_h_mirror_axis_choice",
+          "route_graph": {"nodes": ["source_lane", "left_mirror_horizontal", "right_mirror_diagonal", "selected_mapped_lane", "original_lane_exit"], "directed_edges": [["source_lane", "left_mirror_horizontal"], ["source_lane", "right_mirror_diagonal"], ["selected_mirror", "selected_mapped_lane"], ["selected_mapped_lane", "original_lane_exit"]], "mirror_transform": "player_kill_selects_horizontal_or_diagonal_axis"},
+          "topology_change": "击破左/右镜片分别选择水平或对角镜轴，映射到不同邻接巷。",
+          "safe_route_width_px": 80,
+          "peak_active_bullets": 204,
+          "emitters": [
+            {"id": "s2_boss_sp3_h_axis_source_beads", "primitive": "rebound_bead", "start_tick": 48, "interval_ticks": 60, "bursts_per_loop": 2, "shots_per_burst": 7, "anchor": "boss_right_satellite", "family": "circle", "color_rgba": [0.24, 0.72, 0.92, 1.0], "radius": 8, "lifetime_ticks": 570, "speed": 190, "angle_deg": 90, "angle_step_deg": 11, "spread_deg": 66, "routing": {"mode": "axis_choice_source_lane", "lane_ids": ["left", "center", "right"], "surface_ids": ["horizontal_mirror", "diagonal_mirror"], "max_reflections": 1, "turn_angle_deg": 90, "target_rule": "selected_axis_mapping"}, "warning": {"lead_ticks": 18, "visual": "两镜轴及各自完整未来珠路", "collision_disabled_during_warning": true}, "motion": {"type": "linear_then_single_reflection", "acceleration": 0, "destroy_on_second_surface": true}},
+            {"id": "s2_boss_sp3_h_axis_copy", "primitive": "delayed_seed", "start_tick": 78, "interval_ticks": 84, "bursts_per_loop": 3, "shots_per_burst": 8, "anchor": "arena_top_edge", "family": "spiral_seed", "color_rgba": [0.88, 0.94, 1.0, 0.88], "radius": 7, "lifetime_ticks": 540, "speed": 182, "angle_deg": 90, "angle_step_deg": 10, "spread_deg": 80, "routing": {"mode": "player_selected_axis_copy", "activation_delay_ticks": 30, "axis_options_deg": [0, 45], "target_rule": "map_source_by_destroyed_mirror_axis"}, "warning": {"lead_ticks": 18, "visual": "两套空心镜路、轴线、倒计时环和目标巷", "collision_disabled_during_warning": true}, "motion": {"type": "delayed_linear", "acceleration": 0, "collision_enable_on_activation_tick": true}}
+          ]
+        }
+      }
+    }
+  ],
+  "runtime_evidence_contract": {
+    "identity": ["load all six phase ids in order", "preserve 2 midboss and 4 boss split", "derive each deterministic stream from replay seed"],
+    "stage_trace": ["emit all eighteen authored beat ids", "record gate pause and resume ticks", "record boss-front completion before boss gate"],
+    "warning_collision": ["record warning start, activation, and collision enable tick for every rebound and delayed seed", "assert each rebound uid turns at most once"],
+    "topology": ["record old and new lane graph for every Hard kill transform", "compare reachable lanes, not bullet count or speed"],
+    "score": ["record kill_order, booth_lane_state, rebound_graze_uid, price_chain, reward settlement tick"],
+    "deferred": ["playtest actual route widths", "measure peak active bullets on Windows 60 FPS", "verify Boss paths do not obscure telegraphs", "tune HP, speed, density, and route widths without changing frozen topology"]
+  }
+}
