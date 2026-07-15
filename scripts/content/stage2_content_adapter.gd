@@ -440,7 +440,7 @@ func _validate_emitter_source(phase: Dictionary, profile: Dictionary, source: Di
 				_fail("phase %s emitter %s rebound routing is malformed" % [phase_id, emitter_id])
 				return false
 		"grid_edge":
-			var has_lanes := routing.get("lane_x") is Array and _is_finite_number_array(routing.lane_x, -1) and routing.lane_x.size() >= 2
+			var has_lanes: bool = routing.get("lane_x") is Array and _is_finite_number_array(routing.lane_x, -1) and routing.lane_x.size() >= 2
 			var has_grid := _is_integral_number(routing.get("grid_columns"), 1, 128)
 			if not has_lanes and not has_grid:
 				_fail("phase %s emitter %s grid geometry is malformed" % [phase_id, emitter_id])
