@@ -1964,18 +1964,6 @@ func _stage2_rebuild_field_scratch_owners() -> bool:
 	stage2_field_scratch_bullet_world = pair.scratch_world
 	return true
 
-func _stage2_ensure_field_scratch_owners() -> bool:
-	if (
-		stage2_field_topology_scratch_runtime != null
-		and stage2_field_scratch_bullet_world != null
-		and is_instance_valid(stage2_field_topology_scratch_runtime)
-		and is_instance_valid(stage2_field_scratch_bullet_world)
-		and stage2_field_topology_scratch_runtime.is_trusted_copy_compatible_with(stage2_field_topology_runtime)
-		and stage2_field_scratch_bullet_world.is_trusted_copy_compatible_with(bullet_world)
-	):
-		return true
-	return _stage2_rebuild_field_scratch_owners()
-
 func _clear_bullets():
 	bullet_world.reset()
 	_sync_bullet_world_compatibility_views()
@@ -2775,8 +2763,15 @@ func _stage2_field_callback(kind: String, stage_tick: int, payload: Dictionary =
 	if not _stage2_validate_live_field_bindings():
 		_stage2_reject_field_callback("Stage 2 field runtime, UID binding, and BulletWorld diverged before callback")
 		return false
-	if not _stage2_ensure_field_scratch_owners():
-		_stage2_reject_field_callback("Stage 2 field callback scratch owners are unavailable or incompatible")
+	if (
+		stage2_field_topology_scratch_runtime == null
+		or stage2_field_scratch_bullet_world == null
+		or not is_instance_valid(stage2_field_topology_scratch_runtime)
+		or not is_instance_valid(stage2_field_scratch_bullet_world)
+		or not stage2_field_topology_scratch_runtime.is_trusted_copy_compatible_with(stage2_field_topology_runtime)
+		or not stage2_field_scratch_bullet_world.is_trusted_copy_compatible_with(bullet_world)
+	):
+		_stage2_reject_field_callback("Stage 2 field callback requires prebuilt compatible scratch owners")
 		return false
 	var candidate_runtime: RefCounted = stage2_field_topology_scratch_runtime
 	var candidate_world: RefCounted = stage2_field_scratch_bullet_world
@@ -2815,30 +2810,28 @@ func _stage2_field_callback(kind: String, stage_tick: int, payload: Dictionary =
 	if not _stage2_preflight_field_output(output, stage_tick, sequence, candidate_runtime, candidate_world, candidate_stage_controller):
 		_stage2_reject_field_callback("Stage 2 field callback output failed transactional preflight: %s" % kind)
 		return false
-	# Apply only to the copied scratch owners. The previous live pair becomes the
-	# next scratch pair only after the candidate aggregate is proven coherent.
+	# Apply the complete output against explicit scratch candidates. None of the
+	# candidate owners are published through Main's live references until the
+	# resulting aggregate is fully coherent.
 	var live_stage_controller := stage_controller
 	var live_bullet_world := bullet_world
 	var live_field_runtime := stage2_field_topology_runtime
+	var consumed := _consume_stage2_field_output(output, candidate_runtime, candidate_world, candidate_stage_controller)
+	if kind == "advance":
+		candidate_stage_controller["stage2_field_tick"] = stage_tick
+	var expected_field_tick := stage_tick if kind == "advance" else int(live_stage_controller.get("stage2_field_tick", -1))
+	var candidate_valid := consumed and _stage2_validate_field_candidate_aggregate(candidate_runtime, candidate_world, candidate_stage_controller, stage_tick, sequence, expected_field_tick)
+	if not candidate_valid:
+		_stage2_reject_field_callback("Stage 2 field callback could not commit its isolated output: %s" % kind)
+		return false
+	# The synchronous swap is the first point at which the validated candidate
+	# runtime, world, controller, and compatibility views become live.
 	stage_controller = candidate_stage_controller
 	bullet_world = candidate_world
 	stage2_field_topology_runtime = candidate_runtime
 	stage2_field_scratch_bullet_world = live_bullet_world
 	stage2_field_topology_scratch_runtime = live_field_runtime
 	_sync_bullet_world_compatibility_views()
-	var consumed := _consume_stage2_field_output(output)
-	if kind == "advance":
-		stage_controller["stage2_field_tick"] = stage_tick
-	var candidate_valid := consumed and _stage2_validate_live_field_bindings()
-	if not candidate_valid:
-		stage_controller = live_stage_controller
-		bullet_world = live_bullet_world
-		stage2_field_topology_runtime = live_field_runtime
-		stage2_field_scratch_bullet_world = candidate_world
-		stage2_field_topology_scratch_runtime = candidate_runtime
-		_sync_bullet_world_compatibility_views()
-		_stage2_reject_field_callback("Stage 2 field callback could not commit its isolated output: %s" % kind)
-		return false
 	return true
 
 func _stage2_preflight_field_output(output: Dictionary, expected_stage_tick: int, expected_sequence: int, candidate_runtime: RefCounted, candidate_world: RefCounted, candidate_stage_controller: Dictionary) -> bool:
@@ -2980,50 +2973,54 @@ func _stage2_preflight_field_output(output: Dictionary, expected_stage_tick: int
 	runtime_uids.sort()
 	return planned_uids == runtime_uids
 
-func _consume_stage2_field_output(output: Dictionary) -> bool:
-	if output.is_empty():
+func _consume_stage2_field_output(output: Dictionary, candidate_runtime: RefCounted, candidate_world: RefCounted, candidate_stage_controller: Dictionary) -> bool:
+	if output.is_empty() or candidate_runtime == null or candidate_world == null:
+		return false
+	# Candidate application is forbidden after publication. This guard makes the
+	# transaction order executable, rather than relying on assignment comments.
+	if candidate_runtime == stage2_field_topology_runtime or candidate_world == bullet_world or is_same(candidate_stage_controller, stage_controller):
 		return false
 	for key in STAGE2_FIELD_OUTPUT_ARRAYS:
 		if not (output.get(key) is Array):
 			return false
 	for update_value in output.bullet_updates:
-		if not (update_value is Dictionary) or not _stage2_apply_field_bullet_update(update_value):
+		if not (update_value is Dictionary) or not _stage2_apply_field_bullet_update(update_value, candidate_runtime, candidate_world, candidate_stage_controller):
 			return false
 	for removal_value in output.bullet_removals:
-		if not (removal_value is Dictionary) or not _stage2_apply_field_bullet_removal(removal_value):
+		if not (removal_value is Dictionary) or not _stage2_apply_field_bullet_removal(removal_value, candidate_world, candidate_stage_controller):
 			return false
-	if not _stage2_materialize_field_constructions(output.bullet_constructions):
+	if not _stage2_materialize_field_constructions(output.bullet_constructions, candidate_runtime, candidate_world, candidate_stage_controller):
 		return false
 	for warning_value in output.warnings:
 		if not (warning_value is Dictionary):
 			return false
-		_stage2_append_bounded("stage2_field_warning_records", warning_value)
+		_stage2_append_bounded(candidate_stage_controller, "stage2_field_warning_records", warning_value)
 	for activation_value in output.source_activations:
 		if not (activation_value is Dictionary):
 			return false
-		_stage2_append_bounded("stage2_field_source_activation_records", activation_value)
+		_stage2_append_bounded(candidate_stage_controller, "stage2_field_source_activation_records", activation_value)
 	for source_removal_value in output.source_removals:
 		if not (source_removal_value is Dictionary):
 			return false
-		_stage2_append_bounded("stage2_field_source_removals", source_removal_value)
+		_stage2_append_bounded(candidate_stage_controller, "stage2_field_source_removals", source_removal_value)
 	for transition_value in output.state_transitions:
 		if not (transition_value is Dictionary):
 			return false
-		_stage2_append_bounded("stage2_field_state_transitions", transition_value)
+		_stage2_append_bounded(candidate_stage_controller, "stage2_field_state_transitions", transition_value)
 	for projection_value in output.score_route_callbacks:
 		if not (projection_value is Dictionary):
 			return false
-		_stage2_append_bounded("stage2_field_score_projections", projection_value)
+		_stage2_append_bounded(candidate_stage_controller, "stage2_field_score_projections", projection_value)
 	for telemetry_value in output.telemetry:
 		if not (telemetry_value is Dictionary):
 			return false
-		_stage2_append_bounded("stage2_field_telemetry", telemetry_value)
+		_stage2_append_bounded(candidate_stage_controller, "stage2_field_telemetry", telemetry_value)
 	if not (output.get("telemetry_snapshot") is Dictionary):
 		return false
 	var runtime_telemetry: Dictionary = output.telemetry_snapshot
 	if not (runtime_telemetry.get("active_source_ids") is Array) or not (runtime_telemetry.get("hard_state") is Dictionary) or not (runtime_telemetry.get("counts") is Dictionary):
 		return false
-	_stage2_append_bounded("stage2_field_telemetry", {
+	_stage2_append_bounded(candidate_stage_controller, "stage2_field_telemetry", {
 		"kind": "runtime_snapshot",
 		"stage_tick": int(output.get("stage_tick", -1)),
 		"event_sequence": int(output.get("event_sequence", -1)),
@@ -3035,29 +3032,29 @@ func _consume_stage2_field_output(output: Dictionary) -> bool:
 	})
 	return true
 
-func _stage2_append_bounded(key: String, value: Dictionary) -> void:
-	var records: Array = stage_controller.get(key, [])
+func _stage2_append_bounded(target_stage_controller: Dictionary, key: String, value: Dictionary) -> void:
+	var records: Array = target_stage_controller.get(key, [])
 	records.append(value.duplicate(true))
 	while records.size() > STAGE2_FIELD_RECORD_LIMIT:
 		records.pop_front()
-	stage_controller[key] = records
+	target_stage_controller[key] = records
 
-func _stage2_materialize_field_constructions(constructions: Array) -> bool:
-	if constructions.size() > int(bullet_world.hard_capacity) - bullet_world.active_order().size():
+func _stage2_materialize_field_constructions(constructions: Array, candidate_runtime: RefCounted, candidate_world: RefCounted, candidate_stage_controller: Dictionary) -> bool:
+	if constructions.size() > int(candidate_world.hard_capacity) - candidate_world.active_order().size():
 		return false
 	var validated: Array[Dictionary] = []
 	for construction_value in constructions:
-		if not (construction_value is Dictionary) or not _stage2_field_construction_is_valid(construction_value):
+		if not (construction_value is Dictionary) or not _stage2_field_construction_is_valid_for_runtime(construction_value, candidate_runtime):
 			return false
 		validated.append(construction_value)
 	var spawned_slots: Array[int] = []
-	var bindings: Dictionary = stage_controller.get("stage2_field_uid_to_slot", {})
+	var bindings: Dictionary = candidate_stage_controller.get("stage2_field_uid_to_slot", {})
 	for construction in validated:
 		var uid := String(construction.stage2_bullet_uid)
 		var visual := _stage2_field_visual_for_primitive(String(construction.stage2_primitive))
 		if visual.is_empty() or bindings.has(uid):
 			for spawned_slot in spawned_slots:
-				bullet_world.retire_slot(spawned_slot)
+				candidate_world.retire_slot(spawned_slot)
 			return false
 		var position: Array = construction.position
 		var velocity: Array = construction.velocity_px_per_second
@@ -3073,19 +3070,15 @@ func _stage2_materialize_field_constructions(constructions: Array) -> bool:
 		}
 		for seam_field in STAGE2_FIELD_SEAM_FIELDS:
 			values[seam_field] = construction[seam_field]
-		var slot := int(bullet_world.spawn_bullet(values))
+		var slot := int(candidate_world.spawn_bullet(values))
 		if slot < 0:
 			for spawned_slot in spawned_slots:
-				bullet_world.retire_slot(spawned_slot)
+				candidate_world.retire_slot(spawned_slot)
 			return false
 		spawned_slots.append(slot)
 		bindings[uid] = slot
-	stage_controller["stage2_field_uid_to_slot"] = bindings
-	_sync_bullet_world_compatibility_views()
+	candidate_stage_controller["stage2_field_uid_to_slot"] = bindings
 	return true
-
-func _stage2_field_construction_is_valid(construction: Dictionary) -> bool:
-	return _stage2_field_construction_is_valid_for_runtime(construction, stage2_field_topology_runtime)
 
 func _stage2_field_construction_is_valid_for_runtime(construction: Dictionary, runtime: RefCounted) -> bool:
 	if not _stage2_field_record_has_exact_seam(construction) or not _stage2_field_point_is_valid(construction.get("position")) or not _stage2_field_point_is_valid(construction.get("velocity_px_per_second")):
@@ -3156,17 +3149,17 @@ func _stage2_field_visual_for_primitive(primitive: String) -> Dictionary:
 		return {}
 	return {"family_id": String(family_id), "radius": float(family.get("radius", 5.0)), "color": family.get("color", Color.RED)}
 
-func _stage2_apply_field_bullet_update(update: Dictionary) -> bool:
-	if not _stage2_field_update_is_valid(update, stage2_field_topology_runtime):
+func _stage2_apply_field_bullet_update(update: Dictionary, candidate_runtime: RefCounted, candidate_world: RefCounted, candidate_stage_controller: Dictionary) -> bool:
+	if not _stage2_field_update_is_valid(update, candidate_runtime):
 		return false
 	var uid := String(update.get("stage2_bullet_uid", ""))
-	var bindings: Dictionary = stage_controller.get("stage2_field_uid_to_slot", {})
+	var bindings: Dictionary = candidate_stage_controller.get("stage2_field_uid_to_slot", {})
 	if typeof(update.get("stage2_bullet_uid")) != TYPE_STRING or not bindings.has(uid) or typeof(bindings[uid]) != TYPE_INT:
 		return false
 	var slot := int(bindings[uid])
-	if slot < 0 or slot >= bullet_pool.size() or not bool(bullet_pool[slot].get("active", false)) or String(bullet_pool[slot].get("stage2_bullet_uid", "")) != uid:
+	if slot < 0 or slot >= candidate_world.pool.size() or not bool(candidate_world.pool[slot].get("active", false)) or String(candidate_world.pool[slot].get("stage2_bullet_uid", "")) != uid:
 		return false
-	var bullet: Dictionary = bullet_pool[slot]
+	var bullet: Dictionary = candidate_world.pool[slot]
 	var position: Array = update.position
 	var velocity: Array = update.velocity_px_per_second
 	bullet.x = float(position[0])
@@ -3178,39 +3171,56 @@ func _stage2_apply_field_bullet_update(update: Dictionary) -> bool:
 		bullet[seam_field] = update[seam_field]
 	return true
 
-func _stage2_apply_field_bullet_removal(removal: Dictionary) -> bool:
+func _stage2_apply_field_bullet_removal(removal: Dictionary, candidate_world: RefCounted, candidate_stage_controller: Dictionary) -> bool:
 	if typeof(removal.get("bullet_uid")) != TYPE_STRING:
 		return false
 	var uid := String(removal.bullet_uid)
-	var bindings: Dictionary = stage_controller.get("stage2_field_uid_to_slot", {})
+	var bindings: Dictionary = candidate_stage_controller.get("stage2_field_uid_to_slot", {})
 	if not bindings.has(uid) or typeof(bindings[uid]) != TYPE_INT:
 		return false
 	var slot := int(bindings[uid])
-	if slot < 0 or slot >= bullet_pool.size() or not bool(bullet_pool[slot].get("active", false)) or String(bullet_pool[slot].get("stage2_bullet_uid", "")) != uid:
+	if slot < 0 or slot >= candidate_world.pool.size() or not bool(candidate_world.pool[slot].get("active", false)) or String(candidate_world.pool[slot].get("stage2_bullet_uid", "")) != uid:
 		return false
-	if not bullet_world.retire_slot(slot):
+	if not candidate_world.retire_slot(slot):
 		return false
 	bindings.erase(uid)
-	stage_controller["stage2_field_uid_to_slot"] = bindings
-	_sync_bullet_world_compatibility_views()
+	candidate_stage_controller["stage2_field_uid_to_slot"] = bindings
 	return true
 
 func _stage2_validate_live_field_bindings() -> bool:
-	if stage2_field_topology_runtime == null or stage2_field_topology_runtime.has_hard_error():
+	return _stage2_validate_field_bindings(stage2_field_topology_runtime, bullet_world, stage_controller)
+
+func _stage2_validate_field_candidate_aggregate(candidate_runtime: RefCounted, candidate_world: RefCounted, candidate_stage_controller: Dictionary, expected_callback_tick: int, expected_sequence: int, expected_field_tick: int) -> bool:
+	if not _stage2_validate_field_bindings(candidate_runtime, candidate_world, candidate_stage_controller):
 		return false
-	var active_uids: Array = stage2_field_topology_runtime.telemetry_snapshot().get("active_bullet_uids", [])
-	var bindings: Dictionary = stage_controller.get("stage2_field_uid_to_slot", {})
+	if typeof(candidate_stage_controller.get("stage2_field_event_sequence")) != TYPE_INT or int(candidate_stage_controller.stage2_field_event_sequence) != expected_sequence:
+		return false
+	if typeof(candidate_stage_controller.get("stage2_field_tick")) != TYPE_INT or int(candidate_stage_controller.stage2_field_tick) != expected_field_tick:
+		return false
+	var telemetry: Dictionary = candidate_runtime.telemetry_snapshot()
+	var callback_key_value = telemetry.get("last_callback_key")
+	if not (callback_key_value is Array) or (callback_key_value as Array).size() != 2:
+		return false
+	var callback_key: Array = callback_key_value
+	return typeof(callback_key[0]) == TYPE_INT and int(callback_key[0]) == expected_callback_tick and typeof(callback_key[1]) == TYPE_INT and int(callback_key[1]) == expected_sequence
+
+func _stage2_validate_field_bindings(candidate_runtime: RefCounted, candidate_world: RefCounted, candidate_stage_controller: Dictionary) -> bool:
+	if candidate_runtime == null or candidate_world == null or candidate_runtime.has_hard_error():
+		return false
+	var active_uids: Array = candidate_runtime.telemetry_snapshot().get("active_bullet_uids", [])
+	var bindings: Dictionary = candidate_stage_controller.get("stage2_field_uid_to_slot", {})
 	if active_uids.size() != bindings.size():
 		return false
+	var candidate_pool: Array = candidate_world.pool
 	for uid_value in active_uids:
 		var uid := String(uid_value)
 		if not bindings.has(uid) or typeof(bindings[uid]) != TYPE_INT:
 			return false
 		var slot := int(bindings[uid])
-		if slot < 0 or slot >= bullet_pool.size():
+		if slot < 0 or slot >= candidate_pool.size():
 			return false
-		var bullet: Dictionary = bullet_pool[slot]
-		var runtime_bullet: Dictionary = stage2_field_topology_runtime.bullet_state(uid)
+		var bullet: Dictionary = candidate_pool[slot]
+		var runtime_bullet: Dictionary = candidate_runtime.bullet_state(uid)
 		if not bool(bullet.get("active", false)) or not bool(bullet.get("stage2_field_owned", false)) or runtime_bullet.is_empty():
 			return false
 		for seam_field in STAGE2_FIELD_SEAM_FIELDS:
