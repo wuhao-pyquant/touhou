@@ -28,6 +28,10 @@ const GATE_EVENT_IDS := {
 }
 const ENCOUNTER_KINDS := ["stage", "midboss", "boss", "complete"]
 const RESOLUTION_OUTCOMES := ["clear", "timeout"]
+const PHASE_PRACTICE_NOT_CONFIGURED_ERROR := "phase practice requires a configured controller"
+const PHASE_PRACTICE_UNKNOWN_ID_ERROR := "phase practice phase id is not approved"
+const PHASE_PRACTICE_INVALID_STATE_ERROR := "phase practice requires the configured initial stage state"
+const PHASE_PRACTICE_RUNTIME_ERROR := "phase practice phase runtime configuration failed"
 
 var _package: Dictionary = {}
 var _stage_spec: Dictionary = {}
@@ -40,9 +44,12 @@ var _phase_runtime: RefCounted = null
 var _encounter_kind := "stage"
 var _active_phase_index := -1
 var _resolved_phase_ids: Array[String] = []
+var _phase_practice := false
+var _phase_practice_phase_id := ""
 var _configured := false
 var _validation_errors: Array[String] = []
 var _hard_error := ""
+var _transition_error := ""
 
 func configure(stage2_package: Dictionary, difficulty: String, gameplay_seed: int) -> bool:
 	_clear_configuration()
@@ -84,7 +91,7 @@ func has_hard_error() -> bool:
 	return not _hard_error.is_empty()
 
 func last_error() -> String:
-	return _hard_error
+	return _hard_error if not _hard_error.is_empty() else _transition_error
 
 func reset() -> bool:
 	if not _configured:
@@ -98,8 +105,41 @@ func reset() -> bool:
 	_encounter_kind = "stage"
 	_active_phase_index = -1
 	_resolved_phase_ids.clear()
+	_phase_practice = false
+	_phase_practice_phase_id = ""
 	_hard_error = ""
+	_transition_error = ""
 	return true
+
+func start_phase_practice(phase_id: String) -> bool:
+	if not _configured:
+		_transition_error = PHASE_PRACTICE_NOT_CONFIGURED_ERROR
+		return false
+	if has_hard_error():
+		_transition_error = _hard_error
+		return false
+	var phase_index := PHASE_IDS.find(phase_id)
+	if phase_index < 0:
+		_transition_error = PHASE_PRACTICE_UNKNOWN_ID_ERROR
+		return false
+	if not _is_phase_practice_start_state():
+		_transition_error = PHASE_PRACTICE_INVALID_STATE_ERROR
+		return false
+	var fresh_phase := DanmakuPatternRuntime.new()
+	if not fresh_phase.configure(_phase_specs[phase_index], _difficulty, _gameplay_seed):
+		_transition_error = PHASE_PRACTICE_RUNTIME_ERROR
+		return false
+	_phase_runtime = fresh_phase
+	_encounter_kind = _encounter_kind_for_phase_index(phase_index)
+	_active_phase_index = phase_index
+	_resolved_phase_ids.clear()
+	_phase_practice = true
+	_phase_practice_phase_id = phase_id
+	_transition_error = ""
+	return true
+
+func is_phase_practice() -> bool:
+	return _phase_practice
 
 func advance(player_position: Vector2 = Vector2.ZERO) -> Dictionary:
 	if not _configured:
@@ -203,7 +243,7 @@ func resolved_phase_ids() -> Array[String]:
 func capture_snapshot() -> Dictionary:
 	if not _configured or has_hard_error():
 		return {}
-	return {
+	var snapshot := {
 		"version": SNAPSHOT_VERSION,
 		"stage_id": STAGE_ID,
 		"artifact_id": String(_metadata.get("artifact_id", "")),
@@ -215,6 +255,10 @@ func capture_snapshot() -> Dictionary:
 		"stage_runtime": _stage_runtime.capture_snapshot(),
 		"phase_runtime": _phase_runtime.capture_snapshot() if _phase_runtime != null else {},
 	}
+	if _phase_practice:
+		snapshot["phase_practice"] = true
+		snapshot["phase_practice_phase_id"] = _phase_practice_phase_id
+	return snapshot
 
 func validate_snapshot(snapshot: Dictionary) -> bool:
 	if not _configured or int(snapshot.get("version", -1)) != SNAPSHOT_VERSION:
@@ -227,8 +271,21 @@ func validate_snapshot(snapshot: Dictionary) -> bool:
 		return false
 	if not (snapshot.get("resolved_phase_ids") is Array) or not (snapshot.get("stage_runtime") is Dictionary) or not (snapshot.get("phase_runtime") is Dictionary):
 		return false
+	var phase_practice := false
+	var phase_practice_phase_index := -1
+	if snapshot.has("phase_practice"):
+		if typeof(snapshot.phase_practice) != TYPE_BOOL or not bool(snapshot.phase_practice):
+			return false
+		if typeof(snapshot.get("phase_practice_phase_id")) != TYPE_STRING:
+			return false
+		phase_practice_phase_index = PHASE_IDS.find(String(snapshot.phase_practice_phase_id))
+		if phase_practice_phase_index < 0:
+			return false
+		phase_practice = true
+	elif snapshot.has("phase_practice_phase_id"):
+		return false
 	var resolved: Array = snapshot.resolved_phase_ids
-	if resolved.size() > PHASE_IDS.size() or resolved != PHASE_IDS.slice(0, resolved.size()):
+	if not phase_practice and (resolved.size() > PHASE_IDS.size() or resolved != PHASE_IDS.slice(0, resolved.size())):
 		return false
 	var stage_probe := StageEncounterRuntime.new()
 	if not stage_probe.configure(_stage_spec) or not stage_probe.validate_snapshot(snapshot.stage_runtime):
@@ -236,7 +293,7 @@ func validate_snapshot(snapshot: Dictionary) -> bool:
 	var stage_state: Dictionary = snapshot.stage_runtime
 	var kind := String(snapshot.encounter_kind)
 	var phase_index := int(snapshot.active_phase_index)
-	if not _snapshot_controller_state_is_coherent(kind, phase_index, resolved, stage_state):
+	if not _snapshot_controller_state_is_coherent(kind, phase_index, resolved, stage_state, phase_practice, phase_practice_phase_index):
 		return false
 	if kind in ["midboss", "boss"]:
 		var phase_probe := DanmakuPatternRuntime.new()
@@ -260,16 +317,21 @@ func restore_snapshot(snapshot: Dictionary) -> bool:
 	var restored_ids: Array[String] = []
 	for phase_id in snapshot.resolved_phase_ids:
 		restored_ids.append(String(phase_id))
+	var restored_phase_practice := bool(snapshot.get("phase_practice", false))
+	var restored_phase_practice_phase_id := String(snapshot.get("phase_practice_phase_id", ""))
 	_stage_runtime = restored_stage
 	_phase_runtime = restored_phase
 	_encounter_kind = String(snapshot.encounter_kind)
 	_active_phase_index = restored_phase_index
 	_resolved_phase_ids = restored_ids
+	_phase_practice = restored_phase_practice
+	_phase_practice_phase_id = restored_phase_practice_phase_id
 	_hard_error = ""
+	_transition_error = ""
 	return true
 
 func telemetry_snapshot() -> Dictionary:
-	return {
+	var telemetry := {
 		"version": SNAPSHOT_VERSION,
 		"configured": _configured,
 		"stage_id": STAGE_ID if _configured else "",
@@ -286,6 +348,10 @@ func telemetry_snapshot() -> Dictionary:
 		"phase_runtime": _phase_runtime.telemetry_snapshot() if _phase_runtime != null else {},
 		"hard_error": _hard_error,
 	}
+	if _phase_practice:
+		telemetry["phase_practice"] = true
+		telemetry["phase_practice_phase_id"] = _phase_practice_phase_id
+	return telemetry
 
 func _begin_encounter(kind: String) -> bool:
 	if kind == "midboss" and _resolved_phase_ids.is_empty():
@@ -319,6 +385,11 @@ func _resolve_active_phase_internal(outcome: String) -> Dictionary:
 		"phase_tick": resolved_tick,
 		"owner_id": String(resolved_definition.get("owner_id", "")),
 	})
+	if _phase_practice:
+		_phase_runtime = null
+		_active_phase_index = -1
+		_encounter_kind = "complete"
+		return _finalize_output(output)
 	var encounter_end_index := MIDBOSS_PHASE_IDS.size() if _encounter_kind == "midboss" else PHASE_IDS.size()
 	if _resolved_phase_ids.size() < encounter_end_index:
 		_active_phase_index += 1
@@ -344,7 +415,17 @@ func _resolve_active_phase_internal(outcome: String) -> Dictionary:
 func _phase_definition_for_index(index: int) -> Dictionary:
 	return _phase_definition_at(index, "midboss" if index < MIDBOSS_PHASE_IDS.size() else "boss")
 
-func _snapshot_controller_state_is_coherent(kind: String, phase_index: int, resolved: Array, stage_state: Dictionary) -> bool:
+func _snapshot_controller_state_is_coherent(kind: String, phase_index: int, resolved: Array, stage_state: Dictionary, phase_practice: bool = false, phase_practice_phase_index: int = -1) -> bool:
+	if phase_practice:
+		if not _stage_state_is_initial(stage_state):
+			return false
+		var practice_phase_id: String = PHASE_IDS[phase_practice_phase_index]
+		var practice_kind := _encounter_kind_for_phase_index(phase_practice_phase_index)
+		if kind == practice_kind:
+			return phase_index == phase_practice_phase_index and resolved.is_empty()
+		if kind == "complete":
+			return phase_index == -1 and resolved == [practice_phase_id]
+		return false
 	var paused := bool(stage_state.get("paused", false))
 	var active_gate: Dictionary = stage_state.get("active_gate", {})
 	var completed_gates: Array = stage_state.get("completed_gate_ids", [])
@@ -363,6 +444,29 @@ func _snapshot_controller_state_is_coherent(kind: String, phase_index: int, reso
 		"complete":
 			return phase_index == -1 and resolved == PHASE_IDS and not paused and completed_gates == ["s2_b06", "s2_b18"] and next_event_index == 18
 	return false
+
+func _is_phase_practice_start_state() -> bool:
+	if _phase_practice or _encounter_kind != "stage" or _active_phase_index != -1 or _phase_runtime != null or not _resolved_phase_ids.is_empty():
+		return false
+	if _stage_runtime == null:
+		return false
+	return _stage_state_is_initial(_stage_runtime.capture_snapshot())
+
+func _stage_state_is_initial(stage_state: Dictionary) -> bool:
+	return (
+		int(stage_state.get("stage_tick", -1)) == 0
+		and int(stage_state.get("next_event_index", -1)) == 0
+		and stage_state.get("emitted_event_ids", []) == []
+		and not bool(stage_state.get("paused", true))
+		and stage_state.get("active_gate", {}) == {}
+		and String(stage_state.get("encounter_role", "")) == "stage"
+		and int(stage_state.get("phase_cursor", 0)) == -1
+		and int(stage_state.get("event_count", -1)) == 0
+		and stage_state.get("completed_gate_ids", []) == []
+	)
+
+func _encounter_kind_for_phase_index(index: int) -> String:
+	return "midboss" if index < MIDBOSS_PHASE_IDS.size() else "boss"
 
 func _validate_package(stage2_package: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
@@ -489,6 +593,9 @@ func _clear_configuration() -> void:
 	_encounter_kind = "stage"
 	_active_phase_index = -1
 	_resolved_phase_ids.clear()
+	_phase_practice = false
+	_phase_practice_phase_id = ""
 	_configured = false
 	_validation_errors.clear()
 	_hard_error = ""
+	_transition_error = ""
