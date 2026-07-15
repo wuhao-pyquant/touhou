@@ -60,6 +60,17 @@ func _source_event(main: Node, event_id: String) -> Dictionary:
 			return (event.get("payload", {}) as Dictionary).duplicate(true)
 	return {}
 
+func _stage_event(main: Node, event_id: String) -> Dictionary:
+	return {"id": event_id, "payload": _source_event(main, event_id)}
+
+func _genuinely_live_main_sources(main: Node) -> Array:
+	var result: Array = []
+	for enemy_value in main.enemies:
+		var enemy: Dictionary = enemy_value
+		if bool(enemy.get("stage2_field_owned", false)) and bool(enemy.get("alive", false)) and not bool(enemy.get("dying", false)) and not bool(enemy.get("stage2_source_defeat_forwarded", false)) and not bool(enemy.get("stage2_source_removal_forwarded", false)):
+			result.append(String(enemy.get("stage2_spawn_id", "")))
+	return result
+
 func _activate_direct_event(main: Node, event_id: String) -> bool:
 	var event: Dictionary = _source_event(main, event_id)
 	if not _check(not event.is_empty(), "Missing source metadata for %s." % event_id):
@@ -279,7 +290,8 @@ func _assert_source_callbacks_and_gate_catchup() -> void:
 	var guard := 0
 	while gate.stage2_encounter_controller.encounter_kind() == "stage" and guard < 800:
 		var output: Dictionary = gate.stage2_encounter_controller.advance(Vector2(gate.player_x, gate.player_y))
-		_check(gate._consume_stage2_controller_output(output), "Main rejected pre-midboss field output at step %d." % guard)
+		if not _check(gate._consume_stage2_controller_output(output), "Main rejected pre-midboss field output at step %d." % guard):
+			break
 		guard += 1
 	_check(guard < 800 and gate.stage2_encounter_controller.encounter_kind() == "midboss", "Real Main path did not reach the midboss gate.")
 	_check_equal(int(gate.stage_controller.get("stage2_field_tick", -1)), 750, "Field clock did not freeze at the midboss gate.")
@@ -296,7 +308,105 @@ func _assert_source_callbacks_and_gate_catchup() -> void:
 	_check_equal(int(gate.stage_controller.get("stage2_field_tick", -1)), 1650, "Compressed resume did not consume exact authored intervals.")
 	_check_equal((gate.stage_controller.get("stage2_field_activated_event_ids", []) as Array).slice(0, 12), EVENT_IDS.slice(0, 12), "First twelve field activations were not exact and ordered.")
 	_check_equal(gate.stage_controller.get("stage2_field_uid_to_slot", {}).size(), 0, "Catch-up fabricated a field-owned emission inside phase-owned empty intervals.")
+	var midboss_removals: Array = []
+	for removal_value in gate.stage_controller.get("stage2_field_source_removals", []):
+		var removal: Dictionary = removal_value
+		if String(removal.get("spawn_id", "")) == "s2_midboss_abacus_tsukumogami":
+			midboss_removals.append(removal)
+	_check_equal(midboss_removals.size(), 1, "Phase-owned midboss was not carried exactly across s2_b07-s2_b11.")
+	if not midboss_removals.is_empty():
+		_check_equal(String((midboss_removals[0] as Dictionary).get("reason", "")), "midboss_gate_exit", "Phase-owned midboss lost its explicit s2_b12 removal boundary.")
 	_free_main(gate)
+
+func _assert_event_entry_source_reconciliation() -> void:
+	var production: Node = _new_main("normal", 73033)
+	var guard := 0
+	var b01_bullets_before: Array = []
+	while "s2_b02" not in (production.stage_controller.get("stage2_field_activated_event_ids", []) as Array) and guard < 200:
+		var current_b01_bullets: Array = []
+		for uid_value in production.stage2_field_topology_runtime.telemetry_snapshot().get("active_bullet_uids", []):
+			var uid := String(uid_value)
+			var bullet: Dictionary = production.stage2_field_topology_runtime.bullet_state(uid)
+			if String(bullet.get("stage2_source_event_id", "")) == "s2_b01":
+				current_b01_bullets.append(uid)
+		if not current_b01_bullets.is_empty():
+			b01_bullets_before = current_b01_bullets
+		var output: Dictionary = production.stage2_encounter_controller.advance(Vector2(production.player_x, production.player_y))
+		if not _check(bool(output.get("ok", false)) and production._consume_stage2_controller_output(output), "Production no-shot path rejected before s2_b02 entry at step %d." % guard):
+			break
+		guard += 1
+	_check(guard < 200 and "s2_b02" in (production.stage_controller.get("stage2_field_activated_event_ids", []) as Array), "Production no-shot path did not reach s2_b02 entry.")
+	var expected_b02 := ["s2_b02_left_clerk", "s2_b02_center_clerk", "s2_b02_right_clerk"]
+	_check_equal(production.stage2_field_topology_runtime.telemetry_snapshot().get("active_source_ids", []), expected_b02, "s2_b02 entry did not reconcile runtime sources to the exact data-declared set.")
+	_check_equal(_genuinely_live_main_sources(production), expected_b02, "s2_b02 entry left Main source flags out of sync with runtime sources.")
+	var b01_enemy_count := 0
+	for enemy_value in production.enemies:
+		var enemy: Dictionary = enemy_value
+		if String(enemy.get("stage2_event_id", "")) != "s2_b01":
+			continue
+		b01_enemy_count += 1
+		_check(not bool(enemy.get("alive", true)) and bool(enemy.get("stage2_source_removal_forwarded", false)), "s2_b02 entry did not retire and forward one stale b01 Main source.")
+	_check_equal(b01_enemy_count, 3, "Production source reconciliation did not inspect all three b01 enemies.")
+	var reconciliation_order: Array = []
+	for removal_value in production.stage_controller.get("stage2_field_source_removals", []):
+		var removal: Dictionary = removal_value
+		if String(removal.get("reason", "")) == "s2_b02_event_entry_reconciliation":
+			reconciliation_order.append(String(removal.get("spawn_id", "")))
+	_check_equal(reconciliation_order, ["s2_b01_abacus_left", "s2_b01_abacus_center", "s2_b01_abacus_right"], "s2_b02 stale-source callbacks did not preserve frozen source-row order.")
+	_check(not b01_bullets_before.is_empty(), "Production fixture had no pre-existing b01 bullets to preserve.")
+	for uid_value in b01_bullets_before:
+		var uid := String(uid_value)
+		_check(not production.stage2_field_topology_runtime.bullet_state(uid).is_empty() and production.stage_controller.stage2_field_uid_to_slot.has(uid), "Source reconciliation cleared a previously emitted b01 bullet: %s" % uid)
+	_free_main(production)
+
+	var carryover: Node = _new_main("normal", 73034)
+	_check(_activate_direct_event(carryover, "s2_b04"), "b04-to-b05 carryover fixture activation failed.")
+	_check(carryover._stage2_begin_field_event(_stage_event(carryover, "s2_b05")), "b05 rejected its declared live b04 booth edges.")
+	_check_equal(carryover.stage2_field_topology_runtime.telemetry_snapshot().get("active_source_ids", []), ["s2_b04_left_booth_edge", "s2_b04_right_booth_edge", "s2_b05_left_bead_seller", "s2_b05_right_bead_seller"], "b04-to-b05 declared carryover was not preserved exactly.")
+	_check_equal(_genuinely_live_main_sources(carryover), ["s2_b04_left_booth_edge", "s2_b04_right_booth_edge"], "b04 carryover Main flags changed before b05 materialization.")
+	_free_main(carryover)
+
+	var mirror: Node = _new_main("hard", 73035)
+	_check(_activate_direct_event(mirror, "s2_b15"), "b15-to-b16 carryover fixture activation failed.")
+	var selected: Dictionary = mirror.enemies[1]
+	selected.dying = true
+	selected.death_timer = 8.0
+	_check(mirror._stage2_forward_field_source_defeat(selected), "b15 selected-mirror defeat was not forwarded.")
+	_check(mirror._stage2_begin_field_event(_stage_event(mirror, "s2_b16")), "b16 rejected the exact genuinely live mirror survivor.")
+	_check_equal(mirror.stage2_field_topology_runtime.telemetry_snapshot().get("active_source_ids", []), ["s2_b15_left_mirror", "s2_b16_abacus_keeper"], "b16 did not retain exactly the surviving b15 mirror plus its own source.")
+	_check_equal(int(mirror.stage2_field_topology_runtime.telemetry_snapshot().get("hard_state", {}).get("mirror_activation_mask", -1)), 6, "b16 source reconciliation changed the selected-right/surviving-left mask.")
+	_check(bool(selected.get("stage2_source_defeat_forwarded", false)) and bool(selected.get("stage2_source_removal_forwarded", false)), "b16 carryover lost the selected mirror forwarding flags.")
+	_free_main(mirror)
+
+func _assert_event_entry_rollback() -> void:
+	var rollback: Node = _new_main("normal", 73043)
+	_check(_activate_direct_event(rollback, "s2_b01") and _advance_field_to(rollback, 24), "Event-entry rollback fixture did not create stale sources and bullets.")
+	_check_equal(rollback.stage2_field_topology_runtime.telemetry_snapshot().get("active_source_ids", []), ["s2_b01_abacus_left", "s2_b01_abacus_center", "s2_b01_abacus_right"], "Rollback fixture did not begin with the three stale b01 sources.")
+	var runtime_before: Dictionary = rollback.stage2_field_topology_runtime.capture_snapshot()
+	var world_before: Dictionary = rollback.capture_bullet_world_state()
+	var bindings_before: Dictionary = rollback.stage_controller.stage2_field_uid_to_slot.duplicate(true)
+	var enemies_before: Array = rollback.enemies.duplicate(true)
+	var controller_before: Dictionary = rollback.stage_controller.duplicate(true)
+	var sequence_before := int(rollback.stage_controller.stage2_field_event_sequence)
+	var tick_before := int(rollback.stage_controller.stage2_field_tick)
+	var rejected_event: Dictionary = _stage_event(rollback, "s2_b02")
+	rejected_event.payload.authored_tick = 151
+	_check(not rollback._stage2_begin_field_event(rejected_event), "Event entry accepted an activation with the wrong canonical tick.")
+	_check(String(rollback.stage_controller.get("stage2_field_hard_error", "")) != "" and String(rollback.game_manager_ref.state) == "game_over", "Rejected event entry did not latch the final Main error state.")
+	_check_equal(rollback.stage2_field_topology_runtime.capture_snapshot(), runtime_before, "Rejected whole entry exposed candidate stale-source removals in the live runtime.")
+	_check_equal(rollback.capture_bullet_world_state(), world_before, "Rejected whole entry changed live BulletWorld slots or cursor.")
+	_check_equal(rollback.stage_controller.get("stage2_field_uid_to_slot", {}), bindings_before, "Rejected whole entry changed live UID bindings.")
+	_check_equal(rollback.enemies, enemies_before, "Rejected whole entry exposed candidate Main enemy flag changes.")
+	_check_equal(int(rollback.stage_controller.stage2_field_event_sequence), sequence_before, "Rejected whole entry consumed live callback sequences.")
+	_check_equal(int(rollback.stage_controller.stage2_field_tick), tick_before, "Rejected whole entry advanced the live field tick.")
+	var controller_without_latched_error: Dictionary = rollback.stage_controller.duplicate(true)
+	for key in ["stage2_hard_error", "stage2_field_hard_error"]:
+		if controller_before.has(key):
+			controller_without_latched_error[key] = controller_before[key]
+		else:
+			controller_without_latched_error.erase(key)
+	_check_equal(controller_without_latched_error, controller_before, "Rejected whole entry changed stage_controller beyond the final latched error fields.")
+	_free_main(rollback)
 
 func _assert_fail_closed_paths() -> void:
 	var exhausted: Node = _new_main("normal", 73041)
@@ -384,7 +494,9 @@ func _run() -> void:
 	_assert_contract_loading_and_first_construction()
 	_assert_delayed_seed_rebound_removal_and_projection()
 	_assert_source_callbacks_and_gate_catchup()
+	_assert_event_entry_source_reconciliation()
 	_assert_fail_closed_paths()
+	_assert_event_entry_rollback()
 	_assert_aggregate_snapshot_and_legacy_shape()
 	if failed:
 		quit(1)

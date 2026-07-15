@@ -2370,9 +2370,67 @@ func _stage2_begin_field_event(event: Dictionary) -> bool:
 	var event_id := String(event.get("id", ""))
 	var payload_value = event.get("payload")
 	if event_id == "" or not (payload_value is Dictionary) or typeof((payload_value as Dictionary).get("authored_tick")) != TYPE_INT:
-		_stage2_fail_closed("Stage 2 field event is missing its canonical authored tick")
+		_stage2_reject_field_callback("Stage 2 field event is missing its canonical authored tick")
 		return false
 	var authored_tick := int((payload_value as Dictionary).authored_tick)
+	if String(stage_controller.get("stage2_field_hard_error", "")) != "":
+		return false
+	if stage2_field_topology_runtime == null or not stage2_field_topology_runtime.is_configured() or not _stage2_validate_live_field_bindings():
+		_stage2_reject_field_callback("Stage 2 field event entry aggregate is unavailable or divergent")
+		return false
+	var live_runtime_snapshot: Dictionary = stage2_field_topology_runtime.capture_snapshot()
+	var live_world_snapshot: Dictionary = bullet_world.capture_state()
+	if live_runtime_snapshot.is_empty() or live_world_snapshot.is_empty():
+		_stage2_reject_field_callback("Stage 2 field event entry snapshot is unavailable")
+		return false
+	var candidate_runtime: RefCounted = Stage2FieldTopologyRuntime.new()
+	var field_contract: Dictionary = stage_director.stage2_field_topology_contract() if stage_director != null and stage_director.has_method("stage2_field_topology_contract") else {}
+	if field_contract.is_empty() or not candidate_runtime.configure(field_contract, gameplay_difficulty, String(stage_controller.get("stage2_field_run_uid", ""))) or not candidate_runtime.restore_snapshot(live_runtime_snapshot):
+		_stage2_reject_field_callback("Stage 2 field event entry could not restore a disposable runtime")
+		return false
+	var candidate_world: RefCounted = BulletWorld.new()
+	var world_restore: Dictionary = candidate_world.restore_state(live_world_snapshot)
+	if not bool(world_restore.get("ok", false)):
+		_stage2_reject_field_callback("Stage 2 field event entry could not restore a disposable BulletWorld")
+		return false
+	var live_stage_controller := stage_controller
+	var live_bullet_world := bullet_world
+	var live_field_runtime := stage2_field_topology_runtime
+	var live_enemies := enemies
+	var live_game_state: Variant = game_manager_ref.state if game_manager_ref else null
+	var live_boss_alive := boss_alive
+	stage_controller = stage_controller.duplicate(true)
+	bullet_world = candidate_world
+	stage2_field_topology_runtime = candidate_runtime
+	enemies = enemies.duplicate(true)
+	_sync_bullet_world_compatibility_views()
+	var candidate_valid := _stage2_apply_field_event_entry(event_id, authored_tick)
+	var candidate_error := String(stage_controller.get("stage2_field_hard_error", ""))
+	var candidate_stage_controller := stage_controller
+	candidate_world = bullet_world
+	candidate_runtime = stage2_field_topology_runtime
+	var candidate_enemies := enemies
+	stage_controller = live_stage_controller
+	bullet_world = live_bullet_world
+	stage2_field_topology_runtime = live_field_runtime
+	enemies = live_enemies
+	_sync_bullet_world_compatibility_views()
+	if not candidate_valid:
+		boss_alive = live_boss_alive
+		if game_manager_ref:
+			game_manager_ref.state = live_game_state
+		_stage2_reject_field_callback(candidate_error if candidate_error != "" else "Stage 2 field event entry rejected its disposable aggregate")
+		return false
+	# Reconciliation callbacks, activation, Main source flags, UID bindings, and
+	# BulletWorld slots become visible together only after the whole entry passes.
+	stage_controller = candidate_stage_controller
+	bullet_world = candidate_world
+	stage2_field_topology_runtime = candidate_runtime
+	enemies = candidate_enemies
+	_sync_bullet_world_compatibility_views()
+	return true
+
+func _stage2_apply_field_event_entry(event_id: String, authored_tick: int) -> bool:
 	if event_id == "s2_b12":
 		if not _stage2_remove_runtime_source_if_live("s2_midboss_abacus_tsukumogami", authored_tick, "midboss_gate_exit"):
 			return false
@@ -2380,6 +2438,10 @@ func _stage2_begin_field_event(event: Dictionary) -> bool:
 			return false
 	var carryover: Variant = _stage2_actual_live_carryover(event_id)
 	if carryover == null:
+		return false
+	if not _stage2_reconcile_field_event_sources(event_id, authored_tick, carryover):
+		return false
+	if not _stage2_field_event_source_state_agrees(carryover):
 		return false
 	if not _stage2_field_callback("activate_event", authored_tick, {"event_id": event_id, "active_entity_ids": carryover}):
 		return false
@@ -2389,6 +2451,73 @@ func _stage2_begin_field_event(event: Dictionary) -> bool:
 		return false
 	activated_ids.append(event_id)
 	stage_controller["stage2_field_activated_event_ids"] = activated_ids
+	return true
+
+func _stage2_reconcile_field_event_sources(event_id: String, authored_tick: int, carryover: Array) -> bool:
+	# Runtime telemetry is emitted in the contract's frozen spawn-row order. Keep
+	# that order so several removals at one authored tick receive stable sequences.
+	var runtime_active: Array = stage2_field_topology_runtime.telemetry_snapshot().get("active_source_ids", [])
+	for source_value in runtime_active:
+		if typeof(source_value) != TYPE_STRING:
+			_stage2_reject_field_callback("Stage 2 field runtime exposed a malformed active source during event entry")
+			return false
+		var source_id := String(source_value)
+		if source_id in carryover:
+			continue
+		var matching_enemies: Array = []
+		var accept_dying_defeat := false
+		for enemy_value in enemies:
+			var enemy: Dictionary = enemy_value
+			if not bool(enemy.get("stage2_field_owned", false)) or String(enemy.get("stage2_spawn_id", "")) != source_id:
+				continue
+			matching_enemies.append(enemy)
+			if bool(enemy.get("alive", false)) and bool(enemy.get("dying", false)) and not bool(enemy.get("stage2_source_defeat_forwarded", false)) and not bool(enemy.get("stage2_source_removal_forwarded", false)):
+				accept_dying_defeat = true
+		var callback_kind := "accept_defeat" if accept_dying_defeat else "remove_source"
+		var callback_payload := {"spawn_id": source_id}
+		if callback_kind == "remove_source":
+			callback_payload["reason"] = "%s_event_entry_reconciliation" % event_id
+		if not _stage2_field_callback(callback_kind, authored_tick, callback_payload):
+			return false
+		for enemy_value in matching_enemies:
+			var enemy: Dictionary = enemy_value
+			enemy["alive"] = false
+			enemy["stage2_source_removal_forwarded"] = true
+			if callback_kind == "accept_defeat":
+				enemy["stage2_source_defeat_forwarded"] = true
+	return true
+
+func _stage2_field_event_source_state_agrees(carryover: Array) -> bool:
+	var runtime_active: Array = stage2_field_topology_runtime.telemetry_snapshot().get("active_source_ids", [])
+	if runtime_active != carryover:
+		_stage2_reject_field_callback("Stage 2 event-entry runtime sources do not exactly match declared live carryover")
+		return false
+	var expected_main_live: Array = []
+	for source_value in carryover:
+		var source_id := String(source_value)
+		var definition: Dictionary = stage2_field_topology_runtime.definition_for_spawn(source_id)
+		var source_pattern: Dictionary = definition.get("source", {}).get("pattern", {})
+		if String(source_pattern.get("routing", "")) != "phase_owned":
+			expected_main_live.append(source_id)
+	var main_live: Array = []
+	for enemy_value in enemies:
+		var enemy: Dictionary = enemy_value
+		if not bool(enemy.get("stage2_field_owned", false)):
+			continue
+		var source_id := String(enemy.get("stage2_spawn_id", ""))
+		var genuinely_live := bool(enemy.get("alive", false)) and not bool(enemy.get("dying", false)) and not bool(enemy.get("stage2_source_defeat_forwarded", false)) and not bool(enemy.get("stage2_source_removal_forwarded", false))
+		if genuinely_live:
+			main_live.append(source_id)
+		if source_id in expected_main_live:
+			if not genuinely_live:
+				_stage2_reject_field_callback("Stage 2 event-entry carryover source is not genuinely live in Main: %s" % source_id)
+				return false
+		elif not bool(enemy.get("stage2_source_removal_forwarded", false)):
+			_stage2_reject_field_callback("Stage 2 event-entry inactive Main source lacks removal forwarding: %s" % source_id)
+			return false
+	if main_live != expected_main_live:
+		_stage2_reject_field_callback("Stage 2 event-entry Main source flags do not match declared live carryover")
+		return false
 	return true
 
 func _stage2_finish_field_event(event: Dictionary) -> bool:
@@ -2424,7 +2553,7 @@ func _stage2_actual_live_carryover(event_id: String) -> Variant:
 		if not live_in_main:
 			for enemy_value in enemies:
 				var enemy: Dictionary = enemy_value
-				if bool(enemy.get("stage2_field_owned", false)) and String(enemy.get("stage2_spawn_id", "")) == source_id and bool(enemy.get("alive", false)) and not bool(enemy.get("dying", false)):
+				if bool(enemy.get("stage2_field_owned", false)) and String(enemy.get("stage2_spawn_id", "")) == source_id and bool(enemy.get("alive", false)) and not bool(enemy.get("dying", false)) and not bool(enemy.get("stage2_source_defeat_forwarded", false)) and not bool(enemy.get("stage2_source_removal_forwarded", false)):
 					live_in_main = true
 					break
 		if live_in_main:
