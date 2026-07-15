@@ -1,0 +1,35 @@
+{
+  "id": "M1-content-contract-r1-static-review",
+  "objective": "Perform the independent strictly read-only round-1 gate for repaired candidate 720ae9848a8690c94320d4fe4668c1b481971802. Do not repeat the entire M1 design review. Reconfirm the already approved identity/order/count, Hard topology, canonical seven-part fingerprint, deterministic seed, M0 compatibility, and StageDirector isolation only insofar as the repair could regress them, then decide whether B1-B4 from run 20260715T041456Z-M1-content-contract-static-review-danmaku_director-f29686c4 are closed. B1: all 40 M1 phases must bind one-to-one to existing legacy cards, carry positive HP, 60 Hz timeout ticks, and a PatternDefinition ID, with validation and assertions unable to bypass those fields. B2: every emitter family must resolve through the existing GameDatabase to color-bearing metadata; emitter schedules/warnings, motion-rule content, and Normal/Hard warning frames must fail closed. B3: empty and wrong-shaped roots/nested values must make the catalog invalid through a production-compatible injectable seam, with focused negative assertions and no partial-valid state. B4: deterministic dialogue/performance hook seams and all authored stage/phase score routes must validate and round-trip without pretending dialogue or projectile execution exists. Confirm legacy StageDirector queries are unchanged before/after M1 catalog access. Review likely Godot 4.7 parse/runtime correctness, especially typed arrays, Variant narrowing, Color checks, injected malformed values, and dynamic calls. Do not edit files, run tests, or launch Godot. Return GATE: APPROVE only if exactly one guarded run of tests/assert_m1_content_contracts.gd is safe and sufficient; otherwise return GATE: REPAIR with exact file/line blockers and authorize zero Godot launches.",
+  "mode": "read_only",
+  "allowed_paths": [],
+  "forbidden_paths": [
+    "**"
+  ],
+  "dependency_commit": "720ae9848a8690c94320d4fe4668c1b481971802",
+  "acceptance_commands": [
+    "if((git rev-parse HEAD).Trim() -ne '720ae9848a8690c94320d4fe4668c1b481971802'){throw 'Wrong candidate HEAD'}; Write-Host 'STATIC_REVIEW_HEAD=pass'",
+    "$changed=@(git diff --name-only f787f8fdee06a72024db0712a17e9f96ca814b57..HEAD); $expected=@('scripts/content/boss_phase_definition.gd','scripts/content/difficulty_profile.gd','scripts/content/m1_content_catalog.gd','scripts/content/pattern_definition.gd','scripts/content/stage_timeline.gd','scripts/runtime/stage_director.gd','tests/assert_m1_content_contracts.gd'); if(Compare-Object $expected $changed){throw \"Unexpected full candidate paths: $($changed -join ',')\"}; Write-Host 'STATIC_REVIEW_SCOPE=pass'",
+    "$changed=@(git diff --name-only f96c6faa6b3a718dea234fdacbc51da430b05ffc..HEAD); $expected=@('scripts/content/boss_phase_definition.gd','scripts/content/m1_content_catalog.gd','scripts/content/pattern_definition.gd','scripts/content/stage_timeline.gd','tests/assert_m1_content_contracts.gd'); if(Compare-Object $expected $changed){throw \"Unexpected repair paths: $($changed -join ',')\"}; Write-Host 'STATIC_REVIEW_REPAIR_SCOPE=pass'",
+    "git diff f787f8fdee06a72024db0712a17e9f96ca814b57..HEAD --check",
+    "if(git status --porcelain){throw 'Reviewer worktree is not clean'}; Write-Host 'STATIC_REVIEW_CLEAN=pass'",
+    "if(@(Get-Process -ErrorAction SilentlyContinue | Where-Object ProcessName -Like 'Godot*').Count-ne 0){throw 'Godot process exists during read-only review'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Begin the summary with GATE: APPROVE or GATE: REPAIR and explicitly state that no Godot command or test was run",
+    "Map B1, B2, B3, and B4 to exact repaired production and assertion lines, and identify any remaining blocker by severity, mechanism, and smallest correction",
+    "Confirm the repair preserves the approved fingerprint, seed, M0 compatibility, legacy-query isolation, and M2-M5 implementation boundary",
+    "Audit likely Godot 4.7 parse/runtime hazards in the focused assertion and every new production seam",
+    "On APPROVE authorize exactly one serial guarded execution of tests/assert_m1_content_contracts.gd and no other test; on REPAIR authorize zero Godot launches",
+    "Report actual runtime identity, all acceptance exit codes, zero changed files, and Godot process count zero"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "The authoritative prior gate is .agent-runs/20260715T041456Z-M1-content-contract-static-review-danmaku_director-f29686c4/final.json. It approved fingerprint, seed, M0 compatibility and StageDirector isolation, and identified only B1-B4.",
+    "Repair run 20260715T043543Z-M1-content-contract-runtime-core_simulation-r1-8d62ba66 used the original core_simulation thread/worktree with gpt-5.6-sol / max, changed five in-scope files, launched Godot zero times, and reported static source probes only. Treat that as supplied evidence, not executed proof.",
+    "M1 contract completion does not mean the 40 patterns are playable. M2-M5 still own projectile execution, collision and telegraph timing, tuning, audiovisual readability and performance.",
+    "Windows read-only agents must never launch Godot. Current main-worktree audio/**/*.import modifications are user state outside this detached review and must not be inspected, reset, staged, or described as candidate changes."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
