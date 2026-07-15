@@ -56,10 +56,11 @@ func finish_spell(game_manager_ref: Object, remaining_frames: float, timed_out: 
 		reason = String(game_manager_ref.spell_capture_invalid_reason)
 		captured = false
 	var bonus := 0
+	var bounded_remaining_frames := clampf(remaining_frames, 0.0, float(game_manager_ref.spell_capture_total_frames))
 	if captured:
 		bonus = capture_bonus(
 			int(game_manager_ref.spell_capture_base_value),
-			remaining_frames,
+			bounded_remaining_frames,
 			float(game_manager_ref.spell_capture_total_frames),
 			float(game_manager_ref.night_festival_multiplier)
 		)
@@ -71,7 +72,7 @@ func finish_spell(game_manager_ref: Object, remaining_frames: float, timed_out: 
 		"reason": reason,
 		"bonus": bonus,
 		"base_value": int(game_manager_ref.spell_capture_base_value),
-		"remaining_frames": maxf(remaining_frames, 0.0),
+		"remaining_frames": bounded_remaining_frames,
 		"total_frames": float(game_manager_ref.spell_capture_total_frames),
 		"multiplier": float(game_manager_ref.night_festival_multiplier),
 	}

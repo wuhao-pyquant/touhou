@@ -91,6 +91,9 @@ const BOSS_INDICATOR_W_MAX := 80.0
 var game_manager_ref: Object = null
 var audio_manager_ref: Object = null
 var performance_monitor_ref: Node = null
+var _owned_fallback_game_manager: Node = null
+var _owned_fallback_asset_registry: Node = null
+var _runtime_shutdown_complete: bool = false
 var ui_model: Object = load("res://scripts/ui/ui_model.gd").new()
 var game_database_ref: Object = load("res://scripts/data/game_database.gd").new()
 var game_database: Object = game_database_ref
@@ -201,9 +204,13 @@ func _resolve_singletons() -> void:
 	if not root_game_manager and tree_root:
 		root_game_manager = tree_root.get_node_or_null("GameManager")
 	if root_game_manager:
+		if is_instance_valid(_owned_fallback_game_manager) and _owned_fallback_game_manager != root_game_manager:
+			_release_owned_fallback(_owned_fallback_game_manager)
+			_owned_fallback_game_manager = null
 		game_manager_ref = root_game_manager
 	elif not game_manager_ref:
 		game_manager_ref = load("res://autoload/game_manager.gd").new()
+		_owned_fallback_game_manager = game_manager_ref
 
 	var root_audio_manager: Object = sibling_root.get_node_or_null("AudioManager") if sibling_root else null
 	if not root_audio_manager and tree_root:
@@ -223,12 +230,86 @@ func _resolve_singletons() -> void:
 	if not root_asset_registry and tree_root:
 		root_asset_registry = tree_root.get_node_or_null("AssetRegistry")
 	if root_asset_registry:
+		if is_instance_valid(_owned_fallback_asset_registry) and _owned_fallback_asset_registry != root_asset_registry:
+			_release_owned_fallback(_owned_fallback_asset_registry)
+			_owned_fallback_asset_registry = null
 		if asset_registry_ref != root_asset_registry:
 			asset_registry_ref = root_asset_registry
 			_clear_asset_path_caches()
 	elif not asset_registry_ref:
 		asset_registry_ref = load("res://autoload/asset_registry.gd").new()
+		_owned_fallback_asset_registry = asset_registry_ref
 		_clear_asset_path_caches()
+
+func _release_owned_fallback(owner: Node) -> void:
+	if not is_instance_valid(owner):
+		return
+	if owner.has_method("shutdown_runtime"):
+		owner.shutdown_runtime()
+	owner.free()
+
+func shutdown_runtime() -> void:
+	if _runtime_shutdown_complete:
+		return
+	_runtime_shutdown_complete = true
+
+	asset_texture_cache.clear()
+	_clear_asset_path_caches()
+	_enemy_bullet_type_ids_cache.clear()
+	_enemy_bullet_type_lookup_cache.clear()
+	bullet_pool.clear()
+	active_bullet_indices.clear()
+	enemies.clear()
+	items.clear()
+	combat_effects.clear()
+	boss.clear()
+	stage_controller.clear()
+	current_tick_input.clear()
+	replay_identity.clear()
+	player_bomb_config.clear()
+
+	if bullet_world:
+		bullet_world.reset()
+	if item_reward_system and item_reward_system.has_method("shutdown_runtime"):
+		item_reward_system.shutdown_runtime()
+
+	# A null public reference means a standalone shell explicitly transferred
+	# fallback ownership to its caller for manual cleanup. Otherwise Main still
+	# owns the fallback, even if a test replaced the public reference.
+	if is_instance_valid(_owned_fallback_game_manager) and game_manager_ref != null:
+		_release_owned_fallback(_owned_fallback_game_manager)
+	if is_instance_valid(_owned_fallback_asset_registry) and asset_registry_ref != null:
+		_release_owned_fallback(_owned_fallback_asset_registry)
+	_owned_fallback_game_manager = null
+	_owned_fallback_asset_registry = null
+
+	game_manager_ref = null
+	audio_manager_ref = null
+	performance_monitor_ref = null
+	asset_registry_ref = null
+	_enemy_bullet_type_cache_source = null
+	game_database = null
+	game_database_ref = null
+	ui_model = null
+	item_reward_system = null
+	shot_executor = null
+	bomb_executor = null
+	enemy_pattern_executor = null
+	stage_director = null
+	fixed_tick_clock = null
+	gameplay_rng = null
+	simulation_state_hasher = null
+	bullet_world = null
+	boss_state_machine = null
+	gameplay_input_buffer = null
+	replay_data = null
+
+func _exit_tree() -> void:
+	shutdown_runtime()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		shutdown_runtime()
 
 func _menu_vertical_delta() -> int:
 	var delta: int = 0
@@ -873,12 +954,15 @@ func _sync_shot_cursor_to_selected() -> void:
 	var entries: Array = ui_model.shot_entries(String(game_manager_ref.selected_protagonist_id))
 	shot_menu_cursor = _entry_index_by_id(entries, String(game_manager_ref.selected_shot_id))
 
-func _quit_runtime_safe() -> void:
-	if not is_inside_tree():
-		return
-	if DisplayServer.get_name() == "headless":
-		return
-	get_tree().quit()
+func _quit_runtime_safe(quit_target: Object = null) -> void:
+	var target := quit_target
+	if not target:
+		if not is_inside_tree():
+			return
+		if DisplayServer.get_name() == "headless":
+			return
+		target = get_tree()
+	target.call("quit")
 
 func _screen_center_x() -> float:
 	return SCREEN_W * 0.5
@@ -1099,11 +1183,130 @@ func _validate_gameplay_ledger_snapshot(ledger: Dictionary) -> bool:
 		if not ledger.has(field): return false
 	for field in ["spell_capture_base_value", "run_spell_attempts", "run_spell_captures", "continues_used"]:
 		if typeof(ledger[field]) != TYPE_INT or int(ledger[field]) < 0: return false
-	for field in ["night_festival_multiplier", "highest_night_festival_multiplier", "spell_capture_total_frames"]:
-		if not _is_valid_snapshot_number(ledger[field], 0.0): return false
+	for field in ["night_festival_multiplier", "highest_night_festival_multiplier"]:
+		if not _is_valid_snapshot_number(ledger[field], 1.0) or float(ledger[field]) > 2.0: return false
+	if float(ledger.highest_night_festival_multiplier) < float(ledger.night_festival_multiplier):
+		return false
+	if not _is_valid_snapshot_number(ledger.spell_capture_total_frames, 1.0):
+		return false
 	for field in ["spell_capture_active", "spell_capture_invalidated"]:
 		if typeof(ledger[field]) != TYPE_BOOL: return false
-	return typeof(ledger.spell_capture_invalid_reason) == TYPE_STRING and typeof(ledger.spell_capture_card_id) == TYPE_STRING and ledger.last_capture_result is Dictionary
+	if typeof(ledger.spell_capture_invalid_reason) != TYPE_STRING or typeof(ledger.spell_capture_card_id) != TYPE_STRING or not (ledger.last_capture_result is Dictionary):
+		return false
+	if int(ledger.run_spell_captures) > int(ledger.run_spell_attempts):
+		return false
+	var active := bool(ledger.spell_capture_active)
+	var invalidated := bool(ledger.spell_capture_invalidated)
+	var invalid_reason := String(ledger.spell_capture_invalid_reason)
+	var card_id := String(ledger.spell_capture_card_id)
+	if invalidated != (invalid_reason != ""):
+		return false
+	if active and (card_id == "" or int(ledger.run_spell_attempts) == 0):
+		return false
+	var last_result: Dictionary = ledger.last_capture_result
+	if not last_result.is_empty() and not _validate_capture_result_snapshot(last_result):
+		return false
+	if not last_result.is_empty() and bool(last_result.captured) and int(ledger.run_spell_captures) == 0:
+		return false
+	if not active:
+		if card_id == "":
+			return int(ledger.spell_capture_base_value) == 0 and is_equal_approx(float(ledger.spell_capture_total_frames), 1.0) and not invalidated and last_result.is_empty()
+		if last_result.is_empty() or int(ledger.run_spell_attempts) == 0:
+			return false
+		if String(last_result.card_id) != card_id or int(last_result.base_value) != int(ledger.spell_capture_base_value) or not is_equal_approx(float(last_result.total_frames), float(ledger.spell_capture_total_frames)):
+			return false
+		var result_reason := String(last_result.reason)
+		if bool(last_result.captured):
+			return not invalidated
+		if result_reason == "timeout":
+			return not invalidated
+		return invalidated and invalid_reason == result_reason
+	return true
+
+func _validate_capture_result_snapshot(result: Dictionary) -> bool:
+	for field in ["card_id", "captured", "reason", "bonus", "base_value", "remaining_frames", "total_frames", "multiplier"]:
+		if not result.has(field):
+			return false
+	if typeof(result.card_id) != TYPE_STRING or String(result.card_id) == "" or typeof(result.captured) != TYPE_BOOL or typeof(result.reason) != TYPE_STRING:
+		return false
+	for field in ["bonus", "base_value"]:
+		if typeof(result[field]) != TYPE_INT or int(result[field]) < 0:
+			return false
+	if not _is_valid_snapshot_number(result.remaining_frames, 0.0) or not _is_valid_snapshot_number(result.total_frames, 1.0):
+		return false
+	if float(result.remaining_frames) > float(result.total_frames):
+		return false
+	if not _is_valid_snapshot_number(result.multiplier, 1.0) or float(result.multiplier) > 2.0:
+		return false
+	if bool(result.captured):
+		var expected_bonus := int(floor(float(result.base_value) * float(result.remaining_frames) / float(result.total_frames) * float(result.multiplier)))
+		return String(result.reason) == "capture" and int(result.bonus) == expected_bonus
+	return String(result.reason) != "" and String(result.reason) != "capture" and int(result.bonus) == 0
+
+func _validate_gameplay_bullet_snapshot(bullets_snapshot: Dictionary) -> bool:
+	for entry_value in bullets_snapshot.get("active_bullets", []):
+		var entry: Dictionary = entry_value
+		var bullet: Dictionary = entry.get("state", {})
+		if String(bullet.get("type", "")) != "player":
+			continue
+		var owns_gameplay_fields := bullet.has("behavior") or bullet.has("hit_ledger") or bullet.has("hit_count")
+		if not owns_gameplay_fields:
+			continue
+		if not (bullet.get("behavior") is Dictionary) or not (bullet.get("hit_ledger") is Dictionary) or typeof(bullet.get("hit_count")) != TYPE_INT:
+			return false
+		var behavior: Dictionary = bullet.behavior
+		var ledger: Dictionary = bullet.hit_ledger
+		if typeof(behavior.get("kind")) != TYPE_STRING or String(behavior.kind) == "":
+			return false
+		if behavior.has("piercing") and typeof(behavior.piercing) != TYPE_BOOL:
+			return false
+		if behavior.has("max_hits") and (typeof(behavior.max_hits) != TYPE_INT or int(behavior.max_hits) <= 0):
+			return false
+		var max_hits := int(behavior.get("max_hits", 1))
+		var hit_count := int(bullet.hit_count)
+		if hit_count < 0 or hit_count > max_hits:
+			return false
+		var kind := String(behavior.kind)
+		match kind:
+			"tracking_ofuda":
+				for field in ["tracking_range", "acquisition_half_angle", "turn_rate", "max_deflect"]:
+					if not _is_valid_snapshot_number(behavior.get(field), 0.0):
+						return false
+			"yinyang_satellite":
+				if not _is_valid_snapshot_number(behavior.get("satellite_offset")) or typeof(behavior.get("focused")) != TYPE_BOOL:
+					return false
+			"distance_damage":
+				var origin = behavior.get("origin")
+				if not (origin is Vector2) or is_nan(origin.x) or is_nan(origin.y) or is_inf(origin.x) or is_inf(origin.y):
+					return false
+				for field in ["near_range", "near_multiplier", "far_multiplier"]:
+					if not _is_valid_snapshot_number(behavior.get(field), 0.000001 if field == "near_range" else 0.0):
+						return false
+				if behavior.has("cross_slash") and typeof(behavior.cross_slash) != TYPE_BOOL:
+					return false
+			"sustained_laser":
+				if not _is_valid_snapshot_number(behavior.get("repeat_interval"), 0.000001) or not bool(behavior.get("piercing", false)):
+					return false
+				if behavior.has("focused") and typeof(behavior.focused) != TYPE_BOOL:
+					return false
+			"returning_blade":
+				if typeof(behavior.get("returned")) != TYPE_BOOL or not bool(behavior.get("piercing", false)):
+					return false
+				if not _is_valid_snapshot_number(behavior.get("turn_age"), 0.0) or not _is_valid_snapshot_number(behavior.get("return_speed"), 0.000001) or not _is_valid_snapshot_number(behavior.get("lateral_response"), 0.0):
+					return false
+			_:
+				return false
+		for target_key in ledger:
+			if typeof(target_key) != TYPE_STRING:
+				return false
+			if kind == "sustained_laser":
+				if not _is_valid_snapshot_number(ledger[target_key], 0.0) or float(ledger[target_key]) > float(bullet.age):
+					return false
+			elif typeof(ledger[target_key]) != TYPE_BOOL or not bool(ledger[target_key]):
+				return false
+		if (kind == "sustained_laser" and ledger.size() > hit_count) or (kind != "sustained_laser" and ledger.size() != hit_count):
+			return false
+	return true
 
 func _is_valid_snapshot_number(value: Variant, minimum: float = -INF) -> bool:
 	if typeof(value) not in [TYPE_FLOAT, TYPE_INT]:
@@ -1154,6 +1357,8 @@ func validate_simulation_state(snapshot: Dictionary) -> bool:
 	if not rng_probe.restore(snapshot.rng) or not input_probe.restore(snapshot.input):
 		return false
 	if not bullet_probe.validate_snapshot(snapshot.bullets):
+		return false
+	if not _validate_gameplay_bullet_snapshot(snapshot.bullets):
 		return false
 	if not _validate_manager_snapshot(snapshot.manager) or not _validate_replay_runtime_snapshot(snapshot.replay):
 		return false
@@ -1477,13 +1682,18 @@ func _spawn_enemy_bullet_spec(spec: Dictionary) -> void:
 func _spawn_item(x: float, y: float, item_type: String = "power"):
 	items.append({"alive":true,"collected":false,"x":x,"y":y,"type":item_type,"radius":9.0,"vy":-2.5,"vx":gameplay_rng.range_float(-0.3,0.3),"floating":true,"target_y":128.0,"drift_dir":0.0,"sway":gameplay_rng.range_float(0.0,TAU),"birth":15.0,"anim":gameplay_rng.range_float(0.0,TAU)})
 
-func _spawn_enemy(x: float, y: float, hp: float = 5.0, pattern: String = "aimed", move: String = "straight", vx: float = 0.0, vy: float = 1.5, move_data: Dictionary = {}, strong: bool = false, drop_item_ids: Array = []):
+func _spawn_enemy(x: float, y: float, hp: float = 5.0, pattern: String = "aimed", move: String = "straight", vx: float = 0.0, vy: float = 1.5, move_data: Dictionary = {}, strong: bool = false, drop_item_ids: Variant = null):
 	var cfg: Dictionary = enemy_pattern_executor.spawn_config(pattern, hp, _stage_enemy_hp_mult(), strong)
 	var ehp: float = float(cfg.hp)
 	var radius := float(cfg.radius)
 	var enemy := {"alive":true,"x":x,"y":y,"hp":ehp,"max_hp":ehp,"radius":radius,"vx":vx,"vy":vy,"move_timer":0.0,"move":move,"move_data":move_data.duplicate(true),"pattern":pattern,"shoot_timer":gameplay_rng.range_float(0.0,30.0),"shoot_phase":0,"strong":strong,"dying":false,"death_timer":0.0,"family_id":String(cfg.family_id),"drop_tier":String(cfg.drop_tier),"shoot_interval":float(cfg.shoot_interval)}
 	if not _uses_m0_legacy_gameplay():
-		enemy["drop_item_ids"] = drop_item_ids.duplicate(true) if not drop_item_ids.is_empty() else LEGACY_ENEMY_DROP_IDS.duplicate()
+		var resolved_drop_item_ids: Array = []
+		if drop_item_ids == null:
+			resolved_drop_item_ids = LEGACY_ENEMY_DROP_IDS.duplicate()
+		elif drop_item_ids is Array:
+			resolved_drop_item_ids = drop_item_ids.duplicate(true)
+		enemy["drop_item_ids"] = resolved_drop_item_ids
 	enemies.append(enemy)
 
 func _nearest_enemy(px: float, py: float) -> Vector2:
@@ -2161,7 +2371,8 @@ func _spawn_stage_wave_event(event: Dictionary) -> void:
 		float(event.get("vx", 0.0)),
 		float(event.get("vy", 1.5)),
 		event.get("move_data", {}),
-		bool(event.get("strong", false))
+		bool(event.get("strong", false)),
+		event.get("drop_item_ids", null)
 	)
 
 func _waves_s1(timer: int):
@@ -2671,6 +2882,14 @@ func _record_player_bullet_hit(bullet: Dictionary, target_key: String) -> void:
 func _player_bullet_is_piercing(bullet: Dictionary) -> bool:
 	return bool(bullet.get("behavior", {}).get("piercing", false))
 
+func _retire_player_bullet_after_hit(bullet_index: int, bullet: Dictionary) -> bool:
+	var behavior: Dictionary = bullet.get("behavior", {})
+	var reached_hit_cap := int(bullet.get("hit_count", 0)) >= int(behavior.get("max_hits", 1))
+	if _player_bullet_is_piercing(bullet) and not reached_hit_cap:
+		return false
+	bullet_world.retire_slot(bullet_index)
+	return true
+
 func _check_collisions(is_boss: bool):
 	var player_hitbox_radius: float = _player_hitbox_radius()
 	var player_graze_radius: float = _player_graze_radius()
@@ -2687,8 +2906,7 @@ func _check_collisions(is_boss: bool):
 					if audio_manager_ref: audio_manager_ref.play_sfx("boss_hit")
 					if b.type == "player":
 						_record_player_bullet_hit(b, "boss")
-						if not _player_bullet_is_piercing(b) or not _player_bullet_can_hit(b, "boss") and int(b.get("hit_count", 0)) >= int(b.get("behavior", {}).get("max_hits", 1)):
-							bullet_world.retire_slot(bullet_index)
+						_retire_player_bullet_after_hit(bullet_index, b)
 					else:
 						b.boss_hit = true
 			else:
@@ -2696,13 +2914,14 @@ func _check_collisions(is_boss: bool):
 					var e: Dictionary = enemies[enemy_index]
 					if not e.alive or e.dying: continue
 					if bullet_world.circles_overlap(Vector2(float(b.x), float(b.y)), float(b.radius), Vector2(float(e.x), float(e.y)), float(e.radius)):
+						var player_bullet_retired := false
 						var target_key := "enemy:%d" % enemy_index
 						if b.type == "player" and not _player_bullet_can_hit(b, target_key): continue
 						e.hp -= b.damage if b.type == "bomb" else _player_bullet_effective_damage(b)
 						if audio_manager_ref: audio_manager_ref.play_sfx("enemy_hit")
 						if b.type == "player":
 							_record_player_bullet_hit(b, target_key)
-							if not _player_bullet_is_piercing(b): bullet_world.retire_slot(bullet_index)
+							player_bullet_retired = _retire_player_bullet_after_hit(bullet_index, b)
 						if e.hp <= 0 and not e.dying:
 							e.dying = true; e.death_timer = 8.0
 							_spawn_combat_effect("enemy_defeat", Vector2(e.x, e.y), float(e.radius), Color(1.0, 0.72, 0.28) if e.strong else Color(0.76, 0.42, 1.0))
@@ -2712,7 +2931,7 @@ func _check_collisions(is_boss: bool):
 								_drop_item(e.x, e.y, e.strong, String(e.get("drop_tier", "")))
 							game_manager_ref.score += int(game_database_ref.scoring_rules().enemy_defeat) if game_database_ref else 50
 							if audio_manager_ref: audio_manager_ref.play_sfx("enemy_defeat", -6.0 if e.strong else -8.0)
-						if not _player_bullet_is_piercing(b): break
+						if player_bullet_retired or not _player_bullet_is_piercing(b): break
 		else:
 			if bullet_index not in player_candidates:
 				continue
@@ -2724,11 +2943,14 @@ func _check_collisions(is_boss: bool):
 			var distance_squared: float = dx * dx + dy * dy
 			var hit_limit: float = float(b.radius) + player_hitbox_radius
 			if not player_invincible and distance_squared < hit_limit * hit_limit:
-				player_deathbomb_primed = true; player_deathbomb_timer = game_manager_ref.DEATHBOMB_WINDOW/60.0
-				player_just_hit = true; bullet_world.retire_slot(bullet_index)
-				if audio_manager_ref:
-					audio_manager_ref.play_sfx("player_hit", -2.0)
-					audio_manager_ref.play_sfx("deathbomb_window")
+				bullet_world.retire_slot(bullet_index)
+				if not player_just_hit:
+					player_just_hit = true
+					player_deathbomb_primed = true
+					player_deathbomb_timer = game_manager_ref.DEATHBOMB_WINDOW / 60.0
+					if audio_manager_ref:
+						audio_manager_ref.play_sfx("player_hit", -2.0)
+						audio_manager_ref.play_sfx("deathbomb_window")
 			elif distance_squared < graze_limit * graze_limit and not bool(b.get("grazed", false)):
 				b.grazed = true
 				game_manager_ref.graze += 1; game_manager_ref.score += _score_value("graze", 10)

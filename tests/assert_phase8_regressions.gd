@@ -2,6 +2,13 @@ extends SceneTree
 
 var failed := false
 
+class QuitRequestProbe:
+	extends RefCounted
+	var requested: bool = false
+
+	func quit(_exit_code: int = 0) -> void:
+		requested = true
+
 func _assert(condition: bool, message: String) -> void:
 	if condition or failed:
 		return
@@ -71,6 +78,28 @@ func _run() -> void:
 	_assert(main_shell.combat_effects.size() == main_shell.MAX_COMBAT_EFFECTS, "Combat effects must remain strictly capped.")
 	main_shell._update_combat_effects(2.0)
 	_assert(main_shell.combat_effects.is_empty(), "Expired combat effects must be reclaimed.")
+	var lifecycle_manager = gm_script.new()
+	_assert(lifecycle_manager._database != null and lifecycle_manager._score_system != null, "GameManager must begin with its M0 database and M1 score-system owners.")
+	lifecycle_manager.shutdown_runtime()
+	lifecycle_manager.shutdown_runtime()
+	_assert(lifecycle_manager._database == null and lifecycle_manager._score_system == null, "GameManager shutdown must idempotently release both runtime owners.")
+	lifecycle_manager.free()
+	var shutdown_shell = main_script.new()
+	var owned_manager = shutdown_shell.game_manager_ref
+	var owned_registry = shutdown_shell.asset_registry_ref
+	shutdown_shell.asset_texture_cache["fixture"] = ImageTexture.new()
+	shutdown_shell._stage_background_path_cache[1] = {"far":"fixture"}
+	var live_bullet_world = shutdown_shell.bullet_world
+	var live_item_reward_system = shutdown_shell.item_reward_system
+	var quit_probe := QuitRequestProbe.new()
+	shutdown_shell._quit_runtime_safe(quit_probe)
+	_assert(quit_probe.requested and not shutdown_shell._runtime_shutdown_complete and shutdown_shell.bullet_world == live_bullet_world and shutdown_shell.item_reward_system == live_item_reward_system, "A submitted quit request must preserve runtime ownership until tree teardown.")
+	shutdown_shell.shutdown_runtime()
+	shutdown_shell.shutdown_runtime()
+	_assert(not is_instance_valid(owned_manager) and not is_instance_valid(owned_registry), "Standalone Main shutdown must release its fallback Node owners.")
+	_assert(shutdown_shell.fixed_tick_clock == null and shutdown_shell.bullet_world == null and shutdown_shell.item_reward_system == null, "Main shutdown must release script-owned runtime references.")
+	_assert(shutdown_shell.asset_texture_cache.is_empty() and shutdown_shell._stage_background_path_cache.is_empty(), "Main shutdown must clear resource and path caches before deletion.")
+	shutdown_shell.free()
 	gm.free()
 	main_shell.free()
 	if not failed:

@@ -73,6 +73,24 @@ func _verify_specs_and_collision_semantics() -> void:
 	shell._check_collisions(false)
 	_assert(is_equal_approx(float(shell.enemies[0].hp), first_hp), "Laser repeat hits must obey deterministic cooldown.")
 
+	shell._clear_bullets()
+	shell.enemies = [
+		{"alive":true,"dying":false,"x":360.0,"y":400.0,"radius":12.0,"hp":100.0,"strong":false,"drop_item_ids":[]},
+		{"alive":true,"dying":false,"x":360.0,"y":400.0,"radius":12.0,"hp":100.0,"strong":false,"drop_item_ids":[]},
+		{"alive":true,"dying":false,"x":360.0,"y":400.0,"radius":12.0,"hp":100.0,"strong":false,"drop_item_ids":[]},
+	]
+	shell._spawn_bullet_player(360.0, 400.0, 0.0, 0.0, 5.0, Color.WHITE, 1.0, false, 1, false, 90.0, {"kind":"sustained_laser", "piercing":true, "max_hits":2, "repeat_interval":6.0})
+	shell._check_collisions(false)
+	_assert(float(shell.enemies[0].hp) == 99.0 and float(shell.enemies[1].hp) == 99.0 and float(shell.enemies[2].hp) == 100.0, "Ordinary-enemy piercing must stop exactly at max_hits.")
+	_assert(not bool(shell.bullet_pool[0].active) and int(shell.bullet_pool[0].hit_count) == 2, "Ordinary-enemy max_hits must retire through the shared post-hit rule.")
+	shell._clear_bullets()
+	shell.boss_alive = true
+	shell.boss = {"x":360.0,"y":400.0,"radius":20.0,"hp":100.0,"declaring":false,"phase":"active"}
+	shell._spawn_bullet_player(360.0, 400.0, 0.0, 0.0, 5.0, Color.WHITE, 1.0, false, 1, false, 90.0, {"kind":"sustained_laser", "piercing":true, "max_hits":1, "repeat_interval":6.0})
+	shell._check_collisions(true)
+	_assert(not bool(shell.bullet_pool[0].active) and int(shell.bullet_pool[0].hit_count) == 1, "Boss max_hits must retire through the same shared post-hit rule.")
+	shell.boss_alive = false
+
 	var sword_a: Dictionary = db.shot_profile_by_id("sword_wave_fan")
 	var sword_wide: Array = executor.fire_pattern(sword_a, 5, false, origin)
 	var sword_focus: Array = executor.fire_pattern(sword_a, 5, true, origin)
@@ -98,6 +116,30 @@ func _verify_specs_and_collision_semantics() -> void:
 	_assert(shell._player_bullet_can_hit(live_blade, "boss"), "Returning blade must permit its return-phase hit.")
 	shell._record_player_bullet_hit(live_blade, "boss")
 	_assert(not shell._player_bullet_can_hit(live_blade, "boss"), "Returning blade must be bounded to one hit per target per phase.")
+	shell._clear_bullets()
+	shell.boss = {}
+	shell.enemies = [{"alive":true,"dying":false,"x":360.0,"y":400.0,"radius":12.0,"hp":100.0,"strong":false,"drop_item_ids":[]}]
+	var production_blade: Dictionary = blade.duplicate(true)
+	production_blade.position = Vector2(360.0, 400.0)
+	production_blade.velocity = Vector2.ZERO
+	shell._spawn_player_bullet_spec(production_blade)
+	var collision_blade: Dictionary = shell.bullet_pool[0]
+	shell._check_collisions(false)
+	var outbound_hp := float(shell.enemies[0].hp)
+	_assert(outbound_hp < 100.0 and bool(collision_blade.active), "Returning blade outbound identity must hit once through the production collision loop.")
+	collision_blade.behavior.returned = true
+	shell._check_collisions(false)
+	var return_hp := float(shell.enemies[0].hp)
+	_assert(return_hp < outbound_hp and bool(collision_blade.active), "Returning blade return identity must permit the same target exactly once.")
+	shell._check_collisions(false)
+	_assert(is_equal_approx(float(shell.enemies[0].hp), return_hp), "Returning blade repeated return hits must remain deterministically blocked.")
+	var blade_snapshot: Dictionary = shell.capture_simulation_state()
+	var live_hash: String = shell.simulation_state_hash()
+	for field_and_value in [["behavior", []], ["hit_ledger", []], ["hit_count", 17]]:
+		var malformed: Dictionary = blade_snapshot.duplicate(true)
+		malformed.bullets.active_bullets[0].state[field_and_value[0]] = field_and_value[1]
+		_assert(not shell.restore_simulation_state(malformed), "Malformed gameplay-owned bullet snapshot field %s must be rejected." % field_and_value[0])
+		_assert(shell.simulation_state_hash() == live_hash, "Rejected gameplay-owned bullet data must leave live state unchanged.")
 	_free_main(shell)
 
 func _fixed_boss_ttk(shot_id: String) -> int:

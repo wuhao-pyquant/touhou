@@ -126,6 +126,21 @@ var settings_return_state: String = STATE_TITLE
 var settings: Dictionary = DEFAULT_SETTINGS.duplicate(true)
 var _database = load("res://scripts/data/game_database.gd").new()
 var _score_system = load("res://scripts/runtime/gameplay_score_system.gd").new()
+var _runtime_shutdown_complete: bool = false
+
+func shutdown_runtime() -> void:
+	if _runtime_shutdown_complete:
+		return
+	_runtime_shutdown_complete = true
+	_database = null
+	_score_system = null
+
+func _exit_tree() -> void:
+	shutdown_runtime()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		shutdown_runtime()
 
 func power_level() -> int:
 	for i in range(POWER_THRESHOLDS.size()):

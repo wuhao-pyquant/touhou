@@ -2,6 +2,13 @@ extends RefCounted
 class_name ItemRewardSystem
 
 var _database = load("res://scripts/data/game_database.gd").new()
+var _runtime_shutdown_complete: bool = false
+
+func shutdown_runtime() -> void:
+	if _runtime_shutdown_complete:
+		return
+	_runtime_shutdown_complete = true
+	_database = null
 
 func choose_drop(tier: String, roll: float) -> String:
 	var table: Array = _database.drop_table_for_tier(tier)
