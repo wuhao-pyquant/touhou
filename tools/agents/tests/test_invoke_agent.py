@@ -212,9 +212,39 @@ model_reasoning_effort = "high"
             ),
             "review_repair",
         )
+        self.assertEqual(
+            BRIDGE._validate_review_repair_report(
+                {
+                    **report,
+                    "summary": (
+                        "Read-only review completed.\n"
+                        "The prior report mentioned GATE: APPROVE inline.\n\n"
+                        "GATE: REPAIR\n"
+                    ),
+                },
+                reviewer_agent="danmaku_director",
+            ),
+            "review_repair",
+        )
         with self.assertRaisesRegex(BRIDGE.BridgeError, "GATE: REPAIR"):
             BRIDGE._validate_review_repair_report(
                 {**report, "summary": "GATE: APPROVE"},
+                reviewer_agent="danmaku_director",
+            )
+        with self.assertRaisesRegex(BRIDGE.BridgeError, "exactly one standalone"):
+            BRIDGE._validate_review_repair_report(
+                {
+                    **report,
+                    "summary": "GATE: REPAIR\nDetails.\nGATE: REPAIR",
+                },
+                reviewer_agent="danmaku_director",
+            )
+        with self.assertRaisesRegex(BRIDGE.BridgeError, "exactly one standalone"):
+            BRIDGE._validate_review_repair_report(
+                {
+                    **report,
+                    "summary": "The review found an inline GATE: REPAIR blocker.",
+                },
                 reviewer_agent="danmaku_director",
             )
         with self.assertRaisesRegex(BRIDGE.BridgeError, "zero changed files"):
@@ -226,6 +256,16 @@ model_reasoning_effort = "high"
         self.assertEqual(
             BRIDGE._validate_review_repair_report(
                 deep_report, reviewer_agent="deep_reviewer"
+            ),
+            "deep_review_repair",
+        )
+        self.assertEqual(
+            BRIDGE._validate_review_repair_report(
+                {
+                    **deep_report,
+                    "summary": "Deep review completed.\nGATE: REPAIR_AUTHORIZED",
+                },
+                reviewer_agent="deep_reviewer",
             ),
             "deep_review_repair",
         )

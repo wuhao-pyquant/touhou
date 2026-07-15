@@ -521,24 +521,27 @@ def _validate_review_repair_report(
     if report.get("status") != "completed":
         raise BridgeError("Review failure evidence must have report.status completed")
     summary = str(report.get("summary", ""))
-    deep_authorized = re.match(
-        r"^\s*GATE:\s*REPAIR_AUTHORIZED\b", summary, flags=re.IGNORECASE
+    gate_lines = re.findall(
+        r"(?im)^[ \t]*GATE:[ \t]*([A-Z_]+)\b", summary
     )
-    ordinary_repair = re.match(
-        r"^\s*GATE:\s*REPAIR\b", summary, flags=re.IGNORECASE
-    )
-    if deep_authorized is not None:
+    if len(gate_lines) != 1:
+        raise BridgeError(
+            "Review failure evidence must contain exactly one standalone "
+            "GATE: REPAIR or GATE: REPAIR_AUTHORIZED line"
+        )
+    gate = gate_lines[0].upper()
+    if gate == "REPAIR_AUTHORIZED":
         if reviewer_agent != "deep_reviewer":
             raise BridgeError(
                 "Only deep_reviewer may issue GATE: REPAIR_AUTHORIZED"
             )
         authorization_kind = "deep_review_repair"
-    elif ordinary_repair is not None:
+    elif gate == "REPAIR":
         authorization_kind = "review_repair"
     else:
         raise BridgeError(
-            "Review failure evidence must begin with GATE: REPAIR or "
-            "GATE: REPAIR_AUTHORIZED"
+            "Review failure evidence must contain exactly one standalone "
+            "GATE: REPAIR or GATE: REPAIR_AUTHORIZED line"
         )
     if report.get("changed_files"):
         raise BridgeError("Review failure evidence must report zero changed files")
