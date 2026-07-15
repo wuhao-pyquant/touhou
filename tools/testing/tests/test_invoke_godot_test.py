@@ -488,6 +488,102 @@ class InvokeGodotTestTests(unittest.TestCase):
         markerless.mkdir()
         self.assert_category(6, "InvalidInput", project=markerless)
 
+    # 30: pre-deadline transport failures are authenticated but never assigned
+    # into supervisor state.  Empty/missing/fractional/illegal cleanup frames all
+    # reach real worker protocol paths and fail as LaunchFailure.
+    def test_30_immutable_protocol_schema_branches(self) -> None:
+        for fault in ("empty-frame", "missing-ready", "fractional-final", "cleaned-without-begin"):
+            with self.subTest(fault=fault):
+                self.assert_category(8, "LaunchFailure", fault=fault, timeout=5)
+        existing = subprocess.Popen(
+            [str(self.engine), "--mode", "sleep", "--duration", "30", "--headless", "--path", str(self.project)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        self.processes.append(existing)
+        time.sleep(0.2)
+        self.assert_category(8, "LaunchFailure", fault="fractional-cleanup", cleanup=True, timeout=5)
+        self.assertIsNone(existing.poll(), "invalid cleanup frame mutated the real target")
+
+    # 31: CLEANUP_BEGIN is observed before worker exit.  A real retained target
+    # and post-authority slow seam make the deadline CleanupFailure, not Timeout.
+    def test_31_cleanup_begin_deadline_has_cleanup_precedence(self) -> None:
+        existing = subprocess.Popen(
+            [str(self.engine), "--mode", "sleep", "--duration", "30", "--headless", "--path", str(self.project)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        self.processes.append(existing)
+        time.sleep(0.2)
+        self.assert_category(7, "CleanupFailure", fault="cleanup-slow", cleanup=True, timeout=3)
+        self.assertIsNone(existing.poll(), "slow cleanup seam ran before retained-target authority")
+
+    # 32: every same-image headless process needs exactly one accessible project;
+    # a zero-path candidate is ambiguous and cannot be mutated.
+    def test_32_zero_path_same_image_is_ambiguous(self) -> None:
+        existing = subprocess.Popen([str(self.engine), "--mode", "sleep", "--duration", "30", "--headless"])
+        self.processes.append(existing)
+        time.sleep(0.2)
+        self.assert_category(7, "CleanupFailure", cleanup=True)
+        self.assertIsNone(existing.poll(), "zero-path same-image process was mutated")
+
+    # 33: a different executable image with the same basename is collateral and
+    # is ignored before its malformed command line is queried or classified.
+    def test_33_different_image_is_ignored_before_command_parse(self) -> None:
+        collateral_dir = self.temp / "collateral"
+        collateral_dir.mkdir()
+        collateral_engine = collateral_dir / self.engine.name
+        shutil.copy2(self.engine, collateral_engine)
+        collateral = subprocess.Popen([str(collateral_engine), "--mode", "sleep", "--duration", "30", "--headless"])
+        self.processes.append(collateral)
+        time.sleep(0.2)
+        self.assert_category(0, "Success", cleanup=True)
+        self.assertIsNone(collateral.poll(), "different-image collateral was parsed or mutated")
+
+    # 34: the complete quoted worker command is bounded before Start, and a real
+    # Process.Start failure still produces exactly one public LaunchFailure JSON.
+    def test_34_complete_command_cap_and_start_failure(self) -> None:
+        self.assert_category(6, "InvalidInput", "x" * 23000)
+        completed, summary = self.execute(fault="start-failure")
+        self.assertEqual((completed.returncode, summary["category"]), (8, "LaunchFailure"), completed.stderr)
+        self.assertEqual(len([line for line in completed.stdout.splitlines() if line.startswith("{")]), 1)
+
+    # 35: supervisor death while the worker owns the duplicated watcher job and
+    # is paused before detach leaves neither worker nor watcher job alive.
+    def test_35_watcher_duplicate_job_detach_close_concurrency(self) -> None:
+        command, env = self.invocation("--mode", "success", fault="pause-before-detach", timeout=15)
+        supervisor = subprocess.Popen(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.processes.append(supervisor)
+        worker_pid = self.wait_for_child(supervisor.pid, Path(command[0]).name)
+        capture = Path(env["GTR_LOG"] + ".stdout")
+        deadline = time.monotonic() + 8
+        while not capture.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        self.assertTrue(capture.exists(), "worker never reached real job/capture cleanup")
+        supervisor.kill()
+        supervisor.communicate(timeout=5)
+        self.assert_pid_gone(worker_pid)
+
+    # 36: the single fixed grace can fail only after the real worker retained the
+    # named mutex.  The genuinely surviving worker leaves a sequential contender
+    # fail-closed on the actual mutex instead of using a synthetic abandonment.
+    def test_36_unconfirmed_worker_keeps_mutex_for_sequential_contender(self) -> None:
+        command, env = self.invocation(fault="worker-kill-failure", timeout=3)
+        supervisor = subprocess.Popen(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.processes.append(supervisor)
+        worker_pid = self.wait_for_child(supervisor.pid, Path(command[0]).name)
+        time.sleep(1.5)
+        self.assertTrue(self.pid_alive(worker_pid), "fault did not leave a real unconfirmed worker")
+        try:
+            self.assert_category(4, "LockContention", timeout=5)
+        finally:
+            subprocess.run(["taskkill", "/PID", str(worker_pid), "/T", "/F"], text=True, capture_output=True)
+        stdout, stderr = supervisor.communicate(timeout=8)
+        lines = [line for line in stdout.splitlines() if line.startswith("{")]
+        self.assertEqual(len(lines), 1, f"stdout={stdout}\nstderr={stderr}")
+        summary = json.loads(lines[0])
+        self.assertEqual((supervisor.returncode, summary["category"]), (7, "CleanupFailure"), stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
