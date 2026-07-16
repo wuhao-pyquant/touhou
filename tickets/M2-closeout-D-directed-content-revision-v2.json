@@ -1,0 +1,70 @@
+{
+  "id": "M2-closeout-D-directed-content-revision-v2",
+  "objective": "Perform the single bounded M2 content revision authorized by blind review run 20260716T082208Z-M2-closeout-D-single-blind-playtest-v2-playtest_critic-3e050efa. Revise only the six existing Stage 2 phase-emission choreographies and the evidence-control harness/package so the Youkai Market identity, sustained four-second occupancy, readable escalation, live score-route completion, and actual spell-capture accounting are visible in one honest evidence package. Preserve all six phase IDs, Normal/Hard topology IDs and route graphs, safe-lane widths, warnings, HP/timeouts, score contract, deterministic runtime interfaces, player systems, replay semantics, and performance gates. Do not add phases, redesign systems, weaken validation, fabricate snapshots, or expand M2. Run focused contract tests while editing, then generate exactly one final admitted Normal/Hard evidence capture pair and package after the implementation is ready.",
+  "mode": "write",
+  "allowed_paths": [
+    "content/runtime/m2_stage2_choreography.json",
+    "tests/assert_m2_stage2_content_adapter.gd",
+    "tests/assert_m2_stage2_runtime_capture.gd",
+    "tools/evidence/package_m2_stage2.py",
+    "evidence/m2-stage2/**"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "docs/**",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "content/design/**",
+    "content/runtime/m2_stage2_score_route_contract.json",
+    "content/runtime/m2_stage2_field_topology_contract.json",
+    "tests/fixtures/**",
+    "tools/agents/**"
+  ],
+  "dependency_commit": "eeee152cd5e312d2f0b9d791375fdc5768eaa52d",
+  "execution_contract_version": 2,
+  "execution_checks": [
+    {"kind": "git_diff_check"},
+    {
+      "kind": "godot_test",
+      "godot_path": "C:/Users/e/AppData/Local/Microsoft/WinGet/Packages/GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe/Godot_v4.7-stable_win64_console.exe",
+      "project_path": ".",
+      "arguments": ["--script", "res://tests/assert_m2_stage2_content_adapter.gd"],
+      "timeout_seconds": 300
+    },
+    {
+      "kind": "godot_test",
+      "godot_path": "C:/Users/e/AppData/Local/Microsoft/WinGet/Packages/GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe/Godot_v4.7-stable_win64_console.exe",
+      "project_path": ".",
+      "arguments": ["--script", "res://tests/assert_m2_stage2_runtime_capture.gd", "--contract-only"],
+      "timeout_seconds": 300
+    }
+  ],
+  "output_requirements": [
+    "List the six revised phase-emission structures and explain the visible market, booth, abacus, mirror-lane, or ordered-break identity of each without claiming new unsupported mechanics",
+    "Prove each phase has at least 120 active ticks in its 240-tick evidence window, no phase peak is below 12 active bullets, the per-phase peak-times-active-ticks pressure index strictly increases from phase 1 through phase 6 on each difficulty, and Hard is not structurally weaker than Normal",
+    "Prove the live reference score route completes through production callbacks in both difficulties and the phase ledger records actual spell capture/drop deltas rather than constants or fabricated postprocessing",
+    "Produce a viewable H.264 Stage 2 evidence video at least 20 seconds long using truthful sampled runtime frames, with matching Normal/Hard summaries, heatmaps, curves, replay metadata, score ledger, and phase ledgers",
+    "Report the exactly one final Normal/Hard capture/analyzer/package command chain, both p50/p95/p99 and 1%-low values, six-shot deviation, deaths, overflows, hard errors, package exit code, and residual Godot processes",
+    "Confirm both 1%-low values remain >=55 FPS, six-shot deviation remains <=15%, replay verification passes, and no warning/topology/HP/timeout/score-contract/runtime-interface semantics changed",
+    "Report actual model, reasoning effort, CLI version, changed paths, zero scope violations, and any residual content risk"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "The one blind review scored identity 2, readability 3, escalation 2, fairness 3, replay/route value 2, mean 2.4. It observed phase peaks Normal 7/6/11/9/5/13 and Hard 9/7/13/10/6/15, with sparse or empty midboss spell and boss spell 2 windows.",
+    "The revision is bounded to supported choreography fields such as start tick, interval, bursts, shots, lifetime, speed, angle, and spread. Preserve identifiers and frozen topology/route/warning contracts; shared emitters are allowed but complete timelines must remain distinct.",
+    "The evidence harness currently hardcodes zero phase capture/drop counts and assists only part of the production score route. Replace constants with measured before/after deltas and drive the missing rebound-graze step through the same existing production callback path used by gameplay; do not mutate score state directly.",
+    "The current six-second video is a 20 FPS encoding of frames sampled every 12 simulation ticks. Adjust sampling and/or encoding rate so the final video honestly presents all six four-second evidence windows for at least 20 seconds without inventing frames or altering simulation timing.",
+    "Previous performance passed at Normal 106.809 and Hard 122.454 FPS 1%-low after hot-path repair. Preserve that repair. This ticket receives one implementation pass and at most one same-session task repair; do not create a separate gap review, design document, or broad test matrix."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}

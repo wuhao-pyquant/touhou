@@ -212,6 +212,37 @@ model_reasoning_effort = "high"
         identity = {"model": "gpt-5.6-terra", "model_reasoning_effort": "high"}
         self.assertEqual(BRIDGE._classify_failure(exit_code=1, report=None, report_problems=["missing"], identity_problems=[]), BRIDGE.TRANSPORT_FAILURE)
         self.assertEqual(BRIDGE._classify_failure(exit_code=1, report=None, report_problems=["missing"], identity_problems=[], stderr_text="disk environment unavailable"), BRIDGE.ENVIRONMENT_FAILURE)
+        task_report = {
+            "status": "blocked",
+            "summary": "Hard score route missed the group-2 deadline",
+            "failures": ["package gate failed"],
+            "residual_risks": [],
+        }
+        self.assertEqual(
+            BRIDGE._classify_failure(
+                exit_code=0,
+                report=task_report,
+                report_problems=[],
+                identity_problems=[],
+                stderr_text="ERROR: Failed to read the root certificate store.",
+            ),
+            BRIDGE.TASK_FAILURE,
+        )
+        environment_report = {
+            "status": "blocked",
+            "summary": "ENVIRONMENT_FAILURE: Godot mutex could not be acquired",
+            "failures": [],
+            "residual_risks": [],
+        }
+        self.assertEqual(
+            BRIDGE._classify_failure(
+                exit_code=0,
+                report=environment_report,
+                report_problems=[],
+                identity_problems=[],
+            ),
+            BRIDGE.ENVIRONMENT_FAILURE,
+        )
         self.assertEqual(BRIDGE._profile_identity({"model": identity["model"], "model_reasoning_effort": identity["model_reasoning_effort"]}, 0), identity)
         BRIDGE._validate_non_task_retry(
             failure_class=BRIDGE.ENVIRONMENT_FAILURE,

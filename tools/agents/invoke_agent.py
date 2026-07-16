@@ -342,10 +342,21 @@ def _classify_failure(
     """Classify only terminal failure evidence; successful runs have no class."""
     if report is not None and not report_problems and report.get("status") == "completed" and not identity_problems and exit_code == 0:
         return None
-    if preflight_failure or re.search(r"\b(environment|mutex|disk|certificate store)\b", stderr_text, re.IGNORECASE):
+    if preflight_failure:
         return ENVIRONMENT_FAILURE
     if report is not None and not report_problems and report.get("status") in {"failed", "blocked"}:
+        report_failure_text = "\n".join(
+            [
+                str(report.get("summary", "")),
+                *(str(item) for item in report.get("failures", [])),
+                *(str(item) for item in report.get("residual_risks", [])),
+            ]
+        )
+        if re.search(r"\bENVIRONMENT_FAILURE\b", report_failure_text):
+            return ENVIRONMENT_FAILURE
         return TASK_FAILURE
+    if re.search(r"\b(environment|mutex|disk|certificate store)\b", stderr_text, re.IGNORECASE):
+        return ENVIRONMENT_FAILURE
     return TRANSPORT_FAILURE
 
 
