@@ -1,0 +1,58 @@
+{
+  "id": "M2-closeout-A-score-main-settlement",
+  "objective": "Close the final M2 gameplay-runtime gap by wiring the already merged Stage2ScoreRouteRuntime into the real scripts/main.gd Stage 2 flow. This is a bounded settlement bridge, not a redesign. Instantiate/configure the runtime for Stage 2 Normal/Hard, load the frozen score-route contract, consume real authored stage entries, deterministic enemy defeats/drops, required field bullet emissions, reflected-bullet grazes, topology checkpoints/mirror/final-lane callbacks, and Stage 2 spell begin/finish/invalidation for clear, timeout, miss, and bomb. Resolve deterministic drop aliases to canonical point/power items while keeping route-only tokens non-physical. Commit the frozen +0.25 group multipliers (1.25/1.50/1.75) and exactly one night-festival seal after group 3 through the existing GameManager fields. Include the score runtime ledger in deterministic snapshot/restore and preserve legacy snapshot/replay compatibility plus phase practice. Add one focused Main integration assertion proving real callbacks and exact-once settlement. Do not change public field-topology interfaces, choreography data, score contract values, unrelated stages, UI, or tests outside this bounded behavior.",
+  "mode": "write",
+  "allowed_paths": [
+    "scripts/main.gd",
+    "scripts/runtime/stage2_score_route_runtime.gd",
+    "scripts/runtime/stage_director.gd",
+    "tests/assert_m2_stage2_score_route_main_integration.gd",
+    "tests/assert_m2_stage2_score_route_runtime.gd",
+    "tests/assert_m2_stage2_main_flow.gd"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "docs/**",
+    "evidence/**",
+    "content/**",
+    "autoload/**",
+    "scripts/replay/**",
+    "scripts/ui/**",
+    "scripts/runtime/bullet_world.gd",
+    "scripts/runtime/stage2_encounter_controller.gd",
+    "scripts/runtime/stage2_field_topology_runtime.gd",
+    "tools/**"
+  ],
+  "dependency_commit": "4118455750fb9eb153337eaa898ec6c2fd140f86",
+  "acceptance_commands": [
+    "git diff --check",
+    "$changed=@(git status --porcelain -uall|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $allowed=@('scripts/main.gd','scripts/runtime/stage2_score_route_runtime.gd','scripts/runtime/stage_director.gd','tests/assert_m2_stage2_score_route_main_integration.gd','tests/assert_m2_stage2_score_route_runtime.gd','tests/assert_m2_stage2_main_flow.gd'); $outside=@($changed|Where-Object{$_-notin$allowed}); if($outside.Count-ne0-or$changed.Count-eq0){throw \"Unexpected or missing paths: $($changed-join',')\"}; Write-Host 'M2_SCORE_MAIN_SCOPE=pass'",
+    "$godot=(Get-Command Godot_v4.7-stable_win64_console.exe -ErrorAction Stop).Source; & tools/testing/invoke_godot_test.ps1 -GodotPath $godot -ProjectPath (Get-Location).Path -GodotArgumentJson '[\"--script\",\"res://tests/assert_m2_stage2_score_route_main_integration.gd\"]' -TimeoutSeconds 300 -CleanupExisting; if($LASTEXITCODE-ne0){throw \"Guarded score-main integration failed with exit $LASTEXITCODE\"}",
+    "$godot=(Get-Command Godot_v4.7-stable_win64_console.exe -ErrorAction Stop).Source; & tools/testing/invoke_godot_test.ps1 -GodotPath $godot -ProjectPath (Get-Location).Path -GodotArgumentJson '[\"--script\",\"res://tests/assert_m2_stage2_score_route_runtime.gd\"]' -TimeoutSeconds 240 -CleanupExisting; if($LASTEXITCODE-ne0){throw \"Guarded score runtime regression failed with exit $LASTEXITCODE\"}",
+    "$godot=(Get-Command Godot_v4.7-stable_win64_console.exe -ErrorAction Stop).Source; & tools/testing/invoke_godot_test.ps1 -GodotPath $godot -ProjectPath (Get-Location).Path -GodotArgumentJson '[\"--script\",\"res://tests/assert_m2_stage2_practice_replay_ui.gd\"]' -TimeoutSeconds 180 -CleanupExisting; if($LASTEXITCODE-ne0){throw \"Guarded practice/replay smoke failed with exit $LASTEXITCODE\"}",
+    "if(@(Get-Process -ErrorAction SilentlyContinue|Where-Object ProcessName -Like 'Godot*').Count-ne0){throw 'Residual Godot process after score-main integration'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Report the exact real Main callbacks connected to Stage2ScoreRouteRuntime and their exact-once guards",
+    "Report deterministic drop alias behavior, multiplier/seal settlement, spell capture invalidation, and snapshot/legacy behavior",
+    "Report the three focused guarded results and zero residual Godot processes",
+    "Report actual model, reasoning effort, CLI version, changed paths, and zero scope violations",
+    "Do not propose a new plan, gap review, broad regression, evidence capture, UI work, or extra tests"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "Stage2ScoreRouteRuntime is already merged at scripts/runtime/stage2_score_route_runtime.gd and its focused contract/runtime assertion passes. Reuse its public API; do not duplicate its ledger in Main.",
+    "Field integration already exposes stage_controller.stage2_field_score_projections and real field-owned defeat/graze callbacks. The score bridge must consume these without changing field-topology ownership.",
+    "The prior read-only gameplay route gap review is .agent-runs/20260715T132827Z-M2-stage2-gameplay-route-gap-review-gameplay_systems-43ac71e5/final.json. Use it only as implementation context; do not perform another gap review.",
+    "Run Godot commands serially. Stop after the focused integration, score runtime, and practice/replay smoke pass or one precise blocker remains."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
