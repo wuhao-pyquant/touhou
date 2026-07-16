@@ -1,0 +1,49 @@
+{
+  "id": "M2-closeout-D-final-blind-rereview-v2",
+  "objective": "Perform the single final M2 blind re-review after the one authorized content revision, using only the finalized evidence/m2-stage2 package at dependency commit 74ea6c1322a9ceabdbe5c4fa4b7109cb57d91077. Do not inspect source code, tickets, Agent reports, commit history, implementation notes, or earlier review scores. Review the 24-second H.264 video, Normal/Hard whole-stage and per-phase heatmaps/active-bullet curves, analyzer summaries, deterministic replay metadata, live score ledgers, six-shot balance and performance evidence. Score exactly five 0-5 categories: youkai-market identity/distinctiveness, moment-to-moment readability, six-phase escalation curve, fairness/telegraphing, and replay/score-route value. M2 content passes only if the arithmetic mean is at least 4.0 and no category is below 3.0. Do not reward file count, raw bullet quantity or technical green status as substitutes for play quality. Do not launch Godot, regenerate evidence, edit files, or propose another review cycle.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "evidence/m2-stage2/**"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "docs/**",
+    "project.godot",
+    "autoload/**",
+    "content/**",
+    "scenes/**",
+    "scripts/**",
+    "tests/**",
+    "tools/**"
+  ],
+  "dependency_commit": "74ea6c1322a9ceabdbe5c4fa4b7109cb57d91077",
+  "execution_contract_version": 2,
+  "execution_checks": [
+    {"kind": "git_diff_check"}
+  ],
+  "output_requirements": [
+    "Return exactly five named 0-5 scores, their arithmetic mean and explicit threshold result",
+    "Cite concrete video timestamps and corroborating Normal/Hard heatmap, curve, replay, score-route and shot evidence",
+    "Distinguish visual/gameplay judgment from technical stability and from diagnostic-only pressure metrics",
+    "Return GATE: APPROVE only if mean >=4.0 and every category >=3.0; otherwise return GATE: REPAIR with one concise evidence-grounded blocker and no new plan or review proposal",
+    "Report actual model, reasoning effort, CLI version, zero changed files and zero scope violations"
+  ],
+  "max_repair_rounds": 0,
+  "max_edit_test_loops": 0,
+  "context": [
+    "This is a re-review of materially new evidence, not a reuse of the earlier 6-second sparse package. The final video is 24 seconds and covers all six four-second phase windows.",
+    "Final package gate_failures is empty. Normal/Hard live score routes both complete three groups with [1.25,1.5,1.75] multipliers and one group-3 night-festival seal. Six-shot TTK deviation is 2.909%. Normal/Hard 1%-low values are 112.826/121.716 FPS with zero death, overflow or hard-error counts.",
+    "Content-pressure rows are diagnostic_only. They may corroborate pacing observations but are not a reason by themselves to approve or reject content.",
+    "The deterministic reference replay uses an invincible evidence envelope and assisted phase resolution; it is not a human survival or fun claim. Judge fairness from visible telegraphs, paths and the supplied event evidence without inventing unseen player experience.",
+    "This is the only final blind re-review. If it misses threshold, report the blocker honestly; do not request another capture, broad redesign, implementation Agent or second review."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}

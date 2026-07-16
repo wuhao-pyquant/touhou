@@ -1,0 +1,52 @@
+{
+  "id": "M2-closeout-D-final-evidence-capture-v2",
+  "objective": "Generate the one final M2 Stage 2 evidence package from the already merged and probe-clean runtime. Launch the existing runtime capture script exactly once through tools/testing/invoke_godot_test.ps1 in windowed mode; that single invocation must produce one Normal and one Hard capture plus the six-shot balance result under evidence/m2-stage2/raw. Then run the existing stage2 analyzer once per difficulty and the existing packager once. Do not edit or regenerate source, tests, tools, contracts, configuration, tickets or documentation. Do not retry a failed capture inside this ticket. Preserve honest runtime failures and return nonzero rather than changing gates or evidence data.",
+  "mode": "write",
+  "allowed_paths": [
+    "evidence/m2-stage2/**"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "docs/**",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "tests/**",
+    "tools/**",
+    "content/**"
+  ],
+  "dependency_commit": "bf15d6953c91ca236b61d1db76e37109c4b65165",
+  "execution_contract_version": 2,
+  "execution_checks": [
+    {"kind": "git_diff_check"}
+  ],
+  "output_requirements": [
+    "Report the single guarded windowed capture invocation and prove it produced exactly one Normal and one Hard runtime capture without retry",
+    "Report both analyzer exit codes and the single packager exit code",
+    "Report Normal/Hard p50, p95, p99, 1%-low FPS, peak/pool overflow, deaths and hard errors",
+    "Report both live score-route states, settled group counts, accepted rebound UIDs, multipliers, seal count and spell ledgers",
+    "Report six-shot maximum TTK deviation, replay verification, H.264 codec/duration and manifest entry count",
+    "Confirm content-pressure values are diagnostic evidence rather than package failure gates",
+    "Report actual model, reasoning effort, CLI version, changed paths limited to evidence/m2-stage2, zero residual Godot processes and zero scope violations"
+  ],
+  "max_repair_rounds": 0,
+  "max_edit_test_loops": 0,
+  "context": [
+    "Admission prerequisites are already satisfied: content adapter and contract-only probes passed in the bounded content revision; Normal live score route passed; Hard gate probe now passes route=complete and settled=3 after the field endpoint and contract digest repair; no project Godot process remains.",
+    "Use the repository's guarded runner with -Windowed, the resolved Godot 4.7 console executable, an absolute worktree project path, and Godot arguments [--script,res://tests/assert_m2_stage2_runtime_capture.gd,--capture-dir=<absolute evidence raw directory>]. The capture script itself iterates Normal then Hard exactly once and produces shot-balance in that same process.",
+    "Run tools/content/m1_content_tool.py stage2-analyze once for normal-runtime.jsonl and once for hard-runtime.jsonl, targeting their existing analysis directories.",
+    "Run tools/evidence/package_m2_stage2.py exactly once with resolved ffmpeg.exe and ffprobe.exe. A nonempty gate_failures array is a ticket failure.",
+    "Do not run the separate --gate-probe, --contract-only, --shot-only, another capture, a broad regression, or any source-edit command in this ticket.",
+    "The ticket-added active-tick, peak-bullet and pressure-index values remain in the evidence package for the blind reviewer, but they are explicitly diagnostic_only and must not be promoted back into hard package gates."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}

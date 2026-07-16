@@ -1,0 +1,55 @@
+{
+  "id": "M2-closeout-D-hard-score-route-digest-sync-v2",
+  "objective": "Synchronize the Stage2FieldTopologyRuntime frozen CONTRACT_DIGEST with the exact field topology contract at dependency commit 8714faa54bb21d23dc9009ef81ac202203a924f9. This is the sole dependency omitted by the preceding adjudication: the authorized [584,408] to [584,400] data change is already committed, but runtime configure rejects any contract whose _stable_digest does not equal CONTRACT_DIGEST. Recompute the digest using the runtime's existing canonical algorithm, change only the constant value, and run the single Hard gate probe. Do not alter the algorithm, JSON data, score semantics, capture driver, tests or evidence.",
+  "mode": "write",
+  "allowed_paths": [
+    "scripts/runtime/stage2_field_topology_runtime.gd"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "docs/**",
+    "evidence/**",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/main.gd",
+    "tests/**",
+    "tools/**",
+    "content/**"
+  ],
+  "dependency_commit": "8714faa54bb21d23dc9009ef81ac202203a924f9",
+  "execution_contract_version": 2,
+  "execution_checks": [
+    {"kind": "git_diff_check"},
+    {
+      "kind": "godot_test",
+      "godot_path": "C:/Users/e/AppData/Local/Microsoft/WinGet/Packages/GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe/Godot_v4.7-stable_win64_console.exe",
+      "project_path": ".",
+      "arguments": ["--script", "res://tests/assert_m2_stage2_runtime_capture.gd", "--gate-probe", "--difficulty=hard"],
+      "timeout_seconds": 180
+    }
+  ],
+  "output_requirements": [
+    "Report old and new CONTRACT_DIGEST and how the new value was derived from the unchanged _stable_digest algorithm",
+    "Report the single Hard probe exit code and require route=complete, terminal=route_complete and settled=3",
+    "Confirm only the digest literal changed and no algorithm, JSON, score, test, tool or evidence path changed",
+    "Report actual model, reasoning effort, CLI version and zero scope violations"
+  ],
+  "max_repair_rounds": 0,
+  "max_edit_test_loops": 1,
+  "context": [
+    "The preceding candidate's direct Godot launch was an execution-host failure. The repository runner then produced the real deterministic failure at tick 1: Stage 2 field event entry aggregate is unavailable or divergent. The runtime validator explicitly compares _stable_digest(contract) to CONTRACT_DIGEST.",
+    "Do not modify the already adjudicated endpoint or broaden validation. This ticket only restores the existing integrity mechanism after an authorized contract revision.",
+    "This uses the same core_simulation identity and default Sol/xhigh. It is a new bounded dependency-sync ticket because the previous immutable ticket forbade scripts/runtime and therefore could not perform this required edit.",
+    "No independent review follows if diff scope and the Hard probe pass."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}

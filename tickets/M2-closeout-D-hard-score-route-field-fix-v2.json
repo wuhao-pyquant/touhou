@@ -1,0 +1,57 @@
+{
+  "id": "M2-closeout-D-hard-score-route-field-fix-v2",
+  "objective": "Apply the single field-topology data correction authorized by deep review run 20260716T101308Z-M2-closeout-D-hard-score-route-adjudication-v2-deep_reviewer-def81199. In s2_b13_blue_booth_master Hard geometry, shorten only the first blue_revision_right segment so the immutable tick-1992 selected UID first reflects no later than the inclusive tick-2094 group-2 deadline. The adjudicated minimal candidate changes points[1] from [584,408] to [584,400], which remains on h_b13_blue_right_flag. Preserve every score deadline, source schedule, route ID, surface ID, topology/score predicate, runtime function, capture driver and evidence gate. Run only the Hard gate probe once after the edit. Do not regenerate final evidence or modify any other source.",
+  "mode": "write",
+  "allowed_paths": [
+    "content/runtime/m2_stage2_field_topology_contract.json"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "docs/**",
+    "evidence/**",
+    "project.godot",
+    "autoload/**",
+    "scenes/**",
+    "scripts/**",
+    "tests/**",
+    "tools/**",
+    "content/design/**",
+    "content/runtime/m2_stage2_choreography.json",
+    "content/runtime/m2_stage2_score_route_contract.json"
+  ],
+  "dependency_commit": "fc077ad1c499f6bd21af4d24aa5f130338bd5fe7",
+  "execution_contract_version": 2,
+  "execution_checks": [
+    {"kind": "git_diff_check"},
+    {
+      "kind": "godot_test",
+      "godot_path": "C:/Users/e/AppData/Local/Microsoft/WinGet/Packages/GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe/Godot_v4.7-stable_win64_console.exe",
+      "project_path": ".",
+      "arguments": ["--script", "res://tests/assert_m2_stage2_runtime_capture.gd", "--gate-probe", "--difficulty=hard"],
+      "timeout_seconds": 300
+    }
+  ],
+  "output_requirements": [
+    "Report the exact old and new blue_revision_right point and prove it remains on h_b13_blue_right_flag",
+    "Report the focused Hard probe exit code and require route=complete, terminal=route_complete and settled=3",
+    "Confirm no score deadline, schedule, route/surface ID, GDScript, test, tool or evidence file changed",
+    "Report actual model, reasoning effort, CLI version, changed paths and zero scope violations"
+  ],
+  "max_repair_rounds": 1,
+  "max_edit_test_loops": 1,
+  "context": [
+    "Deep review traced emission tick 1992 and the 224x216 first segment at 180 px/s to ceil(distance*60/180)=104 ticks, producing reflection tick 2096. Moving the endpoint vertically to [584,400] reduces the segment to the adjudicated <=102 ticks while staying on the existing vertical surface x=584, y=360..456.",
+    "This ticket owns public field topology data, so core_simulation is used despite the one-line edit. No independent review follows if the focused probe and diff boundary pass.",
+    "The dependency commit also contains the preserved content choreography, live capture-driver and packager changes from the previous bounded content revision. Do not alter them.",
+    "This is not a chance to strengthen or weaken content-pressure proxy gates; final capture handling is a separate release-lead step."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}

@@ -1,0 +1,52 @@
+{
+  "id": "M2-closeout-D-hard-score-route-adjudication-v2",
+  "objective": "Perform the one bounded read-only adjudication allowed after the Stage 2 Hard live score route repeated the same group-2 failure. Determine why the first eligible group-2 Hard bullet is emitted at tick 1992, first reflects at tick 2096, while the frozen score deadline is tick 2094. Decide whether the minimum safe correction belongs to authored Hard field timing/route data, the live reference-input/capture driver, or a runtime contract implementation defect. Preserve the frozen score semantics and do not relax deadlines merely to make evidence green. Return one correction boundary and one focused Hard-only verification path. Do not edit files, start Godot, regenerate evidence, explore unrelated M2 systems, or rewrite the plan.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "content/runtime/m2_stage2_choreography.json",
+    "content/runtime/m2_stage2_field_topology_contract.json",
+    "content/runtime/m2_stage2_score_route_contract.json",
+    "scripts/runtime/stage2_field_topology_runtime.gd",
+    "scripts/runtime/stage2_score_route_runtime.gd",
+    "tests/assert_m2_stage2_runtime_capture.gd",
+    "tools/evidence/package_m2_stage2.py"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "docs/**",
+    "evidence/**",
+    "project.godot"
+  ],
+  "dependency_commit": "fc077ad1c499f6bd21af4d24aa5f130338bd5fe7",
+  "execution_contract_version": 2,
+  "execution_checks": [
+    {"kind": "git_diff_check"}
+  ],
+  "output_requirements": [
+    "State one primary root cause using the exact group-2 Hard source event, spawn/route timing, deadline, and runtime predicate",
+    "Separate frozen score semantics from mutable capture assistance or authored field timing and reject any evidence-only fabrication",
+    "Name the minimum files and fields/functions an implementation ticket may change",
+    "Provide exactly one focused Hard-only verification path and no broad test matrix",
+    "Return GATE: REPAIR with one bounded correction, or GATE: BLOCK if every correction would change frozen score semantics",
+    "Report actual model, reasoning effort, CLI version, zero changed files, and zero scope violations"
+  ],
+  "max_repair_rounds": 0,
+  "max_edit_test_loops": 0,
+  "context": [
+    "The candidate commit contains only the three non-evidence changes preserved from the exhausted content-runtime chain; failed generated evidence was deliberately not committed.",
+    "Observed Hard facts are deterministic across focused probes: group 1 settles; the first eligible group-2 UID is emitted at tick 1992; its first reflection is tick 2096; the group-2 predicate deadline is tick 2094; terminal_reason is required_rebound_graze_missing and settled_group_count is 1.",
+    "Normal completes all three groups. Both difficulties pass content adapter, runtime-capture contract, replay, spell ledger, performance, and video checks. The sole technical blocker is Hard live score settlement progression.",
+    "The prior implementation already exhausted two directed edit-test loops. Do not suggest another review chain. Your adjudication feeds one fresh implementation ticket with at most two Hard-only edit-test loops.",
+    "The original content ticket forbade edits to the field topology and score contracts. If the actual defect is outside content-runtime ownership, say so explicitly and assign the minimum correct owner without expanding scope.",
+    "Do not treat the ticket-added active-tick, peak-bullet, or pressure-index proxies as frozen product gates; they are not relevant to this adjudication."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}
