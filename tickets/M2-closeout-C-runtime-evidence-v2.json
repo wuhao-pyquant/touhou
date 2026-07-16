@@ -1,0 +1,64 @@
+{
+  "id": "M2-closeout-C-runtime-evidence-v2",
+  "objective": "Complete the single M2 Stage 2 runtime-evidence production pass from the already merged gameplay, practice/replay, score, field, and analyzer implementations. This is not a gap review and must not redesign gameplay. Build the smallest real Main/BulletWorld capture harness needed to run the complete Stage 2 six-phase sequence for Normal and Hard with deterministic reference input, and generate the frozen evidence package under evidence/m2-stage2. The package must contain real-runtime JSONL captures accepted by tools/content/m1_content_tool.py stage2-analyze, whole-stage/per-phase heatmaps and bullet curves, p50/p95/p99 render-frame times and 1%-low FPS, peak/pool/overflow data, ordered warning/gate/phase ledgers, score/drop/capture accounting, deterministic Normal/Hard reference replay documents, six shot-type boss clear-time measurements with max deviation <=15%, and one viewable compressed Stage 2 evidence video plus a SHA256 manifest. Captures must use the actual Main, Stage2EncounterController, Stage2FieldTopologyRuntime, BulletWorld, score runtime, and shot implementations; authored previews or fabricated/synthetic evidence are forbidden. If safe windowed capture cannot be contained by the existing Godot queue, extend the existing supervisor and its focused fault tests with an explicit windowed mode; do not create a second runner. Run the once-per-M2 performance benchmark exactly once. Do not modify gameplay/content values merely to make the benchmark pass.",
+  "mode": "write",
+  "allowed_paths": [
+    "tools/evidence/**",
+    "tools/content/m1_content_tool.py",
+    "tools/testing/invoke_godot_test.ps1",
+    "tools/testing/tests/test_invoke_godot_test.py",
+    "tests/assert_m2_stage2_runtime_capture.gd",
+    "tests/test_m1_content_tooling.py",
+    "evidence/m2-stage2/**"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "docs/**",
+    "project.godot",
+    "autoload/**",
+    "content/**",
+    "scenes/**",
+    "scripts/**",
+    "tests/*.gd.uid",
+    "tools/agents/**"
+  ],
+  "dependency_commit": "2d69ca79c49396b0b02868316052e9dd8436b6ec",
+  "execution_contract_version": 2,
+  "execution_checks": [
+    {"kind": "git_diff_check"},
+    {"kind": "python_unittest", "modules": ["tests.test_m1_content_tooling"]},
+    {
+      "kind": "godot_test",
+      "godot_path": "C:/Users/e/AppData/Local/Microsoft/WinGet/Packages/GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe/Godot_v4.7-stable_win64_console.exe",
+      "project_path": ".",
+      "arguments": ["--script", "res://tests/assert_m2_stage2_runtime_capture.gd", "--contract-only"],
+      "timeout_seconds": 300
+    }
+  ],
+  "output_requirements": [
+    "List exact Normal/Hard capture commands, runtime identities, seeds, replay hashes, capture hashes, and analyzer results",
+    "Report p50/p95/p99, 1%-low FPS, peak bullets, pool cap, overflow/hard-error/death counts, and whether the M2 55 FPS 1%-low gate passed",
+    "Report all six shot-type boss clear times, mean and maximum percentage deviation, and the <=15% gate",
+    "Report score/drop/capture ledgers, exact group multipliers and the sole group-3 night-festival seal",
+    "Report the compressed video path/duration/codec and evidence manifest path; do not call playtest_critic in this ticket",
+    "Report actual model, reasoning effort, CLI version, changed paths, zero scope violations, and zero residual Godot processes"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "The approved analyzer is tools/content/m1_content_tool.py stage2-analyze. Its accepted capture contract is authoritative; do not weaken real-runtime/source/build/windowed/completeness validation to admit fixtures.",
+    "A and B are complete at 8b1faaf and were independently approved by bounded_reviewer run 20260716T063235Z-M2-closeout-A-score-settlement-review-v2-bounded_reviewer-4a205e8f. Do not repeat those reviews.",
+    "The existing tools/testing/invoke_godot_test.ps1 owns the repository mutex, process identity, job-object containment, timeout, crash parsing, and process-tree cleanup. Extend it only if needed for an explicit windowed evidence run and keep headless behavior unchanged by default.",
+    "Godot Movie Maker or deterministic frame capture may be used for the evidence video, with ffmpeg compression if available, but performance timing must come from a separate real windowed run rather than movie-writer fixed-step timing.",
+    "This is the only M2 full performance run. Use focused harness/unit checks while implementing, then one final Normal/Hard measurement pass; do not rerun the full matrix to chase cosmetic variance.",
+    "Do not claim automated survival or a scripted fixture is human play. Label the Normal/Hard inputs deterministic reference replays and reserve fun/readability judgment for the later single playtest_critic pass."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
