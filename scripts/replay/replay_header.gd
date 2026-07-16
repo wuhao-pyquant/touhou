@@ -6,6 +6,10 @@ const MODE_STORY := "story"
 const MODE_STAGE_PRACTICE := "stage_practice"
 const MODE_SPELL_PRACTICE := "spell_practice"
 const SUPPORTED_MODES := [MODE_STORY, MODE_STAGE_PRACTICE, MODE_SPELL_PRACTICE]
+const STAGE2_PHASE_IDS := [
+	"stage_2_midboss_nonspell_1", "stage_2_midboss_spell_1",
+	"stage_2_boss_nonspell_1", "stage_2_boss_spell_1", "stage_2_boss_spell_2", "stage_2_boss_spell_3",
+]
 
 var build_version: String = ""
 var content_hash: String = ""
@@ -51,6 +55,8 @@ func validation_errors() -> Array[String]:
 		errors.append("story replays must start at stage 1")
 	if mode == MODE_SPELL_PRACTICE and phase_id.is_empty():
 		errors.append("spell_practice requires phase_id")
+	if mode == MODE_SPELL_PRACTICE and starting_stage == 2 and phase_id not in STAGE2_PHASE_IDS:
+		errors.append("Stage 2 spell_practice requires an approved phase_id")
 	if mode != MODE_SPELL_PRACTICE and not phase_id.is_empty():
 		errors.append("phase_id is only valid for spell_practice")
 	return errors

@@ -24,7 +24,24 @@ func practice_stage_entries(stage_names: Array, highest_reached_stage: int) -> A
 			"label": "第 %d 关  %s" % [i + 1, String(stage_names[i])],
 			"description": "从本关开始练习，击破 Boss 后结束",
 		})
+	if highest_reached_stage >= 2:
+		entries.append({
+			"id": "stage_2_phase_practice",
+			"stage": 2,
+			"label": "第二关 符卡练习",
+			"description": "从第二关已解锁的单个符卡直接开始",
+		})
 	return entries
+
+func stage2_phase_practice_entries() -> Array:
+	return [
+		{"id": "stage_2_midboss_nonspell_1", "label": "算符「市集の横列」", "description": "第二关 中B 非符"},
+		{"id": "stage_2_midboss_spell_1", "label": "珠符「跳ねるそろばん玉」", "description": "第二关 中B 符卡"},
+		{"id": "stage_2_boss_nonspell_1", "label": "市符「妖市の値切り」", "description": "第二关 Boss 非符"},
+		{"id": "stage_2_boss_spell_1", "label": "泡符「銅貨の泡涌き」", "description": "第二关 Boss 符卡 1"},
+		{"id": "stage_2_boss_spell_2", "label": "道具「迷子の道具屋」", "description": "第二关 Boss 符卡 2"},
+		{"id": "stage_2_boss_spell_3", "label": "鏡符「計り直しの水鏡」", "description": "第二关 Boss 符卡 3"},
+	]
 
 func pause_menu_entries() -> Array:
 	return [

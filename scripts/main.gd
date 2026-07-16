@@ -113,6 +113,8 @@ var main_menu_cursor: int = 0
 var character_menu_cursor: int = 0
 var shot_menu_cursor: int = 0
 var practice_menu_cursor: int = 0
+var phase_practice_menu_cursor: int = 0
+var selected_stage2_phase_practice_id := ""
 var settings_menu_cursor: int = 0
 var pause_menu_cursor: int = 0
 var asset_registry_ref: Object = null
@@ -1018,7 +1020,32 @@ func set_gameplay_seed(seed_value: int) -> void:
 	gameplay_seed = seed_value
 	gameplay_rng.reseed(gameplay_seed)
 
-func _apply_replay_header_setup(header: RefCounted) -> void:
+func _is_stage2_phase_practice_id(phase_id: String) -> bool:
+	return phase_id in ReplayHeader.STAGE2_PHASE_IDS
+
+func _activate_stage2_phase_practice(phase_id: String) -> bool:
+	if _active_stage() != 2 or not _is_stage2_phase_practice_id(phase_id):
+		return false
+	if stage2_encounter_controller == null or not stage2_encounter_controller.is_configured():
+		return false
+	if not stage2_encounter_controller.start_phase_practice(phase_id):
+		return false
+	stage_timer = 0.0
+	_sync_stage2_phase_boss()
+	return true
+
+func _start_stage2_phase_practice(phase_id: String) -> bool:
+	if not _is_stage2_phase_practice_id(phase_id):
+		return false
+	game_manager_ref.practice_mode = true
+	game_manager_ref.practice_stage = 2
+	_start_game()
+	if not _activate_stage2_phase_practice(phase_id):
+		return false
+	selected_stage2_phase_practice_id = ""
+	return true
+
+func _apply_replay_header_setup(header: RefCounted) -> bool:
 	game_manager_ref.selected_protagonist_id = String(header.protagonist)
 	game_manager_ref.selected_shot_id = String(header.shot_type)
 	game_manager_ref.practice_mode = String(header.mode) != ReplayHeader.MODE_STORY
@@ -1026,7 +1053,10 @@ func _apply_replay_header_setup(header: RefCounted) -> void:
 	gameplay_difficulty = String(header.difficulty)
 	set_gameplay_seed(int(header.seed))
 	_start_game()
-	if String(header.mode) == ReplayHeader.MODE_SPELL_PRACTICE:
+	if String(header.mode) == ReplayHeader.MODE_SPELL_PRACTICE and int(header.starting_stage) == 2:
+		if not _activate_stage2_phase_practice(String(header.phase_id)):
+			return false
+	elif String(header.mode) == ReplayHeader.MODE_SPELL_PRACTICE:
 		_enter_boss()
 		var phase_id := String(header.phase_id)
 		for card_index in range(boss.get("cards", []).size()):
@@ -1035,13 +1065,16 @@ func _apply_replay_header_setup(header: RefCounted) -> void:
 				boss.card_idx = card_index
 				break
 	replay_identity = header.to_dict().duplicate(true)
+	return true
 
 func start_replay_recording(header: RefCounted, initialize_run: bool = true) -> bool:
 	if not replay_data.start_recording(header):
 		return false
 	replay_runtime_mode = "recording"
 	if initialize_run:
-		_apply_replay_header_setup(replay_data.header)
+		if not _apply_replay_header_setup(replay_data.header):
+			replay_runtime_mode = "none"
+			return false
 	else:
 		set_gameplay_seed(int(replay_data.header.seed))
 		gameplay_difficulty = String(replay_data.header.difficulty)
@@ -1062,7 +1095,9 @@ func start_replay_playback(document: Dictionary, expected_identity: Dictionary =
 		return false
 	replay_runtime_mode = "playback"
 	if initialize_run:
-		_apply_replay_header_setup(replay_data.header)
+		if not _apply_replay_header_setup(replay_data.header):
+			replay_runtime_mode = "none"
+			return false
 	else:
 		set_gameplay_seed(int(replay_data.header.seed))
 		gameplay_difficulty = String(replay_data.header.difficulty)
@@ -1602,6 +1637,7 @@ func _show_title():
 	game_manager_ref.state = "title"
 	_sync_canvas_origin("title")
 	game_manager_ref.practice_mode = false
+	selected_stage2_phase_practice_id = ""
 	game_manager_ref.settings_return_state = "title"
 	main_menu_cursor = 0
 	_set_pause_audio(false)
@@ -1867,7 +1903,28 @@ func _update_practice_select_menu() -> void:
 		return
 	if not _menu_confirm_pressed() or entries.is_empty():
 		return
-	game_manager_ref.practice_stage = int(entries[practice_menu_cursor].get("stage", 1))
+	var selected_entry: Dictionary = entries[practice_menu_cursor]
+	if String(selected_entry.get("id", "")) == "stage_2_phase_practice":
+		phase_practice_menu_cursor = 0
+		_set_ui_state(game_manager_ref.STATE_PHASE_PRACTICE_SELECT)
+		return
+	selected_stage2_phase_practice_id = ""
+	game_manager_ref.practice_stage = int(selected_entry.get("stage", 1))
+	_sync_character_cursor_to_selected()
+	_set_ui_state("character_select")
+
+func _update_phase_practice_select_menu() -> void:
+	var entries: Array = ui_model.stage2_phase_practice_entries()
+	phase_practice_menu_cursor = clampi(phase_practice_menu_cursor, 0, maxi(entries.size() - 1, 0))
+	phase_practice_menu_cursor = _move_menu_cursor(phase_practice_menu_cursor, _menu_vertical_delta(), entries.size())
+	if _menu_cancel_pressed():
+		_set_ui_state(game_manager_ref.STATE_PRACTICE_SELECT)
+		return
+	if not _menu_confirm_pressed() or entries.is_empty():
+		return
+	selected_stage2_phase_practice_id = String(entries[phase_practice_menu_cursor].get("id", ""))
+	game_manager_ref.practice_mode = true
+	game_manager_ref.practice_stage = 2
 	_sync_character_cursor_to_selected()
 	_set_ui_state("character_select")
 
@@ -1877,7 +1934,7 @@ func _update_character_select_menu() -> void:
 	character_menu_cursor = _move_menu_cursor(character_menu_cursor, _menu_vertical_delta(), entries.size())
 	if _menu_cancel_pressed():
 		if game_manager_ref.practice_mode:
-			_set_ui_state("practice_select")
+			_set_ui_state(game_manager_ref.STATE_PHASE_PRACTICE_SELECT if not selected_stage2_phase_practice_id.is_empty() else game_manager_ref.STATE_PRACTICE_SELECT)
 		else:
 			_show_title()
 		return
@@ -1900,6 +1957,10 @@ func _update_shot_select_menu() -> void:
 	var selected_shot_id: String = String(entries[shot_menu_cursor].get("id", ""))
 	game_manager_ref.selected_shot_id = selected_shot_id
 	game_manager_ref.apply_selected_shot()
+	if not selected_stage2_phase_practice_id.is_empty():
+		if not _start_stage2_phase_practice(selected_stage2_phase_practice_id):
+			game_manager_ref.state = "game_over"
+		return
 	_start_game()
 
 func _update_settings_menu() -> void:
@@ -1970,6 +2031,8 @@ func _process(delta: float):
 				_update_title_menu()
 			"practice_select":
 				_update_practice_select_menu()
+			"phase_practice_select":
+				_update_phase_practice_select_menu()
 			"character_select":
 				_update_character_select_menu()
 			"shot_select":
@@ -3608,6 +3671,15 @@ func _draw_practice_select_screen() -> void:
 	_draw_menu_entries(font, entries, practice_menu_cursor, 282.0, 76.0)
 	_draw_control_hint(font, "方向键选择    Z 确认    X/Esc 返回", SCREEN_H - 78.0)
 
+func _draw_phase_practice_select_screen() -> void:
+	var font := SystemFont.new()
+	_draw_ui_background(Color(0.30, 0.20, 0.42))
+	_draw_phase6_ui_window("main_menu_frame", 0.72)
+	_draw_ui_heading(font, "第二关 符卡练习", "选择一个已批准的阶段", 34)
+	var entries: Array = ui_model.stage2_phase_practice_entries()
+	_draw_menu_entries(font, entries, phase_practice_menu_cursor, 224.0, 64.0)
+	_draw_control_hint(font, "方向键选择    Z 确认    X/Esc 返回", SCREEN_H - 78.0)
+
 func _draw_shot_select_screen() -> void:
 	var font := SystemFont.new()
 	_draw_ui_background(Color(0.46, 0.32, 0.12))
@@ -3671,6 +3743,9 @@ func _draw():
 				return
 			"practice_select":
 				_draw_practice_select_screen()
+				return
+			"phase_practice_select":
+				_draw_phase_practice_select_screen()
 				return
 			"shot_select":
 				_draw_shot_select_screen()
