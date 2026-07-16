@@ -241,13 +241,17 @@ def _resolve_contract_path(repo: Path, value: str, label: str) -> str:
     return str(resolved)
 
 
-def _resolve_contract_executable(value: str, label: str) -> str:
+def _resolve_contract_executable(value: str, label: str, *, repo: Path | None = None) -> str:
     candidate = Path(value)
     if not candidate.is_absolute():
-        located = shutil.which(value)
-        if not located:
-            raise BridgeError(f"{label} executable could not be resolved: {value!r}")
-        candidate = Path(located)
+        repository_candidate = (repo / candidate) if repo is not None else None
+        if repository_candidate is not None and repository_candidate.is_file():
+            candidate = repository_candidate
+        else:
+            located = shutil.which(value)
+            if not located:
+                raise BridgeError(f"{label} executable could not be resolved: {value!r}")
+            candidate = Path(located)
     resolved = candidate.resolve()
     if not resolved.is_file():
         raise BridgeError(f"{label} executable is not a file: {resolved}")
@@ -287,7 +291,7 @@ def _validate_execution_checks(ticket: dict[str, Any], repo: Path | None) -> Non
                     if not isinstance(check[field], str) or not check[field]:
                         raise BridgeError(f"{label}.{field} must be a path string")
                 check["godot_path"] = _resolve_contract_executable(
-                    check["godot_path"], f"{label}.godot_path"
+                    check["godot_path"], f"{label}.godot_path", repo=repo
                 )
                 check["project_path"] = _resolve_contract_path(
                     repo, check["project_path"], f"{label}.project_path"
