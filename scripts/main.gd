@@ -10,6 +10,7 @@ const BossStateMachine := preload("res://scripts/runtime/boss_state_machine.gd")
 const GameplayInputBuffer := preload("res://scripts/runtime/gameplay_input_buffer.gd")
 const Stage2EncounterController := preload("res://scripts/runtime/stage2_encounter_controller.gd")
 const Stage2FieldTopologyRuntime := preload("res://scripts/runtime/stage2_field_topology_runtime.gd")
+const Stage2ScoreRouteRuntime := preload("res://scripts/runtime/stage2_score_route_runtime.gd")
 const ReplayData := preload("res://scripts/replay/replay_data.gd")
 const ReplayHeader := preload("res://scripts/replay/replay_header.gd")
 
@@ -21,6 +22,7 @@ var boss_state_machine: RefCounted = BossStateMachine.new()
 var gameplay_input_buffer: RefCounted = GameplayInputBuffer.new()
 var stage2_encounter_controller: RefCounted = Stage2EncounterController.new()
 var stage2_field_topology_runtime: RefCounted = Stage2FieldTopologyRuntime.new()
+var stage2_score_route_runtime: RefCounted = Stage2ScoreRouteRuntime.new()
 var stage2_field_topology_scratch_runtime: RefCounted = null
 var stage2_field_scratch_bullet_world: RefCounted = null
 var replay_data: RefCounted = ReplayData.new()
@@ -67,7 +69,7 @@ const GAMEPLAY_TOP := 82.0
 const BULLET_POOL_GROWTH := 2048
 const MAX_COMBAT_EFFECTS := 96
 const SIMULATION_SNAPSHOT_VERSION := 2
-const STAGE2_SIMULATION_SNAPSHOT_VERSION := 4
+const STAGE2_SIMULATION_SNAPSHOT_VERSION := 5
 const REPLAY_RUNTIME_MODES := ["none", "recording", "playback"]
 const STAGE2_FIELD_RECORD_LIMIT := 512
 const STAGE2_FIELD_SOURCE_FIELDS := [
@@ -1240,6 +1242,7 @@ func capture_simulation_state() -> Dictionary:
 		snapshot["version"] = STAGE2_SIMULATION_SNAPSHOT_VERSION
 		snapshot["stage2_controller"] = stage2_encounter_controller.capture_snapshot() if stage2_encounter_controller != null and stage2_encounter_controller.is_configured() else {}
 		snapshot["stage2_field_runtime"] = stage2_field_topology_runtime.capture_snapshot() if stage2_field_topology_runtime != null and stage2_field_topology_runtime.is_configured() else {}
+		snapshot["stage2_score_runtime"] = stage2_score_route_runtime.capture_snapshot() if stage2_score_route_runtime != null and stage2_score_route_runtime.is_configured() else {}
 	if _gameplay_ledger_is_nondefault():
 		snapshot["gameplay_ledger"] = _capture_gameplay_ledger_state()
 	return snapshot
@@ -1556,10 +1559,10 @@ func validate_simulation_state(snapshot: Dictionary) -> bool:
 		return false
 	var is_stage2_snapshot := int(snapshot.current_stage_local) == 2
 	if is_stage2_snapshot:
-		if int(snapshot.get("version", -1)) != STAGE2_SIMULATION_SNAPSHOT_VERSION or not (snapshot.get("stage2_controller") is Dictionary) or not (snapshot.get("stage2_field_runtime") is Dictionary):
+		if int(snapshot.get("version", -1)) != STAGE2_SIMULATION_SNAPSHOT_VERSION or not (snapshot.get("stage2_controller") is Dictionary) or not (snapshot.get("stage2_field_runtime") is Dictionary) or not (snapshot.get("stage2_score_runtime") is Dictionary):
 			return false
 	else:
-		if int(snapshot.get("version", -1)) != SIMULATION_SNAPSHOT_VERSION or snapshot.has("stage2_controller") or snapshot.has("stage2_field_runtime"):
+		if int(snapshot.get("version", -1)) != SIMULATION_SNAPSHOT_VERSION or snapshot.has("stage2_controller") or snapshot.has("stage2_field_runtime") or snapshot.has("stage2_score_runtime"):
 			return false
 	if not _is_valid_snapshot_number(snapshot.get("stage_timer"), 0.0):
 		return false
@@ -1607,6 +1610,14 @@ func validate_simulation_state(snapshot: Dictionary) -> bool:
 			return false
 		if not _validate_stage2_bullet_observability_snapshot(snapshot.stage_controller, snapshot.bullets, snapshot.stage2_field_runtime, field_probe):
 			return false
+		if not stage_director.has_method("stage2_score_route_contract"):
+			return false
+		var score_contract: Dictionary = stage_director.stage2_score_route_contract()
+		var score_probe := Stage2ScoreRouteRuntime.new()
+		if score_contract.is_empty() or not score_probe.configure(score_contract, String(snapshot.gameplay_difficulty), field_run_uid):
+			return false
+		if not score_probe.validate_snapshot(snapshot.stage2_score_runtime) or not score_probe.restore_snapshot(snapshot.stage2_score_runtime):
+			return false
 	if snapshot.has("gameplay_ledger") and (not (snapshot.gameplay_ledger is Dictionary) or not _validate_gameplay_ledger_snapshot(snapshot.gameplay_ledger)):
 		return false
 	var player_state: Dictionary = snapshot.player
@@ -1649,6 +1660,7 @@ func restore_simulation_state(snapshot: Dictionary) -> bool:
 		return false
 	var restored_stage2_controller := Stage2EncounterController.new()
 	var restored_stage2_field_runtime := Stage2FieldTopologyRuntime.new()
+	var restored_stage2_score_runtime := Stage2ScoreRouteRuntime.new()
 	var restored_stage2_scratch_runtime: RefCounted = null
 	var restored_stage2_scratch_world: RefCounted = null
 	var restored_bullet_world := BulletWorld.new()
@@ -1663,6 +1675,11 @@ func restore_simulation_state(snapshot: Dictionary) -> bool:
 		if field_contract.is_empty() or not restored_stage2_field_runtime.configure(field_contract, String(snapshot.gameplay_difficulty), _stage2_field_run_uid(int(snapshot.gameplay_seed), String(snapshot.gameplay_difficulty))):
 			return false
 		if not restored_stage2_field_runtime.restore_snapshot(snapshot.stage2_field_runtime):
+			return false
+		var score_contract: Dictionary = stage_director.stage2_score_route_contract()
+		if score_contract.is_empty() or not restored_stage2_score_runtime.configure(score_contract, String(snapshot.gameplay_difficulty), _stage2_field_run_uid(int(snapshot.gameplay_seed), String(snapshot.gameplay_difficulty))):
+			return false
+		if not restored_stage2_score_runtime.restore_snapshot(snapshot.stage2_score_runtime):
 			return false
 		restored_stage2_scratch_runtime = Stage2FieldTopologyRuntime.new()
 		if not restored_stage2_scratch_runtime.configure(field_contract, String(snapshot.gameplay_difficulty), _stage2_field_run_uid(int(snapshot.gameplay_seed), String(snapshot.gameplay_difficulty))):
@@ -1708,6 +1725,7 @@ func restore_simulation_state(snapshot: Dictionary) -> bool:
 	stage_controller = snapshot.stage_controller.duplicate(true)
 	stage2_encounter_controller = restored_stage2_controller
 	stage2_field_topology_runtime = restored_stage2_field_runtime
+	stage2_score_route_runtime = restored_stage2_score_runtime
 	stage2_field_topology_scratch_runtime = restored_stage2_scratch_runtime
 	stage2_field_scratch_bullet_world = restored_stage2_scratch_world
 	var player_state: Dictionary = snapshot.player
@@ -1834,6 +1852,8 @@ func _reset_player():
 	player_last_move_dir = Vector2(0, -1)
 
 func _respawn():
+	if not _stage2_score_player_action("miss"):
+		return
 	if game_manager_ref.has_method("record_actual_miss"):
 		game_manager_ref.record_actual_miss()
 	game_manager_ref.lives -= 1
@@ -1885,6 +1905,7 @@ func _load_stage(stage: int):
 	stage_controller = stage_director.stage_controller(stage)
 	stage2_encounter_controller = Stage2EncounterController.new()
 	stage2_field_topology_runtime = Stage2FieldTopologyRuntime.new()
+	stage2_score_route_runtime = Stage2ScoreRouteRuntime.new()
 	stage2_field_topology_scratch_runtime = null
 	stage2_field_scratch_bullet_world = null
 	if stage_controller.is_empty():
@@ -1913,6 +1934,13 @@ func _load_stage(stage: int):
 		stage_controller["stage2_field_score_projections"] = []
 		stage_controller["stage2_field_telemetry"] = []
 		stage_controller["stage2_field_hard_error"] = ""
+		stage_controller["stage2_score_callback_records"] = []
+		stage_controller["stage2_score_event_sequence"] = -1
+		stage_controller["stage2_score_consumed_stage_event_ids"] = []
+		stage_controller["stage2_score_bullet_emission_sequences"] = {}
+		stage_controller["stage2_score_started_spell_phase_ids"] = []
+		stage_controller["stage2_score_resolved_spell_phase_ids"] = []
+		stage_controller["stage2_score_hard_error"] = ""
 		if not stage_director.has_method("stage2_package") or not stage2_encounter_controller.configure(stage_director.stage2_package(), gameplay_difficulty, gameplay_seed):
 			stage_controller["stage2_hard_error"] = stage2_encounter_controller.last_error()
 			return
@@ -1923,6 +1951,13 @@ func _load_stage(stage: int):
 		if field_contract.is_empty() or not stage2_field_topology_runtime.configure(field_contract, gameplay_difficulty, String(stage_controller.stage2_field_run_uid)):
 			stage_controller["stage2_hard_error"] = stage2_field_topology_runtime.last_error() if stage2_field_topology_runtime != null else "Stage 2 field topology runtime is unavailable"
 			return
+		if not stage_director.has_method("stage2_score_route_contract"):
+			stage_controller["stage2_hard_error"] = "Stage 2 score-route contract query is unavailable"
+			return
+		var score_contract: Dictionary = stage_director.stage2_score_route_contract()
+		if score_contract.is_empty() or not stage2_score_route_runtime.configure(score_contract, gameplay_difficulty, String(stage_controller.stage2_field_run_uid)):
+			stage_controller["stage2_hard_error"] = stage2_score_route_runtime.last_error() if stage2_score_route_runtime != null else "Stage 2 score-route runtime is unavailable"
+			return
 		if not _stage2_rebuild_field_scratch_owners():
 			stage_controller["stage2_hard_error"] = "Stage 2 field topology scratch owners could not be initialized"
 			return
@@ -1930,6 +1965,199 @@ func _load_stage(stage: int):
 
 func _stage2_field_run_uid(seed_value: int, difficulty: String) -> String:
 	return "stage2_%s_%d" % [difficulty, seed_value]
+
+func _stage2_score_next_sequence() -> int:
+	var sequence := int(stage_controller.get("stage2_score_event_sequence", -1)) + 1
+	stage_controller["stage2_score_event_sequence"] = sequence
+	return sequence
+
+func _stage2_score_current_event_id() -> String:
+	var event_ids: Array = stage_controller.get("stage2_event_ids", [])
+	return String(event_ids.back()) if not event_ids.is_empty() else "s2_b01"
+
+func _stage2_score_commit_result(callback_kind: String, stage_tick: int, event_sequence: int, result: Dictionary) -> bool:
+	if not bool(result.get("ok", false)):
+		_stage2_fail_closed("Stage 2 score-route callback rejected %s: %s" % [callback_kind, String(result.get("error", stage2_score_route_runtime.last_error()))])
+		return false
+	_stage2_append_bounded(stage_controller, "stage2_score_callback_records", {
+		"kind": callback_kind,
+		"stage_tick": stage_tick,
+		"event_sequence": event_sequence,
+		"accepted": bool(result.get("accepted", false)),
+		"ignored": bool(result.get("ignored", false)),
+	})
+	for settlement_value in result.get("settlement_records", []):
+		if not (settlement_value is Dictionary) or not _stage2_apply_score_settlement(settlement_value):
+			_stage2_fail_closed("Stage 2 score-route settlement record is malformed")
+			return false
+	return true
+
+func _stage2_apply_score_settlement(settlement: Dictionary) -> bool:
+	var group_index := int(settlement.get("group_index", 0))
+	var transition := String(settlement.get("transition", ""))
+	var multiplier := float(settlement.get("point_value_multiplier_after", 0.0))
+	if group_index not in [1, 2, 3] or transition != "group_%d_settlement" % group_index or not is_equal_approx(multiplier, 1.0 + 0.25 * float(group_index)):
+		return false
+	game_manager_ref.night_festival_multiplier = multiplier
+	game_manager_ref.highest_night_festival_multiplier = maxf(float(game_manager_ref.highest_night_festival_multiplier), multiplier)
+	var seal_count := int(settlement.get("seal_spawn_count", 0))
+	if seal_count != (1 if group_index == 3 else 0):
+		return false
+	if seal_count == 1:
+		if String(settlement.get("seal_item_id", "")) != "night_festival_seal" or not game_manager_ref.has_method("add_night_festival_seal"):
+			return false
+		game_manager_ref.add_night_festival_seal()
+		game_manager_ref.night_festival_multiplier = multiplier
+		game_manager_ref.highest_night_festival_multiplier = maxf(float(game_manager_ref.highest_night_festival_multiplier), multiplier)
+	return true
+
+func _stage2_score_stage_event_entry(event_id: String, stage_tick: int) -> bool:
+	var consumed_event_ids: Array = stage_controller.get("stage2_score_consumed_stage_event_ids", [])
+	if event_id in consumed_event_ids:
+		return true
+	var payload := {"publication_complete": true, "prices": {"red": 3, "blue": 2, "yellow": 1}} if event_id == "s2_b12" else {}
+	var sequence := _stage2_score_next_sequence()
+	var result: Dictionary = stage2_score_route_runtime.on_stage_event_entry(event_id, stage_tick, sequence, payload)
+	if not _stage2_score_commit_result("stage_event_entry", stage_tick, sequence, result):
+		return false
+	if event_id in ["s2_b13", "s2_b14", "s2_b16", "s2_b17", "s2_b18"]:
+		sequence = _stage2_score_next_sequence()
+		result = stage2_score_route_runtime.on_topology_checkpoint(event_id, player_x, stage_tick, sequence)
+		if not _stage2_score_commit_result("topology_checkpoint", stage_tick, sequence, result):
+			return false
+	if event_id == "s2_b18":
+		sequence = _stage2_score_next_sequence()
+		result = stage2_score_route_runtime.on_final_lane_crossing(event_id, player_x, stage_tick, stage_tick, sequence)
+		if not _stage2_score_commit_result("final_lane_crossing", stage_tick, sequence, result):
+			return false
+	consumed_event_ids.append(event_id)
+	stage_controller["stage2_score_consumed_stage_event_ids"] = consumed_event_ids
+	return true
+
+func _stage2_score_route_event_for_source(source_spawn_id: String, stage_tick: int) -> String:
+	if source_spawn_id == "s2_b13_blue_booth_master":
+		return "s2_b14" if stage_tick >= 1950 else "s2_b13"
+	if source_spawn_id == "s2_b16_abacus_keeper":
+		return "s2_b16"
+	return ""
+
+func _stage2_score_required_emissions(output: Dictionary) -> bool:
+	var field_sequence := int(output.get("event_sequence", -1))
+	var emission_sequences: Dictionary = stage_controller.get("stage2_score_bullet_emission_sequences", {})
+	for construction_value in output.get("bullet_constructions", []):
+		var construction: Dictionary = construction_value
+		var source_id := String(construction.get("stage2_source_spawn_id", ""))
+		var spawn_tick := int(construction.get("stage2_bullet_spawn_tick", -1))
+		var route_event_id := _stage2_score_route_event_for_source(source_id, spawn_tick)
+		if route_event_id.is_empty():
+			continue
+		var bullet_uid := String(construction.get("stage2_bullet_uid", ""))
+		var sequence := _stage2_score_next_sequence()
+		var result: Dictionary = stage2_score_route_runtime.on_required_bullet_emitted(route_event_id, bullet_uid, source_id, spawn_tick, field_sequence, spawn_tick, sequence)
+		if not _stage2_score_commit_result("required_bullet_emitted", spawn_tick, sequence, result):
+			return false
+		emission_sequences[bullet_uid] = field_sequence
+	stage_controller["stage2_score_bullet_emission_sequences"] = emission_sequences
+	return true
+
+func _stage2_score_field_projections(output: Dictionary) -> bool:
+	var emission_sequences: Dictionary = stage_controller.get("stage2_score_bullet_emission_sequences", {})
+	for projection_value in output.get("score_route_callbacks", []):
+		var projection: Dictionary = projection_value
+		var bullet_uid := String(projection.get("bullet_uid", ""))
+		var source_id := String(projection.get("bullet_source_spawn_id", ""))
+		var stage_tick := int(projection.get("stage_tick", -1))
+		var route_event_id := _stage2_score_route_event_for_source(source_id, int(projection.get("bullet_spawn_tick", -1)))
+		if route_event_id.is_empty() or not emission_sequences.has(bullet_uid):
+			continue
+		var sequence := _stage2_score_next_sequence()
+		var result: Dictionary = stage2_score_route_runtime.on_reflected_bullet_graze(
+			route_event_id, bullet_uid, source_id,
+			int(projection.get("bullet_spawn_tick", -1)), int(emission_sequences[bullet_uid]),
+			int(projection.get("first_reflection_tick", -1)), int(projection.get("reflection_count_before_graze", 0)),
+			stage_tick, sequence
+		)
+		if not _stage2_score_commit_result("reflected_bullet_graze", stage_tick, sequence, result):
+			return false
+	return true
+
+func _stage2_score_enemy_defeat(enemy: Dictionary) -> bool:
+	var spawn_id := String(enemy.get("stage2_spawn_id", ""))
+	var enemy_id := String(enemy.get("source_enemy_id", ""))
+	var event_id := String(enemy.get("stage2_event_id", ""))
+	var teaching_targets := [
+		"s2_b01_abacus_left", "s2_b01_abacus_center", "s2_b01_abacus_right",
+		"s2_b02_left_clerk", "s2_b02_center_clerk", "s2_b02_right_clerk",
+		"s2_b03_red_ledger", "s2_b03_blue_ledger", "s2_b04_left_booth_edge",
+		"s2_b04_right_booth_edge", "s2_b05_left_bead_seller", "s2_b05_right_bead_seller",
+	]
+	var route_targets := [
+		"s2_b13_red_booth_master", "s2_b13_blue_booth_master", "s2_b13_yellow_booth_master",
+		"s2_b15_left_mirror", "s2_b15_right_mirror", "s2_b16_abacus_keeper",
+	]
+	if spawn_id not in teaching_targets and spawn_id not in route_targets:
+		return true
+	match spawn_id:
+		"s2_b13_red_booth_master": event_id = "s2_b13"
+		"s2_b13_blue_booth_master": event_id = "s2_b14"
+		"s2_b13_yellow_booth_master": event_id = "s2_b17"
+		"s2_b16_abacus_keeper": event_id = "s2_b16"
+		"s2_b15_left_mirror", "s2_b15_right_mirror": event_id = "s2_b16"
+	var stage_tick := int(stage_controller.get("stage2_field_tick", -1))
+	var sequence := _stage2_score_next_sequence()
+	var selected_mirror: Dictionary = stage2_score_route_runtime.capture_snapshot().get("selected_mirror", {})
+	var result: Dictionary
+	if spawn_id in ["s2_b15_left_mirror", "s2_b15_right_mirror"] and selected_mirror.is_empty():
+		result = stage2_score_route_runtime.on_mirror_choice(spawn_id, player_x, stage_tick, sequence)
+		return _stage2_score_commit_result("mirror_choice", stage_tick, sequence, result)
+	result = stage2_score_route_runtime.on_enemy_defeat(event_id, spawn_id, enemy_id, player_x, stage_tick, sequence)
+	return _stage2_score_commit_result("enemy_defeat", stage_tick, sequence, result)
+
+func _stage2_score_player_action(kind: String) -> bool:
+	if _active_stage() != 2 or stage2_score_route_runtime == null or not stage2_score_route_runtime.is_configured():
+		return true
+	var event_id := _stage2_score_current_event_id()
+	var stage_tick := maxi(0, int(stage_controller.get("stage2_field_tick", 0)))
+	var sequence := _stage2_score_next_sequence()
+	var result: Dictionary = stage2_score_route_runtime.on_player_bomb(event_id, stage_tick, sequence) if kind == "bomb" else stage2_score_route_runtime.on_player_miss(event_id, stage_tick, sequence)
+	return _stage2_score_commit_result("player_%s" % kind, stage_tick, sequence, result)
+
+func _stage2_begin_spell_capture(definition: Dictionary) -> bool:
+	if String(definition.get("kind", "nonspell")) != "spell":
+		return true
+	var phase_id := String(definition.get("id", ""))
+	var started: Array = stage_controller.get("stage2_score_started_spell_phase_ids", [])
+	if phase_id in started:
+		return true
+	if phase_id.is_empty() or not game_manager_ref.has_method("begin_spell_capture") or bool(game_manager_ref.spell_capture_active):
+		return false
+	var total_frames := float(definition.get("timeout_ticks", 1))
+	game_manager_ref.begin_spell_capture(phase_id, _score_value("spell_capture_base", 100000), total_frames)
+	started.append(phase_id)
+	stage_controller["stage2_score_started_spell_phase_ids"] = started
+	return true
+
+func _stage2_finish_spell_resolution(resolution_value: Variant) -> bool:
+	if not (resolution_value is Dictionary):
+		return false
+	var resolution: Dictionary = resolution_value
+	var phase_id := String(resolution.get("phase_id", ""))
+	var started: Array = stage_controller.get("stage2_score_started_spell_phase_ids", [])
+	if phase_id not in started:
+		return true
+	var resolved: Array = stage_controller.get("stage2_score_resolved_spell_phase_ids", [])
+	if phase_id in resolved:
+		return true
+	if not game_manager_ref.has_method("finish_spell_capture") or not bool(game_manager_ref.spell_capture_active):
+		return false
+	var definition: Dictionary = boss.get("cards", [{}])[0] if not boss.get("cards", []).is_empty() else {}
+	var total_frames := float(definition.get("time", 0.0)) * 60.0
+	var remaining_frames := maxf(0.0, total_frames - float(resolution.get("phase_tick", 0)))
+	var timed_out := String(resolution.get("outcome", "")) == "timeout"
+	game_manager_ref.finish_spell_capture(0.0 if timed_out else remaining_frames, timed_out)
+	resolved.append(phase_id)
+	stage_controller["stage2_score_resolved_spell_phase_ids"] = resolved
+	return true
 
 func _stage2_create_field_owner_pair_from(source_runtime: RefCounted, source_world: RefCounted) -> Dictionary:
 	if source_runtime == null or source_world == null or not is_instance_valid(source_runtime) or not is_instance_valid(source_world):
@@ -2469,6 +2697,8 @@ func _consume_stage2_controller_output(output: Dictionary) -> bool:
 		var stage_records: Array = stage_controller.get("stage2_stage_event_records", [])
 		stage_records.append(event.duplicate(true))
 		stage_controller["stage2_stage_event_records"] = stage_records
+		if not _stage2_score_stage_event_entry(String(event.get("id", "")), int((event.get("payload", {}) as Dictionary).get("authored_tick", -1))):
+			return false
 		if not (event.get("gate") is Dictionary):
 			var payload: Dictionary = event.get("payload", {})
 			for spawn_value in payload.get("spawns", []):
@@ -2519,6 +2749,8 @@ func _consume_stage2_controller_output(output: Dictionary) -> bool:
 			"stage2_source_owner_id": active_owner_id,
 		})
 	for resolution_value in output.get("phase_resolutions", []):
+		if not _stage2_finish_spell_resolution(resolution_value):
+			return false
 		var resolution_records: Array = stage_controller.get("stage2_phase_resolutions", [])
 		resolution_records.append(resolution_value.duplicate(true))
 		stage_controller["stage2_phase_resolutions"] = resolution_records
@@ -2862,7 +3094,9 @@ func _stage2_field_callback(kind: String, stage_tick: int, payload: Dictionary =
 	stage2_field_scratch_bullet_world = live_bullet_world
 	stage2_field_topology_scratch_runtime = live_field_runtime
 	_sync_bullet_world_compatibility_views()
-	return true
+	if not _stage2_score_required_emissions(output):
+		return false
+	return _stage2_score_field_projections(output)
 
 func _stage2_preflight_field_output(output: Dictionary, expected_stage_tick: int, expected_sequence: int, candidate_runtime: RefCounted, candidate_world: RefCounted, candidate_stage_controller: Dictionary) -> bool:
 	if output.is_empty() or typeof(output.get("stage_tick")) != TYPE_INT or int(output.stage_tick) != expected_stage_tick:
@@ -3374,6 +3608,8 @@ func _sync_stage2_phase_boss() -> void:
 	boss["stage2_phase_index"] = int(definition.get("phase_index", -1))
 	boss["stage2_topology_id"] = String(definition.get("topology_id", ""))
 	game_manager_ref.state = "boss"
+	if not _stage2_begin_spell_capture(definition):
+		_stage2_fail_closed("Stage 2 spell capture could not begin exactly once")
 
 func _apply_stage2_boss_movement(movement: Dictionary) -> void:
 	if not boss_alive or not (movement.get("position") is Vector2):
@@ -3397,6 +3633,8 @@ func _resolve_stage2_player_hit() -> void:
 		if game_manager_ref.lives > 0:
 			_respawn()
 		else:
+			if not _stage2_score_player_action("miss"):
+				return
 			if game_manager_ref.has_method("record_actual_miss"):
 				game_manager_ref.record_actual_miss()
 			player_just_hit = false
@@ -3420,6 +3658,7 @@ func _stage2_fail_closed(message: String) -> void:
 	var stable_message := message if message != "" else "Stage 2 field integration rejected an unspecified runtime fault"
 	stage_controller["stage2_hard_error"] = stable_message
 	stage_controller["stage2_field_hard_error"] = stable_message
+	stage_controller["stage2_score_hard_error"] = stable_message
 	var bindings: Dictionary = stage_controller.get("stage2_field_uid_to_slot", {})
 	for uid_value in bindings.keys():
 		var slot := int(bindings[uid_value])
@@ -4044,6 +4283,8 @@ func _shoot_homing(level: int, dmg_val: float):
 
 func _start_bomb():
 	if game_manager_ref.bombs <= 0: return
+	if not _stage2_score_player_action("bomb"):
+		return
 	game_manager_ref.bombs -= 1
 	if game_manager_ref.has_method("record_bomb_used"):
 		game_manager_ref.record_bomb_used()
@@ -4245,6 +4486,8 @@ func _stage2_forward_field_source_defeat(enemy: Dictionary) -> bool:
 	if not bool(enemy.get("stage2_field_owned", false)) or bool(enemy.get("stage2_source_defeat_forwarded", false)):
 		return true
 	if not _stage2_field_callback("accept_defeat", int(stage_controller.get("stage2_field_tick", -1)), {"spawn_id": String(enemy.get("stage2_spawn_id", ""))}):
+		return false
+	if not _stage2_score_enemy_defeat(enemy):
 		return false
 	enemy["stage2_source_defeat_forwarded"] = true
 	enemy["stage2_source_removal_forwarded"] = true
@@ -4600,8 +4843,25 @@ func _spawn_authored_item(x: float, y: float, item_type: String, ordinal: int) -
 
 func _emit_enemy_drops(enemy: Dictionary) -> void:
 	var drop_item_ids: Array = enemy.get("drop_item_ids", LEGACY_ENEMY_DROP_IDS)
-	for ordinal in range(drop_item_ids.size()):
-		_spawn_authored_item(float(enemy.x), float(enemy.y), String(drop_item_ids[ordinal]), ordinal)
+	var canonical_drop_ids: Array = []
+	for drop_value in drop_item_ids:
+		var drop_id := String(drop_value)
+		if _active_stage() != 2 or stage2_score_route_runtime == null or not stage2_score_route_runtime.is_configured():
+			canonical_drop_ids.append(drop_id)
+			continue
+		var resolved: Dictionary = stage2_score_route_runtime.resolve_drop_alias(drop_id)
+		if not bool(resolved.get("ok", false)):
+			_stage2_fail_closed("Unknown Stage 2 authored drop alias: %s" % drop_id)
+			return
+		if String(resolved.get("behavior", "")) == "route_token":
+			continue
+		if String(resolved.get("behavior", "")) != "canonical_item_batch":
+			_stage2_fail_closed("Unsupported Stage 2 drop alias behavior: %s" % drop_id)
+			return
+		for _copy_index in range(int(resolved.get("count", 0))):
+			canonical_drop_ids.append(String(resolved.get("canonical_item_id", "")))
+	for ordinal in range(canonical_drop_ids.size()):
+		_spawn_authored_item(float(enemy.x), float(enemy.y), String(canonical_drop_ids[ordinal]), ordinal)
 
 func _drop_item_type(strong: bool, roll: float, drop_tier: String = "") -> String:
 	var tier := drop_tier
@@ -4621,6 +4881,11 @@ func _collect_item(it: Dictionary):
 	it.collected = true
 	it.alive = false
 	var result: Dictionary = item_reward_system.apply_collection(String(it.type), game_manager_ref, float(it.get("y", player_y)), game_manager_ref.SCREEN_H * game_manager_ref.ITEM_TOP_RATIO)
+	if _active_stage() == 2 and String(it.type) == "point":
+		var base_delta := int(result.get("score_delta", 0))
+		var multiplied_delta := int(floor(float(base_delta) * float(game_manager_ref.night_festival_multiplier)))
+		game_manager_ref.score += multiplied_delta - base_delta
+		result["score_delta"] = multiplied_delta
 	if audio_manager_ref:
 		audio_manager_ref.play_sfx("item_collect")
 		var resource_delta: Dictionary = result.get("resource_delta", {})

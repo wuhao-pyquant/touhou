@@ -2,12 +2,15 @@ extends RefCounted
 class_name StageDirector
 
 const STAGE2_FIELD_TOPOLOGY_CONTRACT_PATH := "res://content/runtime/m2_stage2_field_topology_contract.json"
+const STAGE2_SCORE_ROUTE_CONTRACT_PATH := "res://content/runtime/m2_stage2_score_route_contract.json"
 
 var _content: Object = null
 var _m1_contract_catalog: Object = null
 var _stage2_content_adapter: Object = null
 var _stage2_field_topology_contract: Dictionary = {}
 var _stage2_field_topology_contract_loaded := false
+var _stage2_score_route_contract: Dictionary = {}
+var _stage2_score_route_contract_loaded := false
 
 func _content_db() -> Object:
 	if _content == null:
@@ -119,6 +122,23 @@ func stage2_field_topology_contract() -> Dictionary:
 	if not _stage2_field_topology_contract_loaded and not load_stage2_field_topology_contract():
 		return {}
 	return _stage2_field_topology_contract.duplicate(true)
+
+func load_stage2_score_route_contract(path: String = STAGE2_SCORE_ROUTE_CONTRACT_PATH) -> bool:
+	_stage2_score_route_contract.clear()
+	_stage2_score_route_contract_loaded = true
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return false
+	var parser := JSON.new()
+	if parser.parse(file.get_as_text()) != OK or not (parser.data is Dictionary):
+		return false
+	_stage2_score_route_contract = (parser.data as Dictionary).duplicate(true)
+	return true
+
+func stage2_score_route_contract() -> Dictionary:
+	if not _stage2_score_route_contract_loaded and not load_stage2_score_route_contract():
+		return {}
+	return _stage2_score_route_contract.duplicate(true)
 
 func _event_key(stage_index: int, event_index: int, event_time: int) -> String:
 	return "%d:%d:%d" % [stage_index, event_index, event_time]
