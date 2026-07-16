@@ -26,6 +26,7 @@ const GATE_EVENT_IDS := {
 	"midboss": "s2_b06",
 	"boss": "s2_b18",
 }
+const POST_MIDBOSS_STAGE_TICK_OFFSET := 899
 const ENCOUNTER_KINDS := ["stage", "midboss", "boss", "complete"]
 const RESOLUTION_OUTCOMES := ["clear", "timeout"]
 const PHASE_PRACTICE_NOT_CONFIGURED_ERROR := "phase practice requires a configured controller"
@@ -169,7 +170,10 @@ func advance(player_position: Vector2 = Vector2.ZERO) -> Dictionary:
 	var stage_output: Dictionary = _stage_runtime.advance()
 	if not bool(stage_output.get("ok", false)):
 		return _hard_fail("stage advance failed: %s" % String(stage_output.get("error", _stage_runtime.last_error())))
-	output["stage_tick"] = int(stage_output.tick)
+	# StageEncounterRuntime compresses the phase-owned s2_b07-s2_b12 interval to
+	# one runtime tick. Main and field replay state retain the authored clock, so
+	# translate the post-midboss runtime cursor back to that frozen timeline.
+	output["stage_tick"] = int(stage_output.tick) + (POST_MIDBOSS_STAGE_TICK_OFFSET if _resolved_phase_ids.size() >= MIDBOSS_PHASE_IDS.size() else 0)
 	output["stage_events"] = stage_output.events.duplicate(true)
 	for event_value in stage_output.events:
 		var event: Dictionary = event_value

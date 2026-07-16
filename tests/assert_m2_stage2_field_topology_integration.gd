@@ -479,7 +479,7 @@ func _assert_source_callbacks_and_gate_catchup() -> void:
 	_check(String(second_resolution.get("encounter_kind", "")) == "stage" and not second_resolution.has("stage_tick") and gate._consume_stage2_controller_output(second_resolution), "Final midboss resolution did not return to stage while withholding stage_tick.")
 	_check_equal(int(gate.stage_controller.get("stage2_field_tick", -1)), 750, "Active midboss advanced the frozen field clock.")
 	var resume: Dictionary = gate.stage2_encounter_controller.advance(Vector2(gate.player_x, gate.player_y))
-	_check(gate._consume_stage2_controller_output(resume), "Compressed post-midboss authored catch-up failed.")
+	_check(gate._consume_stage2_controller_output(resume), "Compressed post-midboss authored catch-up failed: %s" % String(gate.stage_controller.get("stage2_field_hard_error", "")))
 	_check_equal((resume.get("stage_events", []) as Array).map(func(event): return String(event.get("id", ""))), EVENT_IDS.slice(6, 12), "Compressed resume event order drifted.")
 	_check_equal(int(gate.stage_controller.get("stage2_field_tick", -1)), 1650, "Compressed resume did not consume exact authored intervals.")
 	_check_equal((gate.stage_controller.get("stage2_field_activated_event_ids", []) as Array).slice(0, 12), EVENT_IDS.slice(0, 12), "First twelve field activations were not exact and ordered.")
@@ -605,7 +605,14 @@ func _assert_event_entry_source_reconciliation() -> void:
 
 	var carryover: Node = _new_main("normal", 73034)
 	_check(_activate_direct_event(carryover, "s2_b04"), "b04-to-b05 carryover fixture activation failed.")
-	_check(carryover._stage2_begin_field_event(_stage_event(carryover, "s2_b05")), "b05 rejected its declared live b04 booth edges.")
+	# Exercise the production callback cadence before b05 entry. Jumping directly
+	# from 450 to 600 makes activation aggregate b04 construction and later update
+	# records that ordinary Main consumption commits on their authored ticks.
+	for field_tick in range(451, 600):
+		if not _advance_field_to(carryover, field_tick):
+			_free_main(carryover)
+			return
+	_check(carryover._stage2_begin_field_event(_stage_event(carryover, "s2_b05")), "b05 rejected its declared live b04 booth edges: %s" % String(carryover.stage_controller.get("stage2_field_hard_error", "")))
 	_check_equal(carryover.stage2_field_topology_runtime.telemetry_snapshot().get("active_source_ids", []), ["s2_b04_left_booth_edge", "s2_b04_right_booth_edge", "s2_b05_left_bead_seller", "s2_b05_right_bead_seller"], "b04-to-b05 declared carryover was not preserved exactly.")
 	_check_equal(_genuinely_live_main_sources(carryover), ["s2_b04_left_booth_edge", "s2_b04_right_booth_edge"], "b04 carryover Main flags changed before b05 materialization.")
 	_free_main(carryover)

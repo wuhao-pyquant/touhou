@@ -84,6 +84,11 @@ const STAGE2_FIELD_OUTPUT_ARRAYS := [
 	"warnings", "bullet_constructions", "bullet_updates", "bullet_removals",
 	"source_activations", "source_removals", "state_transitions", "score_route_callbacks", "telemetry",
 ]
+const STAGE2_FIELD_CONTROLLER_RECORD_KEYS := [
+	"stage2_field_warning_records", "stage2_field_source_activation_records",
+	"stage2_field_source_removals", "stage2_field_state_transitions",
+	"stage2_field_score_projections", "stage2_field_telemetry",
+]
 const GAME_MANAGER_STATE_FIELDS := [
 	"score", "graze", "shared_power", "bullet_type", "lives", "bombs",
 	"life_fragments", "bomb_fragments", "night_festival_seals", "current_stage",
@@ -2381,7 +2386,8 @@ func _stage2_controller_clock_evidence(output: Dictionary) -> Dictionary:
 	if controller_tick < 0 or controller_tick > Stage2FieldTopologyRuntime.MAX_STAGE_TICK:
 		return {"ok": false, "error": "Stage 2 controller stage-tick evidence is outside the supported range"}
 	var telemetry: Dictionary = stage2_encounter_controller.telemetry_snapshot() if stage2_encounter_controller != null else {}
-	var runtime_tick_value = (telemetry.get("stage_runtime", {}) as Dictionary).get("stage_tick")
+	var stage_runtime_telemetry: Dictionary = telemetry.get("stage_runtime", {})
+	var runtime_tick_value = stage_runtime_telemetry.get("stage_tick")
 	var live_tick_value = stage_controller.get("stage2_field_tick")
 	if typeof(live_tick_value) != TYPE_INT:
 		return {"ok": false, "error": "Stage 2 live field tick is malformed"}
@@ -2391,7 +2397,9 @@ func _stage2_controller_clock_evidence(output: Dictionary) -> Dictionary:
 			return {"ok": false, "error": "Stage 2 controller duplicated stage-tick evidence"}
 		if controller_tick != live_tick + 1:
 			return {"ok": false, "error": "Stage 2 controller skipped ordinary stage-tick evidence"}
-		if typeof(runtime_tick_value) != TYPE_INT or int(runtime_tick_value) != controller_tick + 1:
+		var completed_gate_ids: Array = stage_runtime_telemetry.get("completed_gate_ids", [])
+		var runtime_offset := Stage2EncounterController.POST_MIDBOSS_STAGE_TICK_OFFSET if "s2_b06" in completed_gate_ids else 0
+		if typeof(runtime_tick_value) != TYPE_INT or int(runtime_tick_value) != controller_tick - runtime_offset + 1:
 			return {"ok": false, "error": "Stage 2 controller stage-tick evidence contradicts its live runtime"}
 		return {"ok": true, "mode": "advance", "stage_tick": controller_tick}
 	var canonical_ticks := {}
@@ -2439,7 +2447,9 @@ func _stage2_controller_clock_evidence(output: Dictionary) -> Dictionary:
 		previous_tick = authored_tick
 	if previous_tick != controller_tick:
 		return {"ok": false, "error": "Stage 2 controller stage tick contradicts its final authored event tick"}
-	if typeof(runtime_tick_value) != TYPE_INT or int(runtime_tick_value) != controller_tick + 1:
+	var completed_gate_ids: Array = stage_runtime_telemetry.get("completed_gate_ids", [])
+	var runtime_offset := Stage2EncounterController.POST_MIDBOSS_STAGE_TICK_OFFSET if "s2_b06" in completed_gate_ids else 0
+	if typeof(runtime_tick_value) != TYPE_INT or int(runtime_tick_value) != controller_tick - runtime_offset + 1:
 		return {"ok": false, "error": "Stage 2 controller stage-tick evidence contradicts its live runtime"}
 	return {"ok": true, "mode": "events", "stage_tick": controller_tick}
 
@@ -2754,6 +2764,23 @@ func _stage2_remove_all_field_enemy_sources(authored_tick: int, reason: String) 
 		enemy.alive = false
 	return true
 
+func _stage2_create_field_candidate_controller() -> Dictionary:
+	var bindings_value = stage_controller.get("stage2_field_uid_to_slot")
+	if not (bindings_value is Dictionary):
+		return {}
+	# Field callbacks replace only the binding map, cursor/sequence scalars, and
+	# append-only evidence arrays. Existing evidence records are immutable, so a
+	# shallow array copy isolates append/pop without recursively cloning up to 512
+	# historical records on every fixed tick.
+	var candidate: Dictionary = stage_controller.duplicate(false)
+	candidate["stage2_field_uid_to_slot"] = (bindings_value as Dictionary).duplicate()
+	for record_key in STAGE2_FIELD_CONTROLLER_RECORD_KEYS:
+		var records_value = stage_controller.get(record_key)
+		if not (records_value is Array):
+			return {}
+		candidate[record_key] = (records_value as Array).duplicate()
+	return candidate
+
 func _stage2_field_callback(kind: String, stage_tick: int, payload: Dictionary = {}) -> bool:
 	if String(stage_controller.get("stage2_field_hard_error", "")) != "":
 		return false
@@ -2781,7 +2808,10 @@ func _stage2_field_callback(kind: String, stage_tick: int, payload: Dictionary =
 	if not candidate_world.trusted_copy_mutable_state_from(bullet_world):
 		_stage2_reject_field_callback("Stage 2 field callback could not copy live mutable BulletWorld state into scratch")
 		return false
-	var candidate_stage_controller: Dictionary = stage_controller.duplicate(true)
+	var candidate_stage_controller := _stage2_create_field_candidate_controller()
+	if candidate_stage_controller.is_empty():
+		_stage2_reject_field_callback("Stage 2 field callback could not isolate its mutable controller fields")
+		return false
 	var sequence := int(stage_controller.get("stage2_field_event_sequence", -1)) + 1
 	candidate_stage_controller["stage2_field_event_sequence"] = sequence
 	var output: Dictionary = {}
@@ -3197,30 +3227,24 @@ func _stage2_validate_field_candidate_aggregate(candidate_runtime: RefCounted, c
 		return false
 	if typeof(candidate_stage_controller.get("stage2_field_tick")) != TYPE_INT or int(candidate_stage_controller.stage2_field_tick) != expected_field_tick:
 		return false
-	var telemetry: Dictionary = candidate_runtime.telemetry_snapshot()
-	var callback_key_value = telemetry.get("last_callback_key")
-	if not (callback_key_value is Array) or (callback_key_value as Array).size() != 2:
-		return false
-	var callback_key: Array = callback_key_value
-	return typeof(callback_key[0]) == TYPE_INT and int(callback_key[0]) == expected_callback_tick and typeof(callback_key[1]) == TYPE_INT and int(callback_key[1]) == expected_sequence
+	return candidate_runtime.trusted_callback_cursor_matches(expected_callback_tick, expected_sequence)
 
 func _stage2_validate_field_bindings(candidate_runtime: RefCounted, candidate_world: RefCounted, candidate_stage_controller: Dictionary) -> bool:
 	if candidate_runtime == null or candidate_world == null or candidate_runtime.has_hard_error():
 		return false
-	var active_uids: Array = candidate_runtime.telemetry_snapshot().get("active_bullet_uids", [])
 	var bindings: Dictionary = candidate_stage_controller.get("stage2_field_uid_to_slot", {})
-	if active_uids.size() != bindings.size():
+	if candidate_runtime.trusted_active_bullet_count() != bindings.size():
 		return false
 	var candidate_pool: Array = candidate_world.pool
-	for uid_value in active_uids:
+	for uid_value in bindings.keys():
 		var uid := String(uid_value)
-		if not bindings.has(uid) or typeof(bindings[uid]) != TYPE_INT:
+		if typeof(uid_value) != TYPE_STRING or typeof(bindings[uid_value]) != TYPE_INT:
 			return false
-		var slot := int(bindings[uid])
+		var slot := int(bindings[uid_value])
 		if slot < 0 or slot >= candidate_pool.size():
 			return false
 		var bullet: Dictionary = candidate_pool[slot]
-		var runtime_bullet: Dictionary = candidate_runtime.bullet_state(uid)
+		var runtime_bullet: Dictionary = candidate_runtime.trusted_bullet_state_readonly(uid)
 		if not bool(bullet.get("active", false)) or not bool(bullet.get("stage2_field_owned", false)) or runtime_bullet.is_empty():
 			return false
 		for seam_field in STAGE2_FIELD_SEAM_FIELDS:

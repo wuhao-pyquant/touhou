@@ -211,13 +211,16 @@ func trusted_copy_mutable_state_from(source) -> bool:
 	_current_event_id = String(source._current_event_id)
 	_source_states = (source._source_states as Dictionary).duplicate(true)
 	_active_bullets = (source._active_bullets as Dictionary).duplicate(true)
-	_used_uids = (source._used_uids as Dictionary).duplicate(true)
-	_processed_callbacks = (source._processed_callbacks as Dictionary).duplicate(true)
-	_activated_events = (source._activated_events as Dictionary).duplicate(true)
-	_defeated_sources = (source._defeated_sources as Dictionary).duplicate(true)
-	_grazed_uids = (source._grazed_uids as Dictionary).duplicate(true)
-	_hard_state = (source._hard_state as Dictionary).duplicate(true)
-	_telemetry_counts = (source._telemetry_counts as Dictionary).duplicate(true)
+	# These ledgers contain primitive values only. Their dictionaries still need
+	# independent containers for candidate mutation, but recursive duplication
+	# allocates no additional isolation and creates fixed-tick variance.
+	_used_uids = (source._used_uids as Dictionary).duplicate()
+	_processed_callbacks = (source._processed_callbacks as Dictionary).duplicate()
+	_activated_events = (source._activated_events as Dictionary).duplicate()
+	_defeated_sources = (source._defeated_sources as Dictionary).duplicate()
+	_grazed_uids = (source._grazed_uids as Dictionary).duplicate()
+	_hard_state = (source._hard_state as Dictionary).duplicate()
+	_telemetry_counts = (source._telemetry_counts as Dictionary).duplicate()
 	return true
 
 func reset() -> bool:
@@ -311,6 +314,17 @@ func definition_for_spawn(spawn_id: String) -> Dictionary:
 
 func bullet_state(bullet_uid: String) -> Dictionary:
 	return (_active_bullets[bullet_uid] as Dictionary).duplicate(true) if _active_bullets.has(bullet_uid) else {}
+
+func trusted_active_bullet_count() -> int:
+	return _active_bullets.size()
+
+func trusted_bullet_state_readonly(bullet_uid: String) -> Dictionary:
+	# Main uses this only while validating an unpublished aggregate. Callers must
+	# not retain or mutate the returned internal record.
+	return _active_bullets[bullet_uid] if _active_bullets.has(bullet_uid) else {}
+
+func trusted_callback_cursor_matches(stage_tick: int, event_sequence: int) -> bool:
+	return _last_stage_tick == stage_tick and _last_event_sequence == event_sequence
 
 func make_bullet_uid(event_id: String, spawn_id: String, emitter_id: String, burst_index: int, shot_index: int) -> Dictionary:
 	for value in [_stage_run_uid, event_id, spawn_id, emitter_id]:
@@ -530,8 +544,8 @@ func telemetry_snapshot() -> Dictionary:
 		"used_uid_count": _used_uids.size(),
 		"grazed_bullet_uids": grazed_uids,
 		"defeated_source_ids": defeated,
-		"hard_state": _hard_state.duplicate(true),
-		"counts": _telemetry_counts.duplicate(true),
+		"hard_state": _hard_state.duplicate(),
+		"counts": _telemetry_counts.duplicate(),
 	}
 
 func capture_snapshot() -> Dictionary:

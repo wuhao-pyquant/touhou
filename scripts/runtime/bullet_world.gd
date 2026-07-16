@@ -84,24 +84,36 @@ func trusted_copy_mutable_state_from(source) -> bool:
 	if not is_trusted_copy_compatible_with(source) or _update_in_progress or bool(source._update_in_progress):
 		return false
 	var source_size: int = source.pool.size()
-	for source_bullet in source.pool:
-		if not (source_bullet is Dictionary):
+	if source_size > int(source.hard_capacity) or source._membership.size() != source_size:
+		return false
+	# Inactive slots carry no reusable state: claim_free_slot() replaces them with
+	# make_bullet_state() before publication. Copy only the sparse active set so a
+	# 12k-slot configured world does not turn every fixed tick into a full-pool
+	# traversal, while still deep-copying every mutable published bullet.
+	var copied_active_states := {}
+	for source_index_value in source.active_indices:
+		var source_index := int(source_index_value)
+		if source_index < 0 or source_index >= source_size or copied_active_states.has(source_index):
 			return false
+		var source_bullet: Variant = source.pool[source_index]
+		if not (source_bullet is Dictionary) or not bool((source_bullet as Dictionary).get("active", false)):
+			return false
+		copied_active_states[source_index] = (source_bullet as Dictionary).duplicate(true)
+	for source_index_value in source._next_active_indices:
+		var source_index := int(source_index_value)
+		if source_index < 0 or source_index >= source_size:
+			return false
+	for destination_index in active_indices:
+		if destination_index >= 0 and destination_index < pool.size():
+			pool[destination_index] = make_bullet_state()
 	if pool.size() < source_size:
 		for _index in range(pool.size(), source_size):
 			pool.append(make_bullet_state())
 	elif pool.size() > source_size:
 		pool.resize(source_size)
-	for bullet_index in range(source_size):
-		var destination_bullet: Dictionary = pool[bullet_index]
-		var source_bullet: Dictionary = source.pool[bullet_index]
-		if is_same(destination_bullet, source_bullet):
-			destination_bullet = make_bullet_state()
-		destination_bullet.clear()
-		for key in source_bullet.keys():
-			var value = source_bullet[key]
-			destination_bullet[key] = value.duplicate(true) if value is Array or value is Dictionary else value
-		pool[bullet_index] = destination_bullet
+	for source_index_value in source.active_indices:
+		var source_index := int(source_index_value)
+		pool[source_index] = copied_active_states[source_index]
 	active_indices.clear()
 	for bullet_index in source.active_indices:
 		active_indices.append(int(bullet_index))
