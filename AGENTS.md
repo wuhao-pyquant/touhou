@@ -24,7 +24,17 @@
 - 不得修改 ticket 允许路径之外的文件，也不得吸收、还原或提交主工作树的既有用户改动，尤其是 `audio/**/*.import`。
 - 公共运行时接口由 `core_simulation` 独占；并行内容 Agent 只能使用已冻结接口。
 
-## 4. 审查、测试与证据
+## 4. Git 主线与工作树生命周期
+
+- 本地 `master` 是唯一持续集成主线。除旧 session 的原地续跑外，所有新 ticket 的 `dependency_commit` 必须来自当时的 `master` HEAD；不得把 `codex/*` 里程碑分支长期当作第二主线。
+- 写 ticket 通过聚焦验收后，`release_lead` 必须立即把接受的候选提交 cherry-pick 到 `master`，不得等待 M8 或积累到下一里程碑。未通过的候选不得进入 `master`。
+- 候选进入 `master` 且续跑链关闭后，`release_lead` 必须在同一收尾回合调用 `tools/agents/finalize_agent_worktree.ps1`。该工具必须确认 worktree 干净、无活动 run，并且 ticket 提交与 `master` 补丁等价后，才能删除 worktree 和分支。
+- 仍有 patch-unique 提交的分支默认拒绝清理。只有已记录明确取代提交和取代理由、且取代提交已在 `master` 中时，才能以 superseded 方式关闭；不得用强制删除掩盖漏合并。
+- 失败 worktree 只在同一修复链仍可续跑时保留。链成功、明确 blocked 或被取代后，先保存 `.agent-runs` 证据，再由 `release_lead` 处置脏生成物并关闭，不得跨里程碑无限保留。
+- 里程碑完成门禁包括：readiness 提交已在 `master`、无该里程碑的活动 Agent、无已关闭 ticket 的残留 worktree/分支。`git worktree prune` 是本地机械收尾，不得另派 Agent。
+- 推送 `origin/master`、创建发布标签或发布包仍需用户明确要求或 M8 发布授权；本地主线合并不自动扩大为远程发布。
+
+## 5. 审查、测试与证据
 
 - Ticket 层只运行直接相关的最小测试；触及启动、autoload、主场景或真实运行接缝时才加一次烟雾检查。Milestone 合并后运行一次回归，Release 候选运行一次完整矩阵；性能全量基准只在 M2、M5、M8 执行。
 - GDScript/行为验证在隔离可写 worktree 中运行受控 Godot；文档、TOML、schema、路径任务和 Windows `read_only` Agent 不得启动 Godot。同一项目 Godot 验收串行，超时/崩溃时终止完整进程树。
@@ -34,7 +44,7 @@
 - 最终 capture ticket 只能写整理后的证据目录，禁止改源码、测试和工具；Normal/Hard 只在静态检查与小型 probe 全部通过后各捕获一次。`playtest_critic` 只读证据包；`deep_reviewer` 只读失败项、既有日志和最小 diff，不重新展开探索。
 - 不以文件存在、源码文本或精确弹数替代行为验证。解析错误、测试失败、超时、Godot 非零退出、C++ backtrace、`CrashHandlerException` 或 Windows 错误弹窗必须返回失败；历史绿灯不能代替本次证据。
 
-## 5. 项目基线
+## 6. 项目基线
 
 - Godot 4.7；内部游戏区域 720x960；Windows Release 目标稳定 60 FPS。
 - 1.0 仅包含 Normal/Hard、六关故事、关卡/符卡练习、回放和成绩记录。Easy、Lunatic、Extra Stage 延后。

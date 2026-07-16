@@ -46,3 +46,24 @@ tools/agents/invoke_agent.ps1 `
 - 失败的只读 worktree 也会保留以支持原地续跑；成功的只读 worktree 按默认清理策略移除。
 
 原实施 Agent 的第一轮修复仍失败时，由 `release_lead` 调用 `deep_reviewer` 做只读裁决。若裁决允许下一轮修复，继续 resume 原 Agent，而不是把实现任务改派给 reviewer。
+
+## 写任务合并后的收尾
+
+写 ticket 的候选提交被 `release_lead` cherry-pick 到本地 `master` 后，先执行无副作用预检：
+
+```powershell
+tools/agents/finalize_agent_worktree.ps1 `
+  -Worktree .worktrees/<ticket-agent-run> `
+  -TargetBranch master
+```
+
+只有报告为 `eligible`，并确认没有活动续跑链后，才实际关闭：
+
+```powershell
+tools/agents/finalize_agent_worktree.ps1 `
+  -Worktree .worktrees/<ticket-agent-run> `
+  -TargetBranch master `
+  -Apply
+```
+
+finalizer 默认拒绝脏 worktree、活动 run、非 `codex/*` 分支和仍含 patch-unique 提交的分支。旧实现确实被 `master` 中的新提交取代时，`release_lead` 必须同时提供 `-SupersededBy` 与 `-SupersededReason`，不能用强制删除替代漏合并检查。

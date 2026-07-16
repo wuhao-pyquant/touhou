@@ -21,6 +21,16 @@
 - 常态最多两个无冲突写 Agent，硬上限三个；共享公共运行时所有权时串行。每次运行从 rollout/bridge 核对实际 model 与 effort。
 - 新 ticket 使用 profile 默认等级；失败后才按原 profile 原地升级。实现票最多两次定向 edit-test；capture/盲评/深审票为零次编辑。外部 Agent 运行期间每 2–5 分钟发送一次主对话心跳。
 
+### Git 主线和 ticket 生命周期
+
+- 从 M2 收尾晋升开始，本地 `master` 是唯一绿色集成主线。旧 run 仅可在快照中的原 session/worktree/branch 续跑；所有新 M3–M8 ticket 必须以当时的 `master` HEAD 为 `dependency_commit`。
+- `release_lead` 在写 ticket 聚焦验收和必要审查通过后立即提交候选并 cherry-pick 到 `master`。里程碑分支不承担长期集成职责，也不等待 M8 才一次性进入 `master`。
+- 接受的候选进入 `master` 后，在同一个 release-lead 收尾回合运行 `tools/agents/finalize_agent_worktree.ps1`。默认先做无副作用预检，确认补丁等价、工作树干净且无活动 session 后，再使用 `-Apply` 删除 worktree 和 ticket 分支。
+- patch-unique 分支不能按“已经合并”清理。确属旧实现被替换时，必须同时记录已位于 `master` 的 `SupersededBy` 提交与具体理由；finalizer 机械验证后才能关闭。
+- 失败 worktree 的保留期限等于修复链生命周期，不等于项目生命周期。成功、blocked 或 superseded 关闭后只保留 `.agent-runs` 与正式证据，不保留临时分支、失败生成物或 detached 审查工作树。
+- 每个里程碑的最后一次机械门禁检查 `master` 已包含 readiness 更新，并且该里程碑没有已关闭的 Agent worktree/branch；这一检查不调用 Agent、不追加回归测试。
+- 本地进入 `master` 与远程发布分离。只有用户明确要求或 M8 发布授权时才推送 `origin/master`、创建 Windows 1.0 标签或发布包。
+
 ## 2. M2 立即进入收口模式
 
 本节状态基于主分支 `d1b2fc3`。后续只更新 readiness 中三个闭环的状态，不再派 gap-review Agent。
