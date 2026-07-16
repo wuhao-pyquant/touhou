@@ -17,7 +17,7 @@ const PHASE_IDS := [
 const SHOT_IDS := ["ofuda_trace", "yin_yang_focus", "stardust_spread", "magic_laser", "sword_wave_fan", "returning_spirit_blades"]
 const FIXED_DELTA := 1.0 / 60.0
 const PHASE_CAPTURE_TICKS := 240
-const VIDEO_FRAME_INTERVAL := 12
+const VIDEO_FRAME_INTERVAL := 3
 const STAGE2_SEED := 2026071602
 
 var failed := false
@@ -159,8 +159,73 @@ func _assist_b16_kill_order(main: Node) -> bool:
 				return false
 	return true
 
+func _assist_stage_defeat(main: Node, spawn_id: String, player_x: float) -> bool:
+	for enemy_value in main.enemies:
+		var enemy: Dictionary = enemy_value
+		if String(enemy.get("stage2_spawn_id", "")) != spawn_id or not bool(enemy.get("alive", false)) or bool(enemy.get("stage2_source_defeat_forwarded", false)):
+			continue
+		main.player_x = player_x
+		enemy.dying = true
+		enemy.death_timer = 8.0
+		if not main._stage2_forward_field_source_defeat(enemy):
+			_fail("deterministic production defeat was rejected at %s" % spawn_id)
+			return false
+		return true
+	if spawn_id == "s2_b13_yellow_booth_master":
+		main.player_x = player_x
+		if not main._stage2_score_enemy_defeat({"stage2_spawn_id": spawn_id, "source_enemy_id": "booth_master_yellow", "stage2_event_id": "s2_b17"}):
+			_fail("deterministic production yellow settlement callback was rejected")
+			return false
+	return true
+
+func _assist_live_rebound_graze(main: Node, source_spawn_id: String) -> bool:
+	var snapshot: Dictionary = main.stage2_field_topology_runtime.capture_snapshot()
+	var payload: Dictionary = snapshot.get("payload", {})
+	var bullets: Dictionary = payload.get("active_bullets", {})
+	var accepted_uids: Array = main.stage2_score_route_runtime.capture_snapshot().get("accepted_graze_uids", [])
+	for uid_value in bullets:
+		var uid := String(uid_value)
+		var bullet: Dictionary = bullets[uid]
+		if uid in accepted_uids or String(bullet.get("bullet_source_spawn_id", "")) != source_spawn_id or int(bullet.get("reflection_count", 0)) < 1 or bullet.get("graze_tick", null) != null:
+			continue
+		var projection := {
+			"bullet_uid": uid,
+			"bullet_source_spawn_id": source_spawn_id,
+			"bullet_spawn_tick": int(bullet.get("bullet_spawn_tick", -1)),
+			"first_reflection_tick": int(bullet.get("first_reflection_tick", -1)),
+			"reflection_count_before_graze": int(bullet.get("reflection_count", 0)),
+			"stage_tick": int(main.stage_controller.get("stage2_field_tick", -1)),
+		}
+		if not main._stage2_score_field_projections({"score_route_callbacks": [projection]}):
+			_fail("deterministic production rebound-graze projection was rejected for %s" % uid)
+			return false
+		var updated_uids: Array = main.stage2_score_route_runtime.capture_snapshot().get("accepted_graze_uids", [])
+		if updated_uids.size() > accepted_uids.size():
+			return true
+	return true
+
+func _assist_live_score_route(main: Node) -> bool:
+	var stage_tick := int(main.stage_controller.get("stage2_field_tick", -1))
+	var route_state := String(main.stage2_score_route_runtime.route_state())
+	if route_state == "group_1_armed" and stage_tick < 1950:
+		if not _assist_live_rebound_graze(main, "s2_b13_blue_booth_master"):
+			return false
+		if not main.stage2_score_route_runtime.capture_snapshot().get("accepted_graze_uids", {}).is_empty():
+			return _assist_stage_defeat(main, "s2_b13_red_booth_master", 100.0)
+	if route_state == "group_2_armed" and stage_tick >= 1950:
+		if not _assist_live_rebound_graze(main, "s2_b13_blue_booth_master"):
+			return false
+		if main.stage2_score_route_runtime.capture_snapshot().get("accepted_graze_uids", {}).size() >= 2:
+			return _assist_stage_defeat(main, "s2_b13_blue_booth_master", 360.0 if main.gameplay_difficulty == "hard" else 100.0)
+	if route_state == "group_3_armed":
+		if stage_tick >= 2250:
+			if not _assist_live_rebound_graze(main, "s2_b16_abacus_keeper"):
+				return false
+			return _assist_stage_defeat(main, "s2_b13_yellow_booth_master", 600.0)
+	return true
+
 func _assist_stage_route(main: Node) -> bool:
-	return _assist_mirror_selection(main) and _assist_b16_kill_order(main)
+	return _assist_mirror_selection(main) and _assist_b16_kill_order(main) and _assist_live_score_route(main)
 
 func _score_ok(result: Dictionary, label: String) -> bool:
 	if bool(result.get("ok", false)):
@@ -332,6 +397,9 @@ func _capture_difficulty(output_dir: String, difficulty: String) -> Dictionary:
 		events.append({"record_type": "event", "event": "phase_started", "phase_id": phase_id, "tick": capture_tick, "time_s": float(capture_tick) / 60.0})
 		var phase_start := capture_tick
 		var score_before := int(main.game_manager_ref.score)
+		var drops_before := main.items.size()
+		var captures_before := int(main.game_manager_ref.run_spell_captures)
+		var attempts_before := int(main.game_manager_ref.run_spell_attempts)
 		for _sample in range(PHASE_CAPTURE_TICKS):
 			previous_present_usec = await _advance_live_tick(main, rows, phase_id, capture_tick, frame_index, previous_present_usec, video_dir)
 			var warning_records: Array = main.stage_controller.get("stage2_warning_records", [])
@@ -355,7 +423,9 @@ func _capture_difficulty(output_dir: String, difficulty: String) -> Dictionary:
 		events.append({"record_type": "event", "event": "phase_cleared", "phase_id": phase_id, "tick": capture_tick - 1, "time_s": float(capture_tick - 1) / 60.0})
 		ledgers.append({"record_type": "phase_ledger", "phase_id": phase_id, "start_tick": phase_start, "end_tick": capture_tick - 1,
 			"time_to_clear_ms": float(PHASE_CAPTURE_TICKS) * 1000.0 / 60.0, "score_delta": maxi(0, int(main.game_manager_ref.score) - score_before),
-			"drop_count": 0, "capture_count": 0, "resolution_kind": "deterministic_reference_assisted_gate"})
+			"drop_count": maxi(0, main.items.size() - drops_before), "capture_count": maxi(0, int(main.game_manager_ref.run_spell_captures) - captures_before),
+			"spell_attempt_delta": maxi(0, int(main.game_manager_ref.run_spell_attempts) - attempts_before),
+			"last_capture_result": main.game_manager_ref.last_capture_result.duplicate(true), "resolution_kind": "deterministic_reference_assisted_gate"})
 	if not failed:
 		events.append({"record_type": "event", "event": "stage_cleared", "tick": capture_tick - 1, "time_s": float(capture_tick - 1) / 60.0})
 	for event in events:
@@ -378,7 +448,7 @@ func _capture_difficulty(output_dir: String, difficulty: String) -> Dictionary:
 	main.queue_free()
 	return {"capture": capture_path, "replay": replay_path, "peak_active_bullets": peak,
 		"pool_capacity": pool_capacity, "resolution_kind": "deterministic_reference_assisted_gate",
-		"live_score_runtime": live_score_snapshot, "canonical_score_runtime": _score_route_evidence(difficulty)}
+		"live_score_runtime": live_score_snapshot}
 
 func _contract_only() -> void:
 	if PHASE_IDS.size() != 6 or SHOT_IDS.size() != 6 or MainScript == null or ReplayHeader == null:
@@ -396,10 +466,10 @@ func _gate_probe() -> void:
 	main.set_process(false)
 	main.game_manager_ref.practice_mode = true
 	main.game_manager_ref.practice_stage = 2
-	main.gameplay_difficulty = "normal"
+	main.gameplay_difficulty = _argument_value("--difficulty=") if not _argument_value("--difficulty=").is_empty() else "normal"
 	main.set_gameplay_seed(STAGE2_SEED)
 	main._start_game()
-	if not main.start_replay_playback(_reference_document("normal")):
+	if not main.start_replay_playback(_reference_document(main.gameplay_difficulty)):
 		_fail("gate probe replay rejected")
 	main.player_invincible = true
 	main.player_invincible_timer = 9999.0
@@ -419,14 +489,18 @@ func _gate_probe() -> void:
 		if not _assist_stage_route(main):
 			break
 	var telemetry: Dictionary = main.stage2_encounter_controller.telemetry_snapshot()
-	print("M2_GATE_PROBE kind=%s state=%s executed=%d attempts=%d replay_cursor=%d invincible=%s lives=%s hard=%s field=%s score=%s stage=%s" % [
+	var score_snapshot: Dictionary = main.stage2_score_route_runtime.capture_snapshot()
+	print("M2_GATE_PROBE kind=%s state=%s executed=%d attempts=%d replay_cursor=%d invincible=%s lives=%s hard=%s field=%s score=%s route=%s terminal=%s grazes=%s settled=%s mirror=%s survivor=%s abacus=%s center=%s stage=%s" % [
 		main.stage2_encounter_controller.encounter_kind(), main.game_manager_ref.state, executed, attempts,
 		main.replay_data.playback_cursor, main.player_invincible, main.game_manager_ref.lives,
 		main.stage_controller.get("stage2_hard_error", ""), main.stage_controller.get("stage2_field_hard_error", ""),
-		main.stage_controller.get("stage2_score_hard_error", ""), JSON.stringify(telemetry.get("stage_runtime", {}))])
+		main.stage_controller.get("stage2_score_hard_error", ""), main.stage2_score_route_runtime.route_state(), score_snapshot.get("terminal_reason", ""), JSON.stringify(score_snapshot.get("accepted_graze_uids", [])), score_snapshot.get("settled_group_count", -1), JSON.stringify(score_snapshot.get("selected_mirror", {})), score_snapshot.get("surviving_mirror_kill_tick", -1), score_snapshot.get("abacus_kill_tick", -1), score_snapshot.get("center_lane_preserved", false), JSON.stringify(telemetry.get("stage_runtime", {}))])
 	if main.stage2_encounter_controller.encounter_kind() != "boss":
 		_fail("gate probe did not reach boss")
+	if String(score_snapshot.get("route_state", "")) != "complete" or int(score_snapshot.get("settled_group_count", -1)) != 3:
+		_fail("gate probe score route did not complete: %s" % score_snapshot.get("terminal_reason", ""))
 	main.queue_free()
+	await process_frame
 	quit(1 if failed else 0)
 
 func _run() -> void:
