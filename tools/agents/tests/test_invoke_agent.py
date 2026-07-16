@@ -194,6 +194,7 @@ model_reasoning_effort = "high"
                     {"kind": "python_unittest", "modules": ["tools.agents.tests.test_invoke_agent"]},
                     {"kind": "godot_test", "godot_path": "bin/godot.exe", "project_path": "project with spaces", "arguments": ["--headless"], "timeout_seconds": 5},
                 ], "output_requirements": [], "max_repair_rounds": 0,
+                "max_edit_test_loops": 0,
             }
             BRIDGE._validate_ticket(ticket, repo=repo)
             godot = ticket["execution_checks"][1]
@@ -201,6 +202,13 @@ model_reasoning_effort = "high"
             self.assertIn("project with spaces", godot["project_path"])
             with self.assertRaisesRegex(BRIDGE.BridgeError, "acceptance_commands"):
                 BRIDGE._validate_ticket({**ticket, "acceptance_commands": ["Write-Host unsafe"]}, repo=repo)
+            with self.assertRaisesRegex(BRIDGE.BridgeError, "max_edit_test_loops"):
+                BRIDGE._validate_ticket(
+                    {key: value for key, value in ticket.items() if key != "max_edit_test_loops"},
+                    repo=repo,
+                )
+            with self.assertRaisesRegex(BRIDGE.BridgeError, "max_edit_test_loops"):
+                BRIDGE._validate_ticket({**ticket, "max_edit_test_loops": 3}, repo=repo)
 
     def test_bom_ticket_is_read_as_v2_json(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

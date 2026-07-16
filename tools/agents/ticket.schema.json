@@ -13,7 +13,8 @@
     "execution_contract_version",
     "execution_checks",
     "output_requirements",
-    "max_repair_rounds"
+    "max_repair_rounds",
+    "max_edit_test_loops"
   ],
   "properties": {
     "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
@@ -60,6 +61,7 @@
     },
     "output_requirements": {"type": "array", "items": {"type": "string"}},
     "max_repair_rounds": {"type": "integer", "minimum": 0, "maximum": 2},
+    "max_edit_test_loops": {"type": "integer", "minimum": 0, "maximum": 2},
     "context": {"type": "array", "items": {"type": "string"}},
     "require_runtime_identity": {"type": "boolean", "default": true},
     "keep_worktree": {"type": "boolean", "default": false}

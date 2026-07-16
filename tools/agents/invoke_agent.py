@@ -42,6 +42,10 @@ V2_TICKET_REQUIRED = {
     **{key: value for key, value in TICKET_REQUIRED.items() if key != "acceptance_commands"},
     "execution_contract_version": int,
     "execution_checks": list,
+    "max_edit_test_loops": int,
+}
+V2_LEGACY_TICKET_REQUIRED = {
+    key: value for key, value in V2_TICKET_REQUIRED.items() if key != "max_edit_test_loops"
 }
 REPORT_REQUIRED = {
     "status": str,
@@ -303,7 +307,8 @@ def _validate_ticket(
 ) -> None:
     version = ticket.get("execution_contract_version")
     if version == 2:
-        _validate_required(ticket, V2_TICKET_REQUIRED, "ticket")
+        required = V2_LEGACY_TICKET_REQUIRED if legacy_snapshot else V2_TICKET_REQUIRED
+        _validate_required(ticket, required, "ticket")
         if "acceptance_commands" in ticket:
             raise BridgeError("version-2 tickets reject arbitrary acceptance_commands")
         _validate_execution_checks(ticket, repo)
@@ -319,6 +324,9 @@ def _validate_ticket(
         raise BridgeError("write tickets require at least one allowed path")
     if not 0 <= ticket["max_repair_rounds"] <= 2:
         raise BridgeError("ticket.max_repair_rounds must be between 0 and 2")
+    max_edit_test_loops = ticket.get("max_edit_test_loops", 2)
+    if not isinstance(max_edit_test_loops, int) or not 0 <= max_edit_test_loops <= 2:
+        raise BridgeError("ticket.max_edit_test_loops must be between 0 and 2")
     for key in (
         "allowed_paths",
         "forbidden_paths",
@@ -566,6 +574,7 @@ def _session_identity(
 
 def _build_prompt(profile: dict[str, Any], ticket: dict[str, Any]) -> str:
     ticket_json = json.dumps(ticket, ensure_ascii=False, indent=2, sort_keys=True)
+    max_edit_test_loops = int(ticket.get("max_edit_test_loops", 2))
     return f"""<agent_profile name={json.dumps(profile['name'])}>
 {profile['developer_instructions'].strip()}
 </agent_profile>
@@ -576,6 +585,9 @@ Do not spawn subagents. Do not create or rewrite a project plan. Do not commit,
 merge, rebase, push, remove worktrees, or touch paths outside allowed_paths.
 Treat forbidden_paths as immutable even if they are already dirty elsewhere.
 Run only the focused acceptance commands required by this ticket.
+You may perform at most {max_edit_test_loops} directed edit-then-focused-test loop(s).
+If the ticket is still failing at that limit, stop and report the blocker; do not
+continue open-ended exploration or debugging. A zero limit forbids source edits.
 Your final response must be a single JSON object matching report.schema.json.
 </execution_contract>
 
