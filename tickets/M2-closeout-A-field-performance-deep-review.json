@@ -1,0 +1,50 @@
+{
+  "id": "M2-closeout-A-field-performance-deep-review",
+  "objective": "Perform the single deep-review escalation permitted after the same Stage 2 field callback max-latency defect remained reproducible following core_simulation repair round 1. Review commit 66f3a8b and the exact evidence only. The implementation Agent produced three consecutive guarded passes with max_us 12136, 14422, and 12306, but release-lead validation on the merged main worktree produced p50_us=7046 p95_us=10667 max_us=16967 and failed the frozen max_us < 16667 assertion. All functional assertions pass. Decide whether one second, minimal production optimization by the original core_simulation session is authorized, and identify the narrowest remaining allocation/copy hotspot that can remove variance without weakening the threshold, changing semantics, or redesigning the topology contract. Do not launch Godot, edit files, create a new plan, or request broad regression.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "scripts/main.gd",
+    "scripts/runtime/bullet_world.gd",
+    "scripts/runtime/stage2_encounter_controller.gd",
+    "scripts/runtime/stage2_field_topology_runtime.gd",
+    "tests/assert_m2_stage2_field_topology_integration.gd",
+    ".agent-runs/20260716T051241Z-M2-closeout-A-field-integration-repair-core_simulation-r1-76d40115/**"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    "content/**",
+    "docs/**",
+    "evidence/**",
+    "autoload/**",
+    "scripts/replay/**",
+    "scripts/ui/**",
+    "tools/**",
+    ".codex/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md"
+  ],
+  "dependency_commit": "66f3a8b",
+  "acceptance_commands": [
+    "git diff --check",
+    "git status --porcelain -uall",
+    "git show --stat --oneline 66f3a8b",
+    "git diff 66f3a8b^ 66f3a8b -- scripts/main.gd scripts/runtime/bullet_world.gd scripts/runtime/stage2_encounter_controller.gd scripts/runtime/stage2_field_topology_runtime.gd tests/assert_m2_stage2_field_topology_integration.gd"
+  ],
+  "output_requirements": [
+    "Return exactly one gate: GATE: REPAIR with a bounded second-repair instruction, or GATE: REJECT with a precise reason",
+    "If REPAIR, identify at most two production hotspots and the invariants that must remain unchanged",
+    "Cite the release-lead failing log C:/Users/e/AppData/Local/Temp/godot-test-0c86eb661389435fb37e3bb0cd1cb248.log and the three passing repair logs",
+    "Report actual model, reasoning effort, CLI version, zero changed paths, and zero Godot launches",
+    "Do not propose additional review, testing, planning, or milestone work"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "Passing repair logs: C:/Users/e/AppData/Local/Temp/godot-test-7f84c0e8c9124cd7ba775bf6ee036252.log, C:/Users/e/AppData/Local/Temp/godot-test-546d32cd1b1941749dcfaafca992aa29.log, C:/Users/e/AppData/Local/Temp/godot-test-e69128237b9e4974a1873494b88c10f5.log.",
+    "The current max-latency assertion is intentionally strict and must not be changed to p95, averaged, warmed up, retried-until-green, or given a larger ceiling.",
+    "This is the one deep review allowed by execution-convergence v3.1 after repeated failure. No other reviewer should be created."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
