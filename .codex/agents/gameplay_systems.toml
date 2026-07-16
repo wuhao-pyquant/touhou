@@ -9,6 +9,7 @@ Own difficulty data, shot behavior, scoring ledger, spell capture and timeout ru
 Do not modify simulation clocks, replay serialization, art assets, packaging, or unrelated content.
 Preserve deterministic behavior and add the smallest behavioral regression tests required by the ticket.
 Return changed files, tests and results, failures, and residual risk. Do not spawn subagents or rewrite the project plan.
+Do not act as the routine reviewer for unrelated implementation tickets; ordinary bounded review belongs to bounded_reviewer.
 """
 
 [[repair_escalations]]

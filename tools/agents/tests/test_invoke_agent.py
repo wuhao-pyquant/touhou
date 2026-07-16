@@ -20,12 +20,13 @@ class InvokeAgentTests(unittest.TestCase):
     def test_all_project_profiles_are_bridge_compatible(self) -> None:
         repo_root = Path(__file__).parents[3]
         profiles = sorted((repo_root / ".codex" / "agents").glob("*.toml"))
-        self.assertGreaterEqual(len(profiles), 13)
+        self.assertGreaterEqual(len(profiles), 14)
         loaded = [BRIDGE._load_profile(path) for path in profiles]
         loaded_names = [profile["name"] for profile in loaded]
         self.assertEqual(len(loaded_names), len(set(loaded_names)))
+        no_escalation_profiles = {"bounded_reviewer", "deep_reviewer"}
         for profile in loaded:
-            if profile["name"] == "deep_reviewer":
+            if profile["name"] in no_escalation_profiles:
                 self.assertEqual(profile.get("repair_escalations", []), [])
             else:
                 self.assertGreaterEqual(len(profile.get("repair_escalations", [])), 1)
@@ -70,6 +71,61 @@ model_reasoning_effort = "high"
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(BRIDGE.BridgeError, "contiguous"):
+                BRIDGE._load_profile(profile_path)
+
+    def test_profile_allows_repeated_terminal_max_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            profile_path = Path(temporary) / "worker.toml"
+            profile_path.write_text(
+                """name = "worker"
+description = "probe"
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"
+sandbox_mode = "workspace-write"
+developer_instructions = "bounded"
+
+[[repair_escalations]]
+round = 1
+model = "gpt-5.6-sol"
+model_reasoning_effort = "max"
+
+[[repair_escalations]]
+round = 2
+model = "gpt-5.6-sol"
+model_reasoning_effort = "max"
+""",
+                encoding="utf-8",
+            )
+            profile = BRIDGE._load_profile(profile_path)
+            self.assertEqual(
+                BRIDGE._profile_identity(profile, 2),
+                {"model": "gpt-5.6-sol", "model_reasoning_effort": "max"},
+            )
+
+    def test_profile_rejects_repeated_nonmax_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            profile_path = Path(temporary) / "worker.toml"
+            profile_path.write_text(
+                """name = "worker"
+description = "probe"
+model = "gpt-5.6-terra"
+model_reasoning_effort = "high"
+sandbox_mode = "workspace-write"
+developer_instructions = "bounded"
+
+[[repair_escalations]]
+round = 1
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+
+[[repair_escalations]]
+round = 2
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+""",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(BRIDGE.BridgeError, "retaining the max"):
                 BRIDGE._load_profile(profile_path)
 
     def test_repair_round_must_be_next_and_within_ticket_limit(self) -> None:
@@ -292,7 +348,7 @@ model_reasoning_effort = "high"
                 escalation_level=2,
                 deep_review_authorized=True,
             ),
-            {"model": "gpt-5.6-sol", "model_reasoning_effort": "xhigh"},
+            {"model": "gpt-5.6-sol", "model_reasoning_effort": "max"},
         )
 
     def test_validation_retry_options_are_one_time_directed_continuation(self) -> None:
@@ -361,14 +417,14 @@ model_reasoning_effort = "high"
             "review_failure_run_id": "deep-review",
             "resume_head_commit": "a" * 40,
             "requested_model": "gpt-5.6-sol",
-            "requested_model_reasoning_effort": "xhigh",
+            "requested_model_reasoning_effort": "max",
         }
         summary = {
             "status": "completed",
             "runtime": {
                 "verified": True,
                 "model": "gpt-5.6-sol",
-                "model_reasoning_effort": "xhigh",
+                "model_reasoning_effort": "max",
             },
             "policy_violations": [],
             "report_problems": [],
@@ -399,7 +455,10 @@ model_reasoning_effort = "high"
                 root_run_id="root",
             )
         self.assertEqual(authorization["repair_round"], 2)
-        self.assertEqual(authorization["requested_identity"], default_before)
+        self.assertEqual(
+            authorization["requested_identity"],
+            {"model": "gpt-5.6-sol", "model_reasoning_effort": "max"},
+        )
         self.assertEqual(BRIDGE._profile_identity(profile, 0), default_before)
 
     def test_validation_retry_rejects_a_second_real_lineage_retry(self) -> None:
@@ -413,14 +472,14 @@ model_reasoning_effort = "high"
             "review_failure_run_id": "deep-review",
             "resume_head_commit": "a" * 40,
             "requested_model": "gpt-5.6-sol",
-            "requested_model_reasoning_effort": "xhigh",
+            "requested_model_reasoning_effort": "max",
         }
         summary = {
             "status": "completed",
             "runtime": {
                 "verified": True,
                 "model": "gpt-5.6-sol",
-                "model_reasoning_effort": "xhigh",
+                "model_reasoning_effort": "max",
             },
             "policy_violations": [],
             "report_problems": [],

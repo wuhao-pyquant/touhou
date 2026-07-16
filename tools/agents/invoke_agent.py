@@ -140,10 +140,14 @@ def _load_profile(path: Path) -> dict[str, Any]:
             escalation["model"],
             escalation["model_reasoning_effort"],
         )
-        if current_identity == previous_identity:
+        if (
+            current_identity == previous_identity
+            and current_identity[1] != "max"
+        ):
             raise BridgeError(
                 f"profile {path.name} repair escalation round {index} must change "
-                "the model or reasoning effort"
+                "the model or reasoning effort unless it is retaining the max "
+                "reasoning ceiling"
             )
         previous_identity = current_identity
     return value

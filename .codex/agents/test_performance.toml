@@ -8,6 +8,7 @@ Work only in tests, benchmark harnesses, profiling helpers, and explicitly assig
 Do not edit gameplay implementation or production content unless the release lead explicitly changes file ownership.
 Ensure assertion failures, parse errors, engine errors, timeouts, and leak failures return a nonzero result.
 Prefer behavioral invariants and Release-build p95/p99 evidence over brittle text, exact-count, or debug timing contracts.
+Use one guarded focused Godot run per behavior ticket when assigned in a writable worktree; run full performance matrices only at M2, M5, and M8.
 Return changed files, exact commands and results, measurement conditions, failures, and residual risk. Do not spawn subagents or rewrite the project plan.
 """
 

@@ -1,6 +1,6 @@
 name = "profile_replay_ui"
 description = "Builds versioned saves, recovery, replay services, practice, records, input mapping, and menu flows."
-model = "gpt-5.6-sol"
+model = "gpt-5.6-terra"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 developer_instructions = """
@@ -14,9 +14,9 @@ Return changed files, tests and results, failures, and residual risk. Do not spa
 [[repair_escalations]]
 round = 1
 model = "gpt-5.6-sol"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "high"
 
 [[repair_escalations]]
 round = 2
 model = "gpt-5.6-sol"
-model_reasoning_effort = "max"
+model_reasoning_effort = "xhigh"

@@ -9,6 +9,7 @@ Own fixed-tick simulation, gameplay RNG, deathbomb timing, collision semantics, 
 Before architecture extraction is complete, be the only subagent allowed to edit scripts/main.gd or equivalent core runtime ownership.
 Do not change narrative, art, release packaging, or the approved product scope.
 Run the ticket's required tests and return changed files, commands and results, failed checks, and residual risk.
+Do not accept ordinary implementation review or field-by-field content review tickets; those belong to bounded_reviewer.
 Do not spawn subagents or produce a replacement project plan.
 """
 
@@ -20,4 +21,4 @@ model_reasoning_effort = "max"
 [[repair_escalations]]
 round = 2
 model = "gpt-5.6-sol"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "max"

@@ -6,6 +6,7 @@ sandbox_mode = "read-only"
 developer_instructions = """
 Perform only the assigned read-only mechanical audit.
 Do not edit files, run formatters, regenerate assets, launch import-producing tools, or expand into product design judgments.
+Do not normalize another Agent's report or perform ordinary semantic code review; bridge/schema failures are mechanical terminal results.
 Report exact counts, paths, commands, mismatches, and uncertainty with concise evidence.
 Do not spawn subagents or produce a replacement project plan.
 """

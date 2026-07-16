@@ -12,6 +12,10 @@
 - 首次失败后的修复必须用 `-ResumeRun <run-id> -EscalationLevel <n>` 续跑原 Agent 的同一 session、worktree、branch 和 ticket；不得创建替代 Agent 或新工作树。
 - 修复轮次只能使用该 Agent profile 的 `[[repair_escalations]]` 连续梯度，不能临时从命令行任意指定模型。
 - 修复模型仅覆盖当前续跑 turn，不改写 profile 顶层默认值；ticket 成功后续跑链关闭，下一张新 ticket 自动恢复顶层默认模型与推理强度。
+- 剩余 M2 与 M3–M8 必须遵守 `docs/production/execution-convergence-v3.1.md`；它只修订执行方式，不改变 v3 产品范围。
+- 最多同时运行三个独立 CLI Agent。默认只开两个无文件冲突的写任务，第三个槽位按需用于证据或审查，不为追求并发而制造任务。
+- `core_simulation`、`danmaku_director` 和 `deep_reviewer` 不得承担普通字段修补或常规静态复审；普通代码审查使用 `bounded_reviewer`，机械核验使用 `mechanical_auditor`。
+- 每次 CLI 调度都必须从运行证据核对实际 model 与 model_reasoning_effort；与 profile 请求不一致时立即失败，不能用 TOML 声明冒充实际生效值。
 
 ## 所有权与用户改动
 
@@ -22,10 +26,14 @@
 
 ## 实施与验证
 
-- Ticket 层只运行直接相关测试和一个烟雾检查。
+- Ticket 层只运行最小的直接相关测试；只有改动启动、autoload、主场景或真实运行接缝时才额外运行一个烟雾检查。
 - Milestone 合并后运行一次里程碑回归；Release 候选只运行一次完整矩阵。
 - 不以文件存在、源码文本匹配或精确弹数替代行为验证。
-- 同一缺陷由原实施 Agent 在原 session/worktree 中修复一次；该续跑仍失败才交给 `deep_reviewer`。若审查后允许第二轮修复，仍由原 Agent 继续，不切换 Agent 身份。
+- 行为或 GDScript 写任务应在隔离可写 worktree 内先执行一次受控的聚焦 Godot 验证；文档、TOML、纯 schema 或路径任务不得因此启动 Godot。
+- 默认不做独立 Agent 审查。只有公共运行时接口、确定性/回放、存档迁移、得分资源语义、发布边界，或里程碑创意/发布门禁才触发审查。
+- 每个闭环最多一条独立审查链：首次审查后由原实施 Agent 在原 session/worktree 中修复一次，审查者只复核增量与新证据；同一行为缺陷仍失败才交给 `deep_reviewer`。若深审允许第二轮修复，仍由原 Agent 继续。
+- 禁止为普通提交创建泛化 gap review、逐提交静态审查或报告 normalization Agent。路径、schema、scope 和报告格式由桥接器或脚本机械拒绝。
+- 低风险且范围清晰的改动，在聚焦测试通过、路径边界和 diff 检查通过后，可由 `release_lead` 直接合并，不得为了满足流程数量额外派审查 Agent。
 - 性能全量基准只在 M2、M5、M8 执行。
 - 所有测试失败、解析错误、超时和引擎错误都必须返回非零退出码。
 - Windows 上的 `mode = read_only` Agent 不得启动 Godot；Godot 会写入项目缓存，并已在 Codex 只读沙箱中复现启动期 `signal 11` 原生崩溃。只读审核只检查代码、数据和既有证据，实际 Godot 验收由隔离的可写 worktree 或 `release_lead` 执行。

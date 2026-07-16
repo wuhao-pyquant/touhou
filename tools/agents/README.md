@@ -34,6 +34,7 @@ tools/agents/invoke_agent.ps1 `
 - 只接受状态为 `failed` 或具备可恢复 session 的 `bridge_error` 运行。
 - Agent、ticket 快照、Codex thread、worktree、branch 和基准提交必须与父运行一致。
 - `EscalationLevel` 必须等于父运行轮次加一，且同时受 ticket 的 `max_repair_rounds` 与同一 profile 的 `[[repair_escalations]]` 限制。
+- 相邻轮次通常必须改变模型或推理强度；达到 `max` 后允许下一轮继续保持同一 `max` 身份，避免在没有更高等级时错误降级。
 - `TransportRetry` 只接受无报告、无改动、无策略或身份违规的传输失败；它保持原模型、推理强度和 `repair_round`，不能与升档或修复指令组合。
 - `codex exec resume` 的模型覆盖只作用于当前 repair turn；profile 顶层默认值不会被修改。
 - 成功运行关闭该续跑链，不能再次 resume；下一张新 ticket 从 profile 顶层默认模型与推理强度开始。

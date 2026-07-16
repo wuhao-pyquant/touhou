@@ -1,6 +1,7 @@
 {
   "plan": "Hyakki Night Festival Incident Windows 1.0 Maturation v3",
   "plan_status": "frozen",
+  "execution_policy": "docs/production/execution-convergence-v3.1.md",
   "current_milestone": "M2",
   "milestones": {
     "B0": "completed",
@@ -14,7 +15,40 @@
     "M7": "pending",
     "M8": "pending"
   },
+  "active_closeout": {
+    "milestone": "M2",
+    "mode": "closeout",
+    "status": "pending",
+    "allow_new_gap_reviews": false,
+    "workstreams": {
+      "gameplay_runtime": {
+        "status": "pending",
+        "owners": [
+          "gameplay_systems",
+          "core_simulation_if_public_runtime_changes"
+        ],
+        "review": "one_triggered_review_chain"
+      },
+      "practice_replay": {
+        "status": "pending",
+        "owners": [
+          "profile_replay_ui"
+        ],
+        "review": "one_triggered_review_chain"
+      },
+      "runtime_evidence": {
+        "status": "pending",
+        "owners": [
+          "test_performance",
+          "qa_operator_if_manual_capture_is_required"
+        ],
+        "review": "one_complete_evidence_playtest"
+      }
+    }
+  },
   "notes": [
+    "Execution convergence v3.1 changes dispatch, review, and test frequency only; the v3 product scope and milestone order remain frozen.",
+    "M2 is in closeout mode with three workstreams and no further generic gap reviews.",
     "Named-model agents must use the independent Codex CLI bridge.",
     "Existing audio import changes belong to the user and are outside B0 scope.",
     "B0 verified actual Sol/high, Terra/medium, and Luna/medium runtime identities on Codex CLI 0.144.4.",
