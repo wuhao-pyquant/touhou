@@ -14,6 +14,11 @@ func _check(condition: bool, message: String) -> void:
 func _check_equal(actual: Variant, expected: Variant, message: String) -> void:
 	_check(actual == expected, "%s Expected %s, got %s" % [message, expected, actual])
 
+func _sorted_keys(values: Dictionary) -> Array:
+	var keys: Array = values.keys()
+	keys.sort()
+	return keys
+
 func _phase_fixture() -> Dictionary:
 	return {
 		"schema_version": 1,
@@ -438,6 +443,67 @@ func _assert_pattern_rejections() -> void:
 	var unbound_runtime := DanmakuPatternRuntime.new()
 	_check(not unbound_runtime.configure(unbound_schema_data, "normal", 1), "Runtime accepted data outside the bound phase schema.")
 
+func _assert_cached_signature_contracts() -> void:
+	var phase := _phase_fixture()
+	var pattern := DanmakuPatternRuntime.new()
+	_check(pattern.configure(phase, "normal", 8080), "Cached-signature pattern fixture failed to configure.")
+	var pattern_telemetry: Dictionary = pattern.telemetry_snapshot()
+	var expected_phase_signature: String = pattern._canonical_digest("danmaku-phase-schema-v1", phase)
+	var expected_topology_signature: String = pattern._topology_signature(phase.difficulties.normal)
+	_check_equal(String(pattern_telemetry.phase_signature), expected_phase_signature, "Cached phase signature bytes changed from the canonical contract.")
+	_check_equal(String(pattern_telemetry.topology_signature), expected_topology_signature, "Cached topology signature bytes changed from the configure-time profile.")
+	_check_equal(_sorted_keys(pattern_telemetry), _sorted_keys({
+		"version": 0, "configured": 0, "phase_id": 0, "phase_signature": 0,
+		"difficulty": 0, "topology_id": 0, "topology_signature": 0, "run_seed": 0,
+		"phase_seed": 0, "tick": 0, "loop_index": 0, "loop_tick": 0,
+		"rng_draw_count": 0, "locked_angles": 0, "emitter_counts": 0, "totals": 0,
+		"last_tick_counts": 0, "hard_error": 0,
+	}), "Pattern telemetry snapshot schema changed while caching signatures.")
+	_check_equal(_sorted_keys(pattern.capture_snapshot()), _sorted_keys({
+		"version": 0, "phase_id": 0, "phase_signature": 0, "difficulty": 0,
+		"topology_id": 0, "run_seed": 0, "phase_seed": 0, "tick": 0, "rng": 0,
+		"locked_angles": 0, "emitter_counts": 0, "warning_count": 0, "event_count": 0,
+		"boss_movement_count": 0, "bullet_count": 0, "last_tick_counts": 0,
+	}), "Pattern capture snapshot schema changed while caching signatures.")
+	phase.id = "mutated_after_configure"
+	phase.difficulties.normal.topology_id = "mutated_after_configure"
+	_check_equal(String(pattern.telemetry_snapshot().phase_signature), expected_phase_signature, "Pattern signature retained an alias to caller configuration.")
+	_check_equal(String(pattern.telemetry_snapshot().topology_signature), expected_topology_signature, "Topology signature retained an alias to caller configuration.")
+	var exported_pattern_telemetry := pattern.telemetry_snapshot()
+	var telemetry_baseline := exported_pattern_telemetry.duplicate(true)
+	exported_pattern_telemetry.locked_angles["forged"] = 1.0
+	exported_pattern_telemetry.emitter_counts.clear()
+	exported_pattern_telemetry.totals.bullet_specs = 999
+	_check_equal(pattern.telemetry_snapshot(), telemetry_baseline, "Pattern telemetry exposed aliases into mutable live state.")
+	var pre_increment_output: Dictionary = pattern.advance(Vector2.ZERO)
+	_check_equal(int(pre_increment_output.tick), 0, "Pattern runtime output no longer publishes the pre-increment tick.")
+	_check_equal(pattern.current_tick(), 1, "Pattern scalar tick accessor did not publish the post-advance tick.")
+	_check_equal(int(pattern.telemetry_snapshot().tick), pattern.current_tick(), "Pattern scalar tick accessor diverged from telemetry.")
+
+	var stage := _stage_fixture()
+	var encounter := StageEncounterRuntime.new()
+	_check(encounter.configure(stage), "Cached-signature stage fixture failed to configure.")
+	var encounter_telemetry: Dictionary = encounter.telemetry_snapshot()
+	var expected_event_signature: String = encounter._canonical_digest("stage-encounter-events-schema-v1", {
+		"stage_id": String(stage.stage_id),
+		"events": stage.events,
+	})
+	_check_equal(String(encounter_telemetry.event_signature), expected_event_signature, "Cached event signature bytes changed from the canonical contract.")
+	_check_equal(_sorted_keys(encounter_telemetry), _sorted_keys({
+		"version": 0, "configured": 0, "stage_id": 0, "event_signature": 0,
+		"stage_tick": 0, "next_event_index": 0, "emitted_event_ids": 0, "paused": 0,
+		"active_gate": 0, "encounter_role": 0, "phase_cursor": 0, "event_count": 0,
+		"completed_gate_ids": 0, "hard_error": 0,
+	}), "Stage telemetry snapshot schema changed while caching its signature.")
+	_check_equal(_sorted_keys(encounter.capture_snapshot()), _sorted_keys({
+		"version": 0, "stage_id": 0, "event_signature": 0, "stage_tick": 0,
+		"next_event_index": 0, "emitted_event_ids": 0, "paused": 0, "active_gate": 0,
+		"encounter_role": 0, "phase_cursor": 0, "event_count": 0, "completed_gate_ids": 0,
+	}), "Stage capture snapshot schema changed while caching its signature.")
+	stage.stage_id = "mutated_after_configure"
+	stage.events[0].payload.route = "mutated_after_configure"
+	_check_equal(String(encounter.telemetry_snapshot().event_signature), expected_event_signature, "Event signature retained an alias to caller configuration.")
+
 func _stage_fixture() -> Dictionary:
 	var events: Array = []
 	for index in range(18):
@@ -625,6 +691,7 @@ func _run() -> void:
 	_assert_explicit_aim_lock()
 	_assert_pattern_snapshot_and_seek()
 	_assert_pattern_rejections()
+	_assert_cached_signature_contracts()
 	_assert_stage_runtime()
 	_assert_stage_rejections()
 	if failed:

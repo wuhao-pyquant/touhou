@@ -76,6 +76,8 @@ var _rng = DeterministicRng.new(1)
 var _configured := false
 var _validation_errors: Array[String] = []
 var _hard_error := ""
+var _phase_signature_cache := ""
+var _topology_signature_cache := ""
 var _locked_angles: Dictionary = {}
 var _emitter_counts: Dictionary = {}
 var _warning_count := 0
@@ -95,6 +97,8 @@ func configure(phase: Dictionary, difficulty: String, run_seed: int) -> bool:
 	_difficulty = difficulty.to_lower()
 	_run_seed = run_seed
 	_configured = false
+	_phase_signature_cache = ""
+	_topology_signature_cache = ""
 	_validation_errors = _validate_phase(phase)
 	if _difficulty not in ["normal", "hard"]:
 		_validation_errors.append("difficulty must be normal or hard")
@@ -103,11 +107,15 @@ func configure(phase: Dictionary, difficulty: String, run_seed: int) -> bool:
 		return false
 	_phase = phase.duplicate(true)
 	_profile = _phase.difficulties[_difficulty].duplicate(true)
+	_phase_signature_cache = _canonical_digest("danmaku-phase-schema-v1", _phase)
+	_topology_signature_cache = _topology_signature(_profile)
 	if _phase_signature().is_empty():
 		_validation_errors.append("canonical phase signature generation failed")
 		_hard_error = "configuration rejected: canonical phase signature generation failed"
 		_phase = {}
 		_profile = {}
+		_phase_signature_cache = ""
+		_topology_signature_cache = ""
 		return false
 	_phase_seed = derive_phase_local_seed(_run_seed, String(_phase.deterministic_random_stream_id))
 	if _phase_seed == 0:
@@ -282,6 +290,9 @@ func restore_snapshot(snapshot: Dictionary) -> bool:
 	_hard_error = ""
 	return true
 
+func current_tick() -> int:
+	return _tick
+
 func telemetry_snapshot() -> Dictionary:
 	return {
 		"version": SNAPSHOT_VERSION,
@@ -290,7 +301,7 @@ func telemetry_snapshot() -> Dictionary:
 		"phase_signature": _phase_signature(),
 		"difficulty": _difficulty,
 		"topology_id": String(_profile.get("topology_id", "")),
-		"topology_signature": _topology_signature(_profile),
+		"topology_signature": _topology_signature_cache,
 		"run_seed": _run_seed,
 		"phase_seed": _phase_seed,
 		"tick": _tick,
@@ -802,9 +813,7 @@ func _topology_shape_signature(profile: Dictionary) -> String:
 	return "|".join(parts)
 
 func _phase_signature() -> String:
-	if _phase.is_empty():
-		return ""
-	return _canonical_digest("danmaku-phase-schema-v1", _phase)
+	return _phase_signature_cache
 
 func _canonical_digest(contract: String, value: Variant) -> String:
 	var encoded := _canonical_encode(value)

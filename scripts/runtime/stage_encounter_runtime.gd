@@ -25,12 +25,14 @@ var _completed_gate_ids: Array[String] = []
 var _configured := false
 var _validation_errors: Array[String] = []
 var _hard_error := ""
+var _event_signature_cache := ""
 
 func configure(stage_spec: Dictionary) -> bool:
 	_stage_spec = {}
 	_events = []
 	_stage_id = ""
 	_configured = false
+	_event_signature_cache = ""
 	_validation_errors = _validate_stage_spec(stage_spec)
 	if not _validation_errors.is_empty():
 		_hard_error = "configuration rejected: %s" % "; ".join(PackedStringArray(_validation_errors))
@@ -38,12 +40,17 @@ func configure(stage_spec: Dictionary) -> bool:
 	_stage_spec = stage_spec.duplicate(true)
 	_stage_id = _stage_identity(_stage_spec)
 	_events = _stage_spec.events.duplicate(true)
+	_event_signature_cache = _canonical_digest("stage-encounter-events-schema-v1", {
+		"stage_id": _stage_id,
+		"events": _events,
+	})
 	if _event_signature().is_empty():
 		_validation_errors.append("canonical event signature generation failed")
 		_hard_error = "configuration rejected: canonical event signature generation failed"
 		_stage_spec = {}
 		_events = []
 		_stage_id = ""
+		_event_signature_cache = ""
 		return false
 	_configured = true
 	return reset()
@@ -418,12 +425,7 @@ func _completion_token_for_seek(completion_tokens: Dictionary) -> String:
 	return ""
 
 func _event_signature() -> String:
-	if _events.is_empty():
-		return ""
-	return _canonical_digest("stage-encounter-events-schema-v1", {
-		"stage_id": _stage_id,
-		"events": _events,
-	})
+	return _event_signature_cache
 
 func _canonical_digest(contract: String, value: Variant) -> String:
 	var encoded := _canonical_encode(value)

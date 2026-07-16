@@ -155,7 +155,7 @@ func advance(player_position: Vector2 = Vector2.ZERO) -> Dictionary:
 		if _phase_runtime == null:
 			return _hard_fail("active encounter has no phase runtime")
 		var definition := active_phase_definition()
-		var phase_tick := int(_phase_runtime.telemetry_snapshot().get("tick", 0))
+		var phase_tick := active_phase_tick()
 		if phase_tick >= int(definition.get("timeout_ticks", -1)):
 			return _resolve_active_phase_internal("timeout")
 		var phase_output: Dictionary = _phase_runtime.advance(player_position)
@@ -206,7 +206,7 @@ func active_phase_index() -> int:
 	return _active_phase_index
 
 func active_phase_tick() -> int:
-	return int(_phase_runtime.telemetry_snapshot().get("tick", 0)) if _phase_runtime != null else 0
+	return _phase_runtime.current_tick() if _phase_runtime != null else 0
 
 func active_phase_spec() -> Dictionary:
 	return _phase_specs[_active_phase_index].duplicate(true) if _active_phase_index >= 0 and _active_phase_index < _phase_specs.size() else {}
@@ -335,6 +335,8 @@ func restore_snapshot(snapshot: Dictionary) -> bool:
 	return true
 
 func telemetry_snapshot() -> Dictionary:
+	var stage_telemetry: Dictionary = _stage_runtime.telemetry_snapshot() if _stage_runtime != null else {}
+	var phase_telemetry: Dictionary = _phase_runtime.telemetry_snapshot() if _phase_runtime != null else {}
 	var telemetry := {
 		"version": SNAPSHOT_VERSION,
 		"configured": _configured,
@@ -345,11 +347,11 @@ func telemetry_snapshot() -> Dictionary:
 		"encounter_kind": _encounter_kind,
 		"active_phase_id": active_phase_id(),
 		"active_phase_index": _active_phase_index,
-		"active_phase_tick": active_phase_tick(),
+		"active_phase_tick": int(phase_telemetry.get("tick", 0)),
 		"active_phase_definition": active_phase_definition(),
 		"resolved_phase_ids": _resolved_phase_ids.duplicate(),
-		"stage_runtime": _stage_runtime.telemetry_snapshot() if _stage_runtime != null else {},
-		"phase_runtime": _phase_runtime.telemetry_snapshot() if _phase_runtime != null else {},
+		"stage_runtime": stage_telemetry,
+		"phase_runtime": phase_telemetry,
 		"hard_error": _hard_error,
 	}
 	if _phase_practice:

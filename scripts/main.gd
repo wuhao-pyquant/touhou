@@ -2563,14 +2563,15 @@ func _update_stage2_main_flow(delta: float) -> void:
 	if not bool(output.get("ok", false)):
 		_stage2_fail_closed(String(output.get("error", stage2_encounter_controller.last_error())))
 		return
-	if not _consume_stage2_controller_output(output):
-		return
 	var telemetry: Dictionary = stage2_encounter_controller.telemetry_snapshot()
+	if not _consume_stage2_controller_output(output, telemetry):
+		return
 	stage_timer = float(telemetry.get("stage_runtime", {}).get("stage_tick", stage_timer))
-	if stage2_encounter_controller.encounter_kind() == "complete":
+	var encounter_kind := String(telemetry.get("encounter_kind", ""))
+	if encounter_kind == "complete":
 		_finish_stage2_after_boss()
 		return
-	var encounter_active: bool = stage2_encounter_controller.encounter_kind() in ["midboss", "boss"]
+	var encounter_active: bool = encounter_kind in ["midboss", "boss"]
 	if encounter_active and not boss_alive:
 		_sync_stage2_phase_boss()
 	_update_player(delta)
@@ -2579,9 +2580,10 @@ func _update_stage2_main_flow(delta: float) -> void:
 	if encounter_active:
 		boss.anim = float(boss.get("anim", 0.0)) + 1.0
 		boss.sway = float(boss.get("sway", 0.0)) + 1.0
-		boss.card_shot = float(stage2_encounter_controller.active_phase_tick())
-		var definition: Dictionary = stage2_encounter_controller.active_phase_definition()
-		boss.card_timer = float(maxi(0, int(definition.get("timeout_ticks", 0)) - stage2_encounter_controller.active_phase_tick()))
+		var phase_tick := int(telemetry.get("active_phase_tick", 0))
+		boss.card_shot = float(phase_tick)
+		var definition: Dictionary = telemetry.get("active_phase_definition", {})
+		boss.card_timer = float(maxi(0, int(definition.get("timeout_ticks", 0)) - phase_tick))
 	else:
 		_update_enemies(delta)
 	_update_items(delta)
@@ -2598,7 +2600,7 @@ func _update_stage2_main_flow(delta: float) -> void:
 			_finish_stage2_after_boss()
 	_resolve_stage2_player_hit()
 
-func _stage2_controller_clock_evidence(output: Dictionary) -> Dictionary:
+func _stage2_controller_clock_evidence(output: Dictionary, controller_telemetry: Dictionary = {}) -> Dictionary:
 	var stage_events_value = output.get("stage_events", [])
 	if not (stage_events_value is Array):
 		return {"ok": false, "error": "Stage 2 controller stage-events evidence is malformed"}
@@ -2613,7 +2615,9 @@ func _stage2_controller_clock_evidence(output: Dictionary) -> Dictionary:
 	var controller_tick := int(output.stage_tick)
 	if controller_tick < 0 or controller_tick > Stage2FieldTopologyRuntime.MAX_STAGE_TICK:
 		return {"ok": false, "error": "Stage 2 controller stage-tick evidence is outside the supported range"}
-	var telemetry: Dictionary = stage2_encounter_controller.telemetry_snapshot() if stage2_encounter_controller != null else {}
+	var telemetry: Dictionary = controller_telemetry
+	if telemetry.is_empty() and stage2_encounter_controller != null:
+		telemetry = stage2_encounter_controller.telemetry_snapshot()
 	var stage_runtime_telemetry: Dictionary = telemetry.get("stage_runtime", {})
 	var runtime_tick_value = stage_runtime_telemetry.get("stage_tick")
 	var live_tick_value = stage_controller.get("stage2_field_tick")
@@ -2681,8 +2685,8 @@ func _stage2_controller_clock_evidence(output: Dictionary) -> Dictionary:
 		return {"ok": false, "error": "Stage 2 controller stage-tick evidence contradicts its live runtime"}
 	return {"ok": true, "mode": "events", "stage_tick": controller_tick}
 
-func _consume_stage2_controller_output(output: Dictionary) -> bool:
-	var clock_evidence := _stage2_controller_clock_evidence(output)
+func _consume_stage2_controller_output(output: Dictionary, controller_telemetry: Dictionary = {}) -> bool:
+	var clock_evidence := _stage2_controller_clock_evidence(output, controller_telemetry)
 	if not bool(clock_evidence.get("ok", false)):
 		_stage2_reject_field_callback(String(clock_evidence.get("error", "Stage 2 controller clock evidence was rejected")))
 		return false

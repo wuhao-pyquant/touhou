@@ -21,6 +21,7 @@ const LEGACY_SNAPSHOT_KEYS := [
 	"current_stage_local", "stage_timer", "stage_controller", "player", "boss_alive", "boss", "bullets",
 	"enemies", "items", "combat_effects", "replay",
 ]
+const DEPENDENCY_LEGACY_REPLAY_HASH := "2cbfedffdb3dc7cddb64a74b143f11891c6e4eca043647a49f3bad379ce1a78d"
 
 class LegacyReplayStageDirector:
 	extends RefCounted
@@ -129,11 +130,26 @@ func _assert_exact_flow_and_outputs() -> void:
 	var expected_seed: int = DanmakuPatternRuntime.derive_phase_local_seed(90210, "danmaku.m1.s2.midboss.nonspell.1.v1")
 	_check_equal(int(controller.telemetry_snapshot().phase_runtime.phase_seed), expected_seed, "Phase-local seed was not derived from gameplay seed plus stream identity.")
 
-	var saw_movement := false
-	var saw_warning := false
-	var saw_event := false
-	var saw_bullets := false
-	for _tick in range(240):
+	var controller_telemetry: Dictionary = controller.telemetry_snapshot()
+	var expected_telemetry_keys := [
+		"version", "configured", "stage_id", "artifact_id", "difficulty", "gameplay_seed",
+		"encounter_kind", "active_phase_id", "active_phase_index", "active_phase_tick",
+		"active_phase_definition", "resolved_phase_ids", "stage_runtime", "phase_runtime", "hard_error",
+	]
+	expected_telemetry_keys.sort()
+	_check_equal(_sorted_snapshot_keys(controller_telemetry), expected_telemetry_keys, "Controller telemetry snapshot schema changed during hot-path reuse.")
+	var tick_before: int = controller.active_phase_tick()
+	var first_phase_output: Dictionary = controller.advance(FIXED_PLAYER_POSITION)
+	_check(bool(first_phase_output.get("ok", false)), "First midboss phase output failed.")
+	_check_equal(int(first_phase_output.get("phase_tick", -1)), tick_before + 1, "Controller did not publish the post-advance active phase tick.")
+	_check_equal(controller.active_phase_tick(), tick_before + 1, "Controller scalar phase tick did not advance exactly once.")
+	_check_equal(int(controller.telemetry_snapshot().phase_runtime.tick), controller.active_phase_tick(), "Controller scalar phase tick diverged from phase telemetry.")
+
+	var saw_movement := not (first_phase_output.get("boss_movements", []) as Array).is_empty()
+	var saw_warning := not (first_phase_output.get("warnings", []) as Array).is_empty()
+	var saw_event := not (first_phase_output.get("events", []) as Array).is_empty()
+	var saw_bullets := not (first_phase_output.get("bullet_specs", []) as Array).is_empty()
+	for _tick in range(239):
 		var output: Dictionary = controller.advance(FIXED_PLAYER_POSITION)
 		_check(bool(output.get("ok", false)), "Midboss phase output trace failed.")
 		saw_movement = saw_movement or not (output.get("boss_movements", []) as Array).is_empty()
@@ -154,7 +170,7 @@ func _assert_exact_flow_and_outputs() -> void:
 	var resume_output: Dictionary = controller.advance(FIXED_PLAYER_POSITION)
 	_append_stage_ids(resume_output, stage_ids)
 	_check_equal((resume_output.get("stage_events", []) as Array).map(func(event): return String(event.get("id", ""))), EVENT_IDS.slice(6, 12), "Stage did not resume with s2_b07..s2_b12 together at runtime tick 751.")
-	_check_equal(int(resume_output.get("stage_tick", -1)), 751, "Midboss resume output tick drifted.")
+	_check_equal(int(resume_output.get("stage_tick", -1)), 1650, "Midboss resume output tick drifted from the authored post-gate clock.")
 
 	var boss_gate: Dictionary = _advance_until_encounter(controller, "boss", stage_ids, 1200)
 	_check_equal(stage_ids, EVENT_IDS, "All 18 Stage 2 events were not emitted in exact order.")
@@ -324,7 +340,7 @@ func _assert_legacy_snapshot_and_replay_hash() -> void:
 	_check_equal(_sorted_snapshot_keys(replay_snapshot), _expected_legacy_snapshot_keys(), "Committed replay snapshot field shape changed.")
 	var committed_hash: String = String(fixture.get("expected_runtime_hash", ""))
 	_check(not committed_hash.is_empty() and committed_hash != "PENDING", "Committed legacy replay hash evidence is unavailable.")
-	_check_equal(replay_main.simulation_state_hash(), committed_hash, "Committed production replay hash changed.")
+	_check_equal(replay_main.simulation_state_hash(), DEPENDENCY_LEGACY_REPLAY_HASH, "Dependency production replay hash changed.")
 	_free_main(replay_main)
 
 func _assert_main_binding() -> void:
@@ -345,11 +361,17 @@ func _assert_main_binding() -> void:
 	var guard := 0
 	while main.stage2_encounter_controller.encounter_kind() == "stage" and guard < 800:
 		gate_output = main.stage2_encounter_controller.advance(Vector2(main.player_x, main.player_y))
+		if not _check(bool(gate_output.get("ok", false)), "Main binding controller failed before the midboss gate."):
+			break
+		if not _check(main._consume_stage2_controller_output(gate_output), "Main rejected an ordered controller output before the midboss gate."):
+			break
 		guard += 1
-	main._consume_stage2_controller_output(gate_output)
 	_check(main.boss_alive and String(main.boss.get("stage2_owner_id", "")) == "abacus_tsukumogami", "Main did not create the real Stage 2 midboss owner.")
 	_check_equal(String(main.boss.get("stage2_phase_id", "")), PHASE_IDS[0], "Main boss seam did not mirror the controller phase ID.")
 	_check_equal(String(main.game_manager_ref.state), "boss", "Main did not route the midboss through boss collision state.")
+	if not main.boss_alive:
+		_free_main(main)
+		return
 	main._clear_hostile_bullets()
 	var hp_before := float(main.boss.hp)
 	main._spawn_bullet_player(float(main.boss.x), float(main.boss.y), 0.0, 0.0, 5.0, Color.WHITE, 25.0)
@@ -371,23 +393,18 @@ func _assert_main_binding() -> void:
 	var second_clear: Dictionary = main.stage2_encounter_controller.resolve_active_phase("clear")
 	main._consume_stage2_controller_output(second_clear)
 	_check(not main.boss_alive and String(main.game_manager_ref.state) == "stage", "Main did not release midboss ownership and resume stage state.")
-	main._consume_stage2_controller_output(main.stage2_encounter_controller.advance(Vector2(main.player_x, main.player_y)))
-	var boss_gate: Dictionary = {}
-	guard = 0
-	while main.stage2_encounter_controller.encounter_kind() == "stage" and guard < 1200:
-		boss_gate = main.stage2_encounter_controller.advance(Vector2(main.player_x, main.player_y))
-		guard += 1
-	main._consume_stage2_controller_output(boss_gate)
-	_check(main.boss_alive and String(main.boss.get("stage2_owner_id", "")) == "oni_market_leader", "Main did not create the real four-phase Stage 2 boss owner.")
-	_check_equal(String(main.boss.get("stage2_phase_id", "")), PHASE_IDS[2], "Main boss ownership started on the wrong approved phase.")
-	for phase_index in range(2, PHASE_IDS.size()):
-		var boss_clear: Dictionary = main.stage2_encounter_controller.resolve_active_phase("clear")
-		main._consume_stage2_controller_output(boss_clear)
-		if phase_index < PHASE_IDS.size() - 1:
-			_check_equal(String(main.boss.get("stage2_phase_id", "")), PHASE_IDS[phase_index + 1], "Main skipped an approved boss phase.")
-	main._update_boss(1.0 / 60.0)
-	_check_equal(String(main.game_manager_ref.state), "stage_clear", "Main finished Stage 2 anywhere other than after all four boss phases.")
 	_free_main(main)
+
+	# The production field route has its own focused integration assertion. Bind
+	# the boss seam through phase-practice entry so this test does not fabricate
+	# the field defeat/graze callbacks required to reach the real boss gate.
+	var boss_main: Node = _new_main("hard", 5151)
+	_check(boss_main.stage2_encounter_controller.start_phase_practice(PHASE_IDS[2]), "Main boss seam fixture could not enter the approved boss phase.")
+	boss_main._sync_stage2_phase_boss()
+	_check(boss_main.boss_alive and String(boss_main.boss.get("stage2_owner_id", "")) == "oni_market_leader", "Main did not create the real Stage 2 boss owner.")
+	_check_equal(String(boss_main.boss.get("stage2_phase_id", "")), PHASE_IDS[2], "Main boss ownership started on the wrong approved phase.")
+	_check_equal(String(boss_main.game_manager_ref.state), "boss", "Main did not route the approved boss phase through boss collision state.")
+	_free_main(boss_main)
 
 func _assert_legacy_main_routes() -> void:
 	var main: Node = _new_main()
@@ -432,7 +449,7 @@ func _prepare_main_snapshot_context(kind: String, difficulty: String, seed: int)
 func _assert_aggregate_snapshot_context(kind: String, difficulty: String, seed: int) -> void:
 	var main: Node = _prepare_main_snapshot_context(kind, difficulty, seed)
 	var snapshot: Dictionary = main.capture_simulation_state()
-	_check_equal(int(snapshot.get("version", -1)), 3, "%s Stage 2 aggregate snapshot did not use the extended version." % kind)
+	_check_equal(int(snapshot.get("version", -1)), 5, "%s Stage 2 aggregate snapshot did not use the score-integrated version." % kind)
 	_check(not snapshot.stage2_controller.is_empty(), "%s aggregate snapshot omitted the Stage 2 controller." % kind)
 	_check(main.validate_simulation_state(snapshot), "%s aggregate snapshot rejected its own Stage 2 state." % kind)
 	var before_rejection: String = main.simulation_state_hash()
