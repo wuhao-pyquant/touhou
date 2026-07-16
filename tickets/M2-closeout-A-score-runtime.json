@@ -1,0 +1,61 @@
+{
+  "id": "M2-closeout-A-score-runtime",
+  "objective": "Complete the engine-neutral score-route part of M2 closeout stream A from current main 2375192. Use candidate 7e21cf0017395e33f05a71ae5045c0998e3cf314 as an input, not as an approved merge: port its already-accepted contract projection, callback ordering, immutable bullet identity, teaching isolation, aliases and settlement semantics, then fix exactly the two final-review blockers. B1: snapshots produced after a contract-valid target-before-graze ordering for group 1 or group 2 must validate, atomically restore and continue deterministically without pretending the target latch is untouched. B2: terminal precommit provenance must equal the latest exact causal component tuple; consistently rewriting both mirrored precommit copies to a later invented tuple must be rejected. Preserve fail-closed recursive contract matching and the approved Normal/Hard route behavior. Add or update only the focused runtime assertion, including target-before-graze round trips for groups 1 and 2 and a consistent two-copy forged-precommit rejection. Run the focused assertion once through the guarded writable-worktree Godot runner before reporting. Do not integrate Main in this ticket; that is the serial A2 ownership seam after this candidate is merged.",
+  "mode": "write",
+  "allowed_paths": [
+    "scripts/runtime/stage2_score_route_runtime.gd",
+    "tests/assert_m2_stage2_score_route_runtime.gd"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "project.godot",
+    "autoload/**",
+    "content/**",
+    "docs/**",
+    "evidence/**",
+    "scenes/**",
+    "scripts/main.gd",
+    "scripts/content/**",
+    "scripts/data/**",
+    "scripts/replay/**",
+    "scripts/ui/**",
+    "scripts/runtime/bullet_world.gd",
+    "scripts/runtime/gameplay_score_system.gd",
+    "scripts/runtime/item_reward_system.gd",
+    "scripts/runtime/stage2_encounter_controller.gd",
+    "tests/assert_m0_*.gd",
+    "tests/assert_m1_*.gd",
+    "tests/assert_m2_stage2_main_flow.gd",
+    "tools/**"
+  ],
+  "dependency_commit": "23751926a241def98d31bc60e2fb54dc1800c24c",
+  "acceptance_commands": [
+    "git diff --check",
+    "$changed=@(git status --porcelain -uall|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $allowed=@('scripts/runtime/stage2_score_route_runtime.gd','tests/assert_m2_stage2_score_route_runtime.gd'); $outside=@($changed|Where-Object{$_-notin$allowed}); if($outside.Count-ne0-or$changed.Count-ne2){throw \"Unexpected or missing paths: $($changed-join',')\"}; Write-Host 'M2_CLOSEOUT_A_SCORE_SCOPE=pass'",
+    "$hits=@(rg -n 'Time\\.|randomize\\(|randf\\(|randi\\(|AudioServer|AudioStreamPlayer|main\\.gd' scripts/runtime/stage2_score_route_runtime.gd tests/assert_m2_stage2_score_route_runtime.gd); if($LASTEXITCODE-gt1){throw 'Static scan failed'}; if($hits.Count-ne0){$hits|Out-Host;throw 'Forbidden nondeterministic or Main dependency found'}; Write-Host 'M2_CLOSEOUT_A_SCORE_STATIC=pass'",
+    "$godot=(Get-Command Godot_v4.7-stable_win64_console.exe -ErrorAction Stop).Source; & tools/testing/invoke_godot_test.ps1 -GodotPath $godot -ProjectPath (Get-Location).Path -GodotArgumentJson '[\"--script\",\"res://tests/assert_m2_stage2_score_route_runtime.gd\"]' -TimeoutSeconds 180 -CleanupExisting; if($LASTEXITCODE-ne0){throw \"Guarded score-route assertion failed with exit $LASTEXITCODE\"}; Write-Host 'M2_CLOSEOUT_A_SCORE_GODOT=pass'",
+    "if(@(Get-Process -ErrorAction SilentlyContinue|Where-Object ProcessName -Like 'Godot*').Count-ne0){throw 'Residual Godot process after score-route assertion'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Report how the accepted candidate behavior was ported and how B1 and B2 were corrected",
+    "Report the target-before-graze and forged-precommit focused assertions plus snapshot continuation",
+    "Report the guarded Godot JSON result and exact exit code, not a static substitute",
+    "Report changed paths, actual model/effort/CLI, failures and residual A2 Main integration work"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "The old score-route chain is terminal and must not be resumed or reviewed again. This is the successor closeout delivery defined by docs/production/execution-convergence-v3.1.md.",
+    "Final blocker evidence is in run 20260715T162853Z-M2-stage2-score-route-runtime-r2-final-review-deep_reviewer-ec1c842f. Do not reopen findings already marked passed.",
+    "The frozen input contract is content/runtime/m2_stage2_score_route_contract.json. Do not redesign its route, rewards, aliases or Hard topology.",
+    "Do not modify Main, commit, merge, create another ticket, spawn subagents or rewrite M2."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}

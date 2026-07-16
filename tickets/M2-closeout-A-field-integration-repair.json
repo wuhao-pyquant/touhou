@@ -1,0 +1,54 @@
+{
+  "id": "M2-closeout-A-field-integration-repair",
+  "objective": "Repair only the current post-merge Stage 2 field-topology integration failures at commit 2e957ad1f58f457d14e4b3ceb505b758a1517fe7. The previously approved topology chain was cleanly cherry-picked after the approved phase-practice/replay merge, but the release-lead guarded run of tests/assert_m2_stage2_field_topology_integration.gd returned process exit 1. Close these observed failures without redesigning the frozen field/score contracts: (1) ordinary callback timing count=120 p50=19875us p95=34029us max=42660us exceeded the 16667us ceiling; (2) compressed post-midboss catch-up stayed at tick 750 instead of 1650 and activated only s2_b01..s2_b06 instead of s2_b01..s2_b12; (3) the phase-owned midboss carry count across s2_b07..s2_b11 was 0 instead of 1; (4) b05 rejected the declared live b04 booth edges and failed to preserve b04+b05 source carryover. Preserve the already approved transaction, snapshot, clock-cursor, bullet ownership, replay, and phase-practice behavior. Make the minimum production/test correction supported by runtime evidence; do not weaken the 16.667ms ceiling, delete assertions, or broaden scope. Run the focused topology integration plus one practice/replay smoke in the writable worktree.",
+  "mode": "write",
+  "allowed_paths": [
+    "scripts/main.gd",
+    "scripts/runtime/bullet_world.gd",
+    "scripts/runtime/stage2_encounter_controller.gd",
+    "scripts/runtime/stage2_field_topology_runtime.gd",
+    "scripts/runtime/stage_director.gd",
+    "tests/assert_m2_stage2_field_topology_integration.gd",
+    "tests/assert_m2_stage2_practice_replay_ui.gd"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "docs/**",
+    "evidence/**",
+    "content/**",
+    "autoload/**",
+    "scripts/replay/**",
+    "scripts/ui/**",
+    "tools/**"
+  ],
+  "dependency_commit": "2e957ad1f58f457d14e4b3ceb505b758a1517fe7",
+  "acceptance_commands": [
+    "git diff --check",
+    "$changed=@(git status --porcelain -uall|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $allowed=@('scripts/main.gd','scripts/runtime/bullet_world.gd','scripts/runtime/stage2_encounter_controller.gd','scripts/runtime/stage2_field_topology_runtime.gd','scripts/runtime/stage_director.gd','tests/assert_m2_stage2_field_topology_integration.gd','tests/assert_m2_stage2_practice_replay_ui.gd'); $outside=@($changed|Where-Object{$_-notin$allowed}); if($outside.Count-ne0-or$changed.Count-eq0){throw \"Unexpected or missing paths: $($changed-join',')\"}; Write-Host 'M2_CLOSEOUT_A_FIELD_SCOPE=pass'",
+    "$godot=(Get-Command Godot_v4.7-stable_win64_console.exe -ErrorAction Stop).Source; & tools/testing/invoke_godot_test.ps1 -GodotPath $godot -ProjectPath (Get-Location).Path -GodotArgumentJson '[\"--script\",\"res://tests/assert_m2_stage2_field_topology_integration.gd\"]' -TimeoutSeconds 300 -CleanupExisting; if($LASTEXITCODE-ne0){throw \"Guarded field-topology integration failed with exit $LASTEXITCODE\"}; Write-Host 'M2_CLOSEOUT_A_FIELD_GODOT=pass'",
+    "$godot=(Get-Command Godot_v4.7-stable_win64_console.exe -ErrorAction Stop).Source; & tools/testing/invoke_godot_test.ps1 -GodotPath $godot -ProjectPath (Get-Location).Path -GodotArgumentJson '[\"--script\",\"res://tests/assert_m2_stage2_practice_replay_ui.gd\"]' -TimeoutSeconds 180 -CleanupExisting; if($LASTEXITCODE-ne0){throw \"Guarded practice/replay smoke failed with exit $LASTEXITCODE\"}; Write-Host 'M2_CLOSEOUT_A_FIELD_SMOKE=pass'",
+    "if(@(Get-Process -ErrorAction SilentlyContinue|Where-Object ProcessName -Like 'Godot*').Count-ne0){throw 'Residual Godot process after field integration repair'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Report the exact root causes and minimal corrections for all four observed failure groups",
+    "Report guarded topology and practice/replay results, including timing line and zero residual Godot processes",
+    "Report actual model, reasoning effort, CLI version, changed paths, and zero scope violations",
+    "Do not propose a new plan, additional review chain, broad regression, or performance benchmark"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "Release-lead failing log: C:/Users/e/AppData/Local/Temp/godot-test-4ec8469ed0774979a66a18bbed5b02a7.log. The guard returned FatalOutput with processExitCode=1 and cleanedPids=[].",
+    "The phase-practice/replay implementation commit 61db002 passed its three root-run guarded tests and one bounded reviewer returned GATE: APPROVE before the topology chain was cherry-picked.",
+    "The score-route runtime is already merged at scripts/runtime/stage2_score_route_runtime.gd but is not part of this repair ticket. Main score-route settlement is a later serial A ticket.",
+    "Do not launch concurrent Godot instances. Use only the repository guard, and stop after the two focused commands pass or one precise blocker remains."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}

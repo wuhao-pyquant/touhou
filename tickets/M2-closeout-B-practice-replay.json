@@ -1,0 +1,70 @@
+{
+  "id": "M2-closeout-B-practice-replay",
+  "objective": "Complete M2 closeout stream B as one usable Stage 2 practice/replay slice. Port the approved controller work from candidate d177ff066f01bbb09699cbb333ffb666c47b1296: after normal Stage2EncounterController configuration, starting any of the six approved phase IDs must enter that phase at tick zero, reject invalid transitions atomically, isolate clear/timeout completion, and round-trip deterministically. Then connect this frozen API to the current menu and replay runtime without adding input actions: keep the existing Stage Practice path, add a minimal reachable Stage 2 phase-practice selection using existing confirm/back/directional actions, show all six approved phase labels, and start the selected phase through the real Stage 2 controller rather than the legacy generic boss-card shortcut. Replay headers and documents must preserve mode=spell_practice, starting_stage=2 and the exact approved phase_id; playback must reject unknown or mismatched Stage 2 phase identity before mutating live state. Preserve story replay, ordinary Stage Practice, old replay compatibility and the existing Main simulation snapshot contract. Add one focused integration assertion for menu reachability, all six phase selections, replay record/playback identity, mismatch rejection and legacy compatibility, and run it plus the existing controller contract through the guarded writable-worktree Godot runner. Do not add full replay browsing or persistent records; those remain M6.",
+  "mode": "write",
+  "allowed_paths": [
+    "autoload/game_manager.gd",
+    "scripts/main.gd",
+    "scripts/replay/replay_header.gd",
+    "scripts/replay/replay_data.gd",
+    "scripts/runtime/stage2_encounter_controller.gd",
+    "scripts/ui/ui_model.gd",
+    "tests/assert_m2_stage2_phase_practice_contract.gd",
+    "tests/assert_m2_stage2_practice_replay_ui.gd"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "project.godot",
+    "content/**",
+    "docs/**",
+    "evidence/**",
+    "scenes/**",
+    "scripts/content/**",
+    "scripts/data/**",
+    "scripts/player/**",
+    "scripts/runtime/boss_state_machine.gd",
+    "scripts/runtime/bullet_world.gd",
+    "scripts/runtime/danmaku_pattern_runtime.gd",
+    "scripts/runtime/deterministic_rng.gd",
+    "scripts/runtime/gameplay_score_system.gd",
+    "scripts/runtime/item_reward_system.gd",
+    "scripts/runtime/stage2_field_topology_runtime.gd",
+    "scripts/runtime/stage2_score_route_runtime.gd",
+    "tests/assert_m0_*.gd",
+    "tests/assert_m1_*.gd",
+    "tests/assert_m2_stage2_main_flow.gd",
+    "tools/**"
+  ],
+  "dependency_commit": "23751926a241def98d31bc60e2fb54dc1800c24c",
+  "acceptance_commands": [
+    "git diff --check",
+    "$changed=@(git status --porcelain -uall|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $allowed=@('autoload/game_manager.gd','scripts/main.gd','scripts/replay/replay_header.gd','scripts/replay/replay_data.gd','scripts/runtime/stage2_encounter_controller.gd','scripts/ui/ui_model.gd','tests/assert_m2_stage2_phase_practice_contract.gd','tests/assert_m2_stage2_practice_replay_ui.gd'); $outside=@($changed|Where-Object{$_-notin$allowed}); if($outside.Count-ne0-or'tests/assert_m2_stage2_practice_replay_ui.gd'-notin$changed-or'tests/assert_m2_stage2_phase_practice_contract.gd'-notin$changed){throw \"Unexpected or missing paths: $($changed-join',')\"}; Write-Host 'M2_CLOSEOUT_B_SCOPE=pass'",
+    "$hits=@(rg -n 'Time\\.|randomize\\(|randf\\(|randi\\(' scripts/replay scripts/runtime/stage2_encounter_controller.gd tests/assert_m2_stage2_phase_practice_contract.gd tests/assert_m2_stage2_practice_replay_ui.gd); if($LASTEXITCODE-gt1){throw 'Static scan failed'}; if($hits.Count-ne0){$hits|Out-Host;throw 'Nondeterministic practice/replay dependency found'}; Write-Host 'M2_CLOSEOUT_B_STATIC=pass'",
+    "$godot=(Get-Command Godot_v4.7-stable_win64_console.exe -ErrorAction Stop).Source; & tools/testing/invoke_godot_test.ps1 -GodotPath $godot -ProjectPath (Get-Location).Path -GodotArgumentJson '[\"--script\",\"res://tests/assert_m2_stage2_phase_practice_contract.gd\"]' -TimeoutSeconds 180 -CleanupExisting; if($LASTEXITCODE-ne0){throw \"Guarded phase-practice contract failed with exit $LASTEXITCODE\"}; Write-Host 'M2_CLOSEOUT_B_CONTRACT_GODOT=pass'",
+    "$godot=(Get-Command Godot_v4.7-stable_win64_console.exe -ErrorAction Stop).Source; & tools/testing/invoke_godot_test.ps1 -GodotPath $godot -ProjectPath (Get-Location).Path -GodotArgumentJson '[\"--script\",\"res://tests/assert_m2_stage2_practice_replay_ui.gd\"]' -TimeoutSeconds 180 -CleanupExisting; if($LASTEXITCODE-ne0){throw \"Guarded practice/replay integration failed with exit $LASTEXITCODE\"}; Write-Host 'M2_CLOSEOUT_B_INTEGRATION_GODOT=pass'",
+    "$godot=(Get-Command Godot_v4.7-stable_win64_console.exe -ErrorAction Stop).Source; & tools/testing/invoke_godot_test.ps1 -GodotPath $godot -ProjectPath (Get-Location).Path -GodotArgumentJson '[\"--quit-after\",\"2\"]' -TimeoutSeconds 120 -CleanupExisting; if($LASTEXITCODE-ne0){throw \"Guarded main-scene smoke failed with exit $LASTEXITCODE\"}; Write-Host 'M2_CLOSEOUT_B_SMOKE=pass'",
+    "if(@(Get-Process -ErrorAction SilentlyContinue|Where-Object ProcessName -Like 'Godot*').Count-ne0){throw 'Residual Godot process after practice/replay tests'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Report the controller practice API, menu state/inputs and six phase entries",
+    "Report exact replay header/document identity and atomic mismatch rejection",
+    "Report both guarded focused assertions and the guarded main-scene smoke with exit codes",
+    "Report changed paths, actual model/effort/CLI, preserved story/stage-practice compatibility and residual risks"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "Approved Stage 2 phase IDs are stage_2_midboss_nonspell_1, stage_2_midboss_spell_1, stage_2_boss_nonspell_1, stage_2_boss_spell_1, stage_2_boss_spell_2 and stage_2_boss_spell_3.",
+    "Current Main already has Stage Practice menus and replay format v2 fields mode, starting_stage and phase_id. Extend those seams; do not build a parallel UI or replay service.",
+    "The Stage2 controller candidate is input evidence, not permission to change choreography, difficulty topology or public score semantics.",
+    "Use existing input actions only. Do not modify score route, BulletWorld, content JSON, commit, merge, spawn subagents or rewrite M2."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}

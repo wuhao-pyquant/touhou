@@ -1,0 +1,46 @@
+{
+  "id": "M2-closeout-B-practice-replay-review",
+  "objective": "Perform the single bounded independent review required for the M2 Stage 2 phase-practice and replay-identity boundary. Review only commit 23751926a241def98d31bc60e2fb54dc1800c24c..adbe7b443a1f100e74bb509a22f4410bf105f878. Confirm that all six Stage 2 encounter phases are selectable through the existing menu/input flow, launch the exact controller phase, preserve story and stage-practice behavior, record the exact phase identity in replay headers, reject mismatched Stage 2 phase playback, and retain compatibility for non-Stage2 and legacy replay paths. Use the supplied successful guarded runtime evidence; do not launch Godot. Return only release-blocking correctness or compatibility findings. Do not broaden into a general M2 audit.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "autoload/game_manager.gd",
+    "scripts/main.gd",
+    "scripts/replay/replay_header.gd",
+    "scripts/ui/ui_model.gd",
+    "tests/assert_m2_stage2_phase_practice_contract.gd",
+    "tests/assert_m2_stage2_practice_replay_ui.gd"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "docs/**",
+    "evidence/**",
+    "tools/**"
+  ],
+  "dependency_commit": "adbe7b443a1f100e74bb509a22f4410bf105f878",
+  "acceptance_commands": [
+    "git diff --check 23751926a241def98d31bc60e2fb54dc1800c24c..adbe7b443a1f100e74bb509a22f4410bf105f878",
+    "$changed=@(git diff --name-only 23751926a241def98d31bc60e2fb54dc1800c24c..adbe7b443a1f100e74bb509a22f4410bf105f878); $expected=@('autoload/game_manager.gd','scripts/main.gd','scripts/replay/replay_header.gd','scripts/ui/ui_model.gd','tests/assert_m2_stage2_phase_practice_contract.gd','tests/assert_m2_stage2_practice_replay_ui.gd'); if(Compare-Object $expected $changed){throw \"Unexpected review paths: $($changed-join',')\"}; Write-Host 'M2_CLOSEOUT_B_REVIEW_SCOPE=pass'",
+    "if(@(Get-Process -ErrorAction SilentlyContinue|Where-Object ProcessName -Like 'Godot*').Count-ne0){throw 'Godot process exists during bounded review'}; Write-Host 'GODOT_PROCESS_COUNT=0'"
+  ],
+  "output_requirements": [
+    "Top-level status must be completed; first summary line exactly GATE: APPROVE or GATE: REPAIR",
+    "List only release-blocking findings with exact file and line evidence; do not request additional broad tests",
+    "Confirm the supplied root-run guarded results were considered: phase contract pass, practice/replay integration pass, main-scene smoke pass, and zero residual Godot processes",
+    "Report actual reviewer model, reasoning effort, CLI version, zero modifications, and zero Godot launches"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "The implementation Agent ran as profile_replay_ui with verified gpt-5.6-terra/high on Codex CLI 0.144.4. Its sandbox emitted a Windows root-certificate-store startup error, so the release lead reran all three guarded commands outside that sandbox.",
+    "Release-lead evidence from the candidate worktree: contract guard Success/exit 0 in 21.302s; integration guard Success/exit 0 in 6.924s; main smoke Success/exit 0 in 6.785s; GODOT_PROCESS_COUNT=0.",
+    "This is the only independent review for this closed loop. Do not edit, launch Godot, commit, merge, spawn subagents, replan M2, or perform a general gap review."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}
