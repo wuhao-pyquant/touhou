@@ -82,6 +82,7 @@ def _run(
     result = subprocess.run(
         command,
         cwd=cwd,
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=text,
         encoding="utf-8" if text else None,
@@ -1351,18 +1352,20 @@ def _minimal_codex_final_probe(codex: Path, temp_root: Path) -> None:
     try:
         schema = probe_dir / "probe.schema.json"
         final = probe_dir / "final.json"
-        schema.write_text('{"type":"object","additionalProperties":false,"required":["status"],"properties":{"status":{"const":"completed"}}}\n', encoding="utf-8")
+        schema.write_text('{"type":"object","additionalProperties":false,"required":["status"],"properties":{"status":{"type":"string","const":"completed"}}}\n', encoding="utf-8")
         result = _run([
             str(codex), "exec", "--disable", "use_agent_identity", "--strict-config",
+            "--disable", "plugins", "--disable", "remote_plugin",
             "-m", "gpt-5.6-luna", "-c", 'model_reasoning_effort="medium"',
-            "--ephemeral", "--skip-git-repo-check", "-s", "read-only",
+            "--ephemeral", "--ignore-user-config", "--skip-git-repo-check",
+            "-s", "read-only",
             "--json", "--output-schema", str(schema), "-o", str(final),
             "Return exactly one JSON object with status set to completed.",
         ], cwd=probe_dir, check=False)
         if result.returncode != 0 or not final.exists():
-            detail = (result.stderr or result.stdout).strip()[-1000:]
+            detail = (result.stdout + "\n" + result.stderr).strip()[-2000:]
             raise preflight.PreflightError(
-                "minimal Codex final.json probe failed"
+                f"minimal Codex final.json probe failed (exit {result.returncode})"
                 + (f": {detail}" if detail else "")
             )
         payload = _load_json(final)
