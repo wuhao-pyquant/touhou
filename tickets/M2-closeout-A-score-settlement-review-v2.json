@@ -1,0 +1,43 @@
+{
+  "id": "M2-closeout-A-score-settlement-review-v2",
+  "objective": "Perform the single bounded independent review of commit 8b1faaf for the Stage 2 score-settlement bridge. Inspect only the delta from 4118455 through 8b1faaf and the three supplied guarded PASS logs. Verify exact-once callback settlement, snapshot/legacy compatibility, spell capture invalidation, deterministic drop aliases, multiplier/seal accounting, and that no public field-topology ownership was changed. Do not launch Godot, repeat the gap review, request broad regression, normalize reports, or create a follow-up plan. Return GATE: APPROVE unless a concrete release-blocking defect remains; otherwise return GATE: REPAIR with the smallest correction boundary.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "scripts/main.gd",
+    "scripts/runtime/stage_director.gd",
+    "scripts/runtime/stage2_score_route_runtime.gd",
+    "tests/assert_m2_stage2_score_route_main_integration.gd",
+    "tests/assert_m2_stage2_score_route_runtime.gd",
+    "tests/assert_m2_stage2_practice_replay_ui.gd"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "docs/**",
+    "evidence/**"
+  ],
+  "dependency_commit": "8b1faaff6ac9266ef7b24c768bf42e77bbf1d355",
+  "execution_contract_version": 2,
+  "execution_checks": [
+    {"kind": "git_diff_check"}
+  ],
+  "output_requirements": [
+    "Return exactly one GATE: APPROVE or GATE: REPAIR decision with only release-blocking findings",
+    "Cite inspected callbacks and snapshot/spell/drop settlement behavior from the bounded delta",
+    "Use the supplied three runtime PASS logs as evidence and do not launch Godot",
+    "Report actual model, reasoning effort, CLI version, zero changed paths, and zero scope violations"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "Guarded PASS: C:/Users/e/AppData/Local/Temp/godot-test-1d6716272b3f4e559ae7923ded709c62.log (Main score settlement).",
+    "Guarded PASS: C:/Users/e/AppData/Local/Temp/godot-test-765add26694b4688a94a5df0d18a0764.log (score runtime regression).",
+    "Guarded PASS: C:/Users/e/AppData/Local/Temp/godot-test-9111c88e3e594658b2102b1081f8da3c.log (practice/replay compatibility); residual Godot process count was zero.",
+    "The implementation Agent ran as gameplay_systems with actual gpt-5.6-sol/high. Its failure was an environment-class certificate diagnostic, so no repair round or model escalation was consumed."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
