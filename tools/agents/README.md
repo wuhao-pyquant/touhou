@@ -2,7 +2,7 @@
 
 桥接器从 `.codex/agents/<agent>.toml` 读取 Agent 的默认模型、推理强度、沙箱和修复梯度。调用方不能在命令行任意覆盖模型。
 
-新票必须声明 `execution_contract_version: 2` 和结构化 `execution_checks`；bridge 会把项目内 Godot/Python 路径解析为绝对路径，拒绝 `acceptance_commands` 形式的任意 PowerShell。已被运行快照的旧票仍可被原 session 读取，以保持修复链兼容。
+新票必须声明 `execution_contract_version: 2`、结构化 `execution_checks` 和 `max_edit_test_loops`；实现票最大为 2，capture/只读审查票为 0。bridge 会把项目内 Godot/Python 路径解析为绝对路径，拒绝 `acceptance_commands` 形式的任意 PowerShell。已被运行快照的旧票仍可被原 session 读取，以保持修复链兼容。
 
 每个新批次在创建第一个 run 前执行一次 admission preflight 并缓存 fingerprint。bridge summary 的 failure_class 为 `TASK_FAILURE`、`ENVIRONMENT_FAILURE` 或 `TRANSPORT_FAILURE`；只有任务失败可消耗 escalation。后两类保留身份和 repair_round，并只允许一次有界的同 session 重试。leaf `codex exec` 始终传递 `--disable use_agent_identity`，由 bridge 而不是 native profile loader 读取 repair escalations。
 

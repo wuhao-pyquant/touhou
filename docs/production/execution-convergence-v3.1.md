@@ -4,24 +4,22 @@
 
 本修订只替换剩余 M2 与 M3–M8 的执行、模型路由、审查和测试方式。《Windows 1.0 成熟化计划 v3》的产品范围、里程碑顺序和质量门槛保持冻结；`docs/production/readiness.json` 仍是唯一进度账本。不得据此生成另一份总体计划。
 
-## 1. 执行目标
+## 1. 三轮执行修订合并摘要
 
-### INFRA-M2.5 admission gate
+| 轮次 | 解决的问题 | 合并后的规则位置 |
+|---|---|---|
+| 执行收敛 | 逐提交复审、泛化 gap review、高级模型滥用和重复全量测试 | 本文第 3–6 节；根级 `AGENTS.md` 的审查/测试硬规则 |
+| INFRA-M2.5 | 路径/编码、Godot 残留、证书误判、传输失败和重复 resume 被误当任务缺陷 | `tools/agents/preflight.py`、bridge failure taxonomy、Godot supervisor 和 single-flight |
+| 有界收口 | Agent 无限 edit-test、机械任务另派 Agent、capture 混改源码、盲评/深审重新探索 | ticket `max_edit_test_loops`、根级 capture/reviewer 边界和主对话心跳 |
 
-在任何新 M2 证据/审查票和 M3-M8 票之前，release lead 必须通过一次缓存的 session admission gate。它验证 Codex/Godot 可执行文件及版本、项目/worktree/temp 根与写权限、磁盘空间、profile bridge/native 兼容性、残留项目进程、Godot mutex 和最小 Codex `final.json` 探针。fingerprint 不变时同一批次复用；任一输入改变必须重跑。
+### 共同执行规则
 
-新票一律使用 `execution_contract_version=2` 的结构化 `execution_checks`，只能声明 `git_diff_check`、Python unittest 或受控 Godot test。不得携带任意 shell/PowerShell acceptance command；已快照旧票只允许原 run 的读取和续跑。bridge 将失败分为 TASK_FAILURE、ENVIRONMENT_FAILURE、TRANSPORT_FAILURE；仅前者使用 repair escalation，后两者保留原 model、reasoning、session、worktree 和 round，且最多一次有界重试。相同 `root_run_id + repair_round` 采用 single-flight；原 CLI 存活或 final.json grace 未结束时拒绝重复 resume。`status=completed` 的 `GATE: REPAIR`/`GATE: REPAIR_AUTHORIZED` 是已完成审查证据，不触发 normalization Agent。
-
-模型生效/恢复、`status/gate` 规范化、CLI/session 核对、路径/编码/BOM/引号预检、Godot 进程清理、根证书警告分类、`final.json` grace 等待和纯传输重试均属于主流程机械职责，一律不得创建 Agent。外部 CLI Agent 存活期间，release lead 每 2–5 分钟向主对话发送一次阶段心跳。
-
-- 以可运行闭环和验收证据为调度单位，不以文件、字段、提交或报告数量为单位。
-- 复用已有候选提交、worktree 和证据；已覆盖的内容不得重新拆票实现。
-- 不再创建泛化 gap review。缺口只能写入当前里程碑的单一验收矩阵，并分配给现有闭环。
-- 最多同时运行三个独立 CLI Agent；常态为两个无冲突写任务，第三个槽位仅在确有证据采集或审查需求时启用。
-- 共享 `main.gd`、固定时钟、RNG、快照和 BulletWorld 所有权冲突必须串行；不同关卡的数据与资源可并行。
-- 新 ticket 使用 profile 顶层默认模型。只有原 ticket 失败后才原地续跑升级；成功或终止的链不会改变下一张 ticket 的默认等级。
-- 每次 CLI 运行必须从 rollout/bridge 证据核对实际 model 与 model_reasoning_effort；声明值和实际值不一致时直接失败。
-- 新 ticket 必须声明 `max_edit_test_loops`。实现票最大为 2；证据捕获、盲评和深审票为 0。达到上限仍失败时本次调用立即返回，不允许继续开放式调试。
+- 以可运行闭环和验收证据为调度单位；复用已有提交、worktree 和证据，不按文件、字段、报告数量拆票，也不创建泛化 gap review。
+- 新 M2 证据/审查票和 M3–M8 票先通过可缓存的 session admission preflight；新票只能使用 v2 结构化 checks，不得携带任意 shell/PowerShell acceptance command。
+- bridge 将失败分为 TASK、ENVIRONMENT、TRANSPORT；只有 TASK 消耗 repair round 或模型升级。resume 保持原身份/session/worktree/ticket，并对 `root_run_id + repair_round` single-flight。
+- 模型/推理等级核对与恢复、`status/gate`、CLI/session、路径/编码、进程、证书、`final.json` 等机械工作由 bridge/release lead 完成，不创建 Agent。
+- 常态最多两个无冲突写 Agent，硬上限三个；共享公共运行时所有权时串行。每次运行从 rollout/bridge 核对实际 model 与 effort。
+- 新 ticket 使用 profile 默认等级；失败后才按原 profile 原地升级。实现票最多两次定向 edit-test；capture/盲评/深审票为零次编辑。外部 Agent 运行期间每 2–5 分钟发送一次主对话心跳。
 
 ## 2. M2 立即进入收口模式
 
@@ -127,9 +125,5 @@ M3–M5 的一份批次盲评必须分别给每关打分，因此仍覆盖每关
 - readiness 只维护里程碑和当前三个闭环状态；不得为同一状态生成第二份计划。
 - 一个闭环通常只有一张主实现票；只有文件所有权冲突时才拆串行子票。
 - 不为“可能存在的缺口”派 Agent。必须先指出未满足的冻结验收行、现有证据和唯一责任人。
-- 不为通过的提交追加“保险深审”。高模型只由风险类型或重复失败触发。
-- 不为报告格式、schema、scope、路径或退出码错误派修复 Agent；桥接器应立即失败并由 `release_lead` 修正 ticket 或工具。
-- 不为模型/推理等级核对、默认等级恢复、`status/gate` 修正、CLI/session 核对、路径编码预检、进程清理、证书警告、延迟落盘或传输重试派 Agent。
-- 不允许实现 Agent 在一次调用内超过两次定向 edit-test；不允许最终 capture ticket 修改源码；不允许盲评或深审重新展开实现探索。
 - 不因并发槽位空闲而启动任务；并行只用于没有共享文件所有权的真实工作。
 - 每个里程碑只在结束时更新 readiness；日常进度写入当前闭环状态，不改写计划正文。
