@@ -1,0 +1,58 @@
+{
+  "id": "INFRA-M2.5-agent-execution-stabilization",
+  "objective": "Implement the one-time execution-environment admission gate required before any new M2 evidence/review ticket and all M3-M8 work. Do not change game code or re-plan v3. Add: (1) a session-level preflight that verifies resolved Codex/Godot paths and versions, project/worktree/temp roots, disk/write access, profile bridge/native compatibility, absence of this project's residual Codex/Godot processes, Godot mutex availability, and a minimal Codex final.json probe; cache a successful fingerprint so it runs once per batch, not per Agent; (2) a version-2 structured ticket execution contract using absolute-path resolution and structured Godot/Python test specifications, rejecting arbitrary acceptance PowerShell for new tickets while retaining read compatibility for already snapshotted legacy tickets; (3) explicit TASK_FAILURE, ENVIRONMENT_FAILURE, and TRANSPORT_FAILURE classification in run summaries, with only TASK_FAILURE consuming repair_round/model escalation; environment and transport retries keep the same model/session/worktree/round and allow one bounded retry; (4) a root_run_id+repair_round single-flight lock plus original CLI/session liveness and final.json grace checks preventing duplicate resume; (5) Godot classification that treats the exact Windows root-certificate-store warning as a known environment warning only when exit code is 0, a structured PASS exists, and no crash/backtrace/FAIL exists; all other ERROR/crash/nonzero cases remain failures; (6) disable native custom-agent identity loading for leaf CLI invocations so bridge-only repair_escalations do not produce unknown-field warnings; (7) stable review semantics where status=completed plus GATE: REPAIR/REPAIR_AUTHORIZED is review completion and never launches a report-normalization Agent. Update AGENTS.md and execution-convergence-v3.1.md with this admission policy. Use synthetic/fault-injection tests only; do not launch the real game or full test matrix.",
+  "mode": "write",
+  "allowed_paths": [
+    "tools/agents/invoke_agent.py",
+    "tools/agents/invoke_agent.ps1",
+    "tools/agents/preflight.py",
+    "tools/agents/README.md",
+    "tools/agents/ticket.schema.json",
+    "tools/agents/report.schema.json",
+    "tools/agents/tests/test_invoke_agent.py",
+    "tools/agents/tests/test_preflight.py",
+    "tools/testing/invoke_godot_test.ps1",
+    "tools/testing/tests/test_invoke_godot_test.py",
+    "AGENTS.md",
+    "docs/production/execution-convergence-v3.1.md"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    "content/**",
+    "evidence/**",
+    "autoload/**",
+    "scripts/**",
+    "tests/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "HANDOVER.md",
+    "docs/production/readiness.json"
+  ],
+  "dependency_commit": "984c3109c9b2e76e44fbb7f585e04efb2b642dde",
+  "acceptance_commands": [
+    "git diff --check",
+    "python -m unittest tools.agents.tests.test_invoke_agent tools.agents.tests.test_preflight",
+    "python -m unittest tools.testing.tests.test_invoke_godot_test",
+    "$changed=@(git status --porcelain -uall|ForEach-Object{$_.Substring(3).Replace('\\','/')}); $allowed=@('tools/agents/invoke_agent.py','tools/agents/invoke_agent.ps1','tools/agents/preflight.py','tools/agents/README.md','tools/agents/ticket.schema.json','tools/agents/report.schema.json','tools/agents/tests/test_invoke_agent.py','tools/agents/tests/test_preflight.py','tools/testing/invoke_godot_test.ps1','tools/testing/tests/test_invoke_godot_test.py','AGENTS.md','docs/production/execution-convergence-v3.1.md'); $outside=@($changed|Where-Object{$_-notin$allowed}); if($outside.Count-ne0-or$changed.Count-eq0){throw \"Unexpected or missing paths: $($changed-join',')\"}; Write-Host 'INFRA_M2_5_SCOPE=pass'"
+  ],
+  "output_requirements": [
+    "Report all three failure classes and prove environment/transport failure keeps repair_round and model identity unchanged",
+    "Report six named fault-injection results: BOM ticket, path with spaces, certificate warning plus PASS, mutex contention no escalation, delayed final.json no duplicate resume, completed review gate no normalization Agent",
+    "Report session preflight cache/fingerprint behavior, single-flight lock behavior, exact certificate exception, and leaf CLI profile-loader suppression",
+    "Report actual model, reasoning effort, CLI version, changed paths, and zero game/Godot launches",
+    "Do not add more milestones, reviewers, Agents, plugins, external dependencies, or broad tests"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "Preserve existing same-session/worktree repair escalation and profile-default restoration behavior. The current bridge unit suite has 22 passing tests and must remain green.",
+    "The existing Godot supervisor already owns a repository-derived Global mutex and process-tree cleanup. Extend its classification and preflight hooks; do not replace it with a second queue implementation.",
+    "Legacy tickets already snapshotted by active runs may retain acceptance_commands. All newly created post-INFRA tickets must use execution_contract_version=2 structured checks and must reject arbitrary PowerShell command strings.",
+    "Use --disable use_agent_identity (or the exact supported equivalent verified from the local CLI) for leaf codex exec invocations so .codex/agents repair_escalations are not parsed by the native role loader. Do not alter the profile TOMLs or their bridge semantics.",
+    "This ticket is the only INFRA-M2.5 implementation pass. Avoid production game tests and do not invoke Godot_v4.7-stable_win64_console.exe."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}
