@@ -5,13 +5,95 @@
   },
   "capture_counts": {
     "hard": {
-      "records": 2942,
+      "records": 2977,
       "render_frames": 1434
     },
     "normal": {
-      "records": 2943,
+      "records": 2969,
       "render_frames": 1434
     }
+  },
+  "content_pressure": {
+    "difficulties": {
+      "hard": [
+        {
+          "active_ticks": 160,
+          "peak_active_bullets": 13,
+          "phase_id": "stage_2_midboss_nonspell_1",
+          "pressure_index": 2080
+        },
+        {
+          "active_ticks": 173,
+          "peak_active_bullets": 19,
+          "phase_id": "stage_2_midboss_spell_1",
+          "pressure_index": 3287
+        },
+        {
+          "active_ticks": 192,
+          "peak_active_bullets": 22,
+          "phase_id": "stage_2_boss_nonspell_1",
+          "pressure_index": 4224
+        },
+        {
+          "active_ticks": 204,
+          "peak_active_bullets": 26,
+          "phase_id": "stage_2_boss_spell_1",
+          "pressure_index": 5304
+        },
+        {
+          "active_ticks": 222,
+          "peak_active_bullets": 45,
+          "phase_id": "stage_2_boss_spell_2",
+          "pressure_index": 9990
+        },
+        {
+          "active_ticks": 219,
+          "peak_active_bullets": 57,
+          "phase_id": "stage_2_boss_spell_3",
+          "pressure_index": 12483
+        }
+      ],
+      "normal": [
+        {
+          "active_ticks": 160,
+          "peak_active_bullets": 12,
+          "phase_id": "stage_2_midboss_nonspell_1",
+          "pressure_index": 1920
+        },
+        {
+          "active_ticks": 175,
+          "peak_active_bullets": 17,
+          "phase_id": "stage_2_midboss_spell_1",
+          "pressure_index": 2975
+        },
+        {
+          "active_ticks": 216,
+          "peak_active_bullets": 18,
+          "phase_id": "stage_2_boss_nonspell_1",
+          "pressure_index": 3888
+        },
+        {
+          "active_ticks": 208,
+          "peak_active_bullets": 22,
+          "phase_id": "stage_2_boss_spell_1",
+          "pressure_index": 4576
+        },
+        {
+          "active_ticks": 222,
+          "peak_active_bullets": 40,
+          "phase_id": "stage_2_boss_spell_2",
+          "pressure_index": 8880
+        },
+        {
+          "active_ticks": 221,
+          "peak_active_bullets": 49,
+          "phase_id": "stage_2_boss_spell_3",
+          "pressure_index": 10829
+        }
+      ]
+    },
+    "gate_kind": "diagnostic_only",
+    "note": "Active ticks, bullet peaks, and pressure index support playtest review but are not frozen product gates."
   },
   "event_ledgers": {
     "hard": {
@@ -107,37 +189,57 @@
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_nonspell_1",
+          "tick": 0
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_midboss_nonspell_1",
+          "tick": 0
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_midboss_nonspell_1",
           "tick": 48
         },
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_nonspell_1",
-          "tick": 78
+          "tick": 72
         },
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_nonspell_1",
-          "tick": 108
+          "tick": 96
         },
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_nonspell_1",
-          "tick": 168
+          "tick": 144
         },
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_nonspell_1",
-          "tick": 168
+          "tick": 144
         },
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_nonspell_1",
-          "tick": 228
+          "tick": 192
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_midboss_nonspell_1",
+          "tick": 216
         },
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_spell_1",
-          "tick": 270
+          "tick": 240
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_midboss_spell_1",
+          "tick": 282
         },
         {
           "event": "warning",
@@ -147,7 +249,7 @@
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_spell_1",
-          "tick": 330
+          "tick": 324
         },
         {
           "event": "warning",
@@ -157,7 +259,27 @@
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_spell_1",
+          "tick": 366
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_midboss_spell_1",
           "tick": 396
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_midboss_spell_1",
+          "tick": 408
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_midboss_spell_1",
+          "tick": 450
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_nonspell_1",
+          "tick": 480
         },
         {
           "event": "warning",
@@ -167,7 +289,17 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_nonspell_1",
-          "tick": 546
+          "tick": 516
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_nonspell_1",
+          "tick": 552
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_nonspell_1",
+          "tick": 588
         },
         {
           "event": "warning",
@@ -177,12 +309,17 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_nonspell_1",
-          "tick": 606
+          "tick": 624
         },
         {
           "event": "warning",
           "phase_id": "stage_2_boss_nonspell_1",
-          "tick": 666
+          "tick": 660
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_nonspell_1",
+          "tick": 696
         },
         {
           "event": "warning",
@@ -192,7 +329,12 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_1",
-          "tick": 762
+          "tick": 720
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_1",
+          "tick": 756
         },
         {
           "event": "warning",
@@ -202,7 +344,12 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_1",
-          "tick": 822
+          "tick": 792
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_1",
+          "tick": 828
         },
         {
           "event": "warning",
@@ -212,7 +359,12 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_1",
-          "tick": 882
+          "tick": 864
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_1",
+          "tick": 900
         },
         {
           "event": "warning",
@@ -222,7 +374,27 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_1",
-          "tick": 942
+          "tick": 936
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 960
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 960
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 984
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 984
         },
         {
           "event": "warning",
@@ -232,22 +404,82 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_2",
-          "tick": 1038
+          "tick": 1008
         },
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_2",
-          "tick": 1098
+          "tick": 1032
         },
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_2",
-          "tick": 1122
+          "tick": 1032
         },
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_2",
-          "tick": 1188
+          "tick": 1056
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1056
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1080
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1080
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1104
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1104
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1128
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1128
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1152
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1152
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1176
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1176
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_3",
+          "tick": 1200
         },
         {
           "event": "warning",
@@ -262,12 +494,37 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_3",
+          "tick": 1260
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_3",
           "tick": 1290
         },
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_3",
+          "tick": 1320
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_3",
           "tick": 1344
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_3",
+          "tick": 1350
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_3",
+          "tick": 1380
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_3",
+          "tick": 1410
         },
         {
           "event": "warning",
@@ -374,32 +631,42 @@
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_nonspell_1",
-          "tick": 66
+          "tick": 60
         },
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_nonspell_1",
-          "tick": 96
+          "tick": 84
         },
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_nonspell_1",
-          "tick": 156
+          "tick": 132
         },
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_nonspell_1",
-          "tick": 156
+          "tick": 132
         },
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_nonspell_1",
-          "tick": 216
+          "tick": 180
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_midboss_nonspell_1",
+          "tick": 204
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_midboss_nonspell_1",
+          "tick": 228
         },
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_spell_1",
-          "tick": 258
+          "tick": 270
         },
         {
           "event": "warning",
@@ -409,7 +676,7 @@
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_spell_1",
-          "tick": 318
+          "tick": 312
         },
         {
           "event": "warning",
@@ -419,7 +686,22 @@
         {
           "event": "warning",
           "phase_id": "stage_2_midboss_spell_1",
+          "tick": 354
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_midboss_spell_1",
           "tick": 384
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_midboss_spell_1",
+          "tick": 396
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_midboss_spell_1",
+          "tick": 438
         },
         {
           "event": "warning",
@@ -429,7 +711,17 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_nonspell_1",
-          "tick": 534
+          "tick": 504
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_nonspell_1",
+          "tick": 540
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_nonspell_1",
+          "tick": 576
         },
         {
           "event": "warning",
@@ -439,12 +731,12 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_nonspell_1",
-          "tick": 594
+          "tick": 612
         },
         {
           "event": "warning",
           "phase_id": "stage_2_boss_nonspell_1",
-          "tick": 654
+          "tick": 648
         },
         {
           "event": "warning",
@@ -454,12 +746,12 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_nonspell_1",
-          "tick": 714
+          "tick": 684
         },
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_1",
-          "tick": 750
+          "tick": 744
         },
         {
           "event": "warning",
@@ -469,7 +761,12 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_1",
-          "tick": 810
+          "tick": 780
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_1",
+          "tick": 816
         },
         {
           "event": "warning",
@@ -479,7 +776,12 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_1",
-          "tick": 870
+          "tick": 852
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_1",
+          "tick": 888
         },
         {
           "event": "warning",
@@ -489,7 +791,17 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_1",
-          "tick": 930
+          "tick": 924
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 972
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 984
         },
         {
           "event": "warning",
@@ -499,22 +811,67 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_2",
-          "tick": 1026
+          "tick": 1020
         },
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_2",
-          "tick": 1086
+          "tick": 1020
         },
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_2",
-          "tick": 1110
+          "tick": 1044
         },
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_2",
-          "tick": 1176
+          "tick": 1056
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1068
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1092
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1092
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1116
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1128
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1140
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1164
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1164
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_2",
+          "tick": 1188
         },
         {
           "event": "warning",
@@ -529,7 +886,17 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_3",
+          "tick": 1248
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_3",
           "tick": 1278
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_3",
+          "tick": 1308
         },
         {
           "event": "warning",
@@ -539,7 +906,27 @@
         {
           "event": "warning",
           "phase_id": "stage_2_boss_spell_3",
+          "tick": 1338
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_3",
+          "tick": 1368
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_3",
+          "tick": 1398
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_3",
           "tick": 1416
+        },
+        {
+          "event": "warning",
+          "phase_id": "stage_2_boss_spell_3",
+          "tick": 1428
         }
       ]
     }
@@ -549,7 +936,7 @@
     "hard": {
       "build_kind": "release",
       "capture_path": "raw/hard-runtime.jsonl",
-      "capture_sha256": "7ea1a3c22244656ea557b4b682bd0ead670a6177b7ea25f7c7032805647f3820",
+      "capture_sha256": "c0934428cbb30079f948905b276e2c62854ba2729f70edeecefe672bb6269af0",
       "execution_mode": "windowed",
       "headless": false,
       "replay_path": "raw/hard-reference-replay.json",
@@ -560,7 +947,7 @@
     "normal": {
       "build_kind": "release",
       "capture_path": "raw/normal-runtime.jsonl",
-      "capture_sha256": "e2792e50025a626b8b1fd09fd8322ad764bfb704adffc85a56a842b0e914ba51",
+      "capture_sha256": "c7483c8b34b655ab596cae0db24ea78b64b95ea6fa72fe9d67438b62d14220e4",
       "execution_mode": "windowed",
       "headless": false,
       "replay_path": "raw/normal-reference-replay.json",
@@ -584,12 +971,12 @@
       "gate_fps": 55.0,
       "gate_passed": true,
       "hard_error_count": 0,
-      "one_percent_low_fps": 122.45397771337605,
+      "one_percent_low_fps": 121.71570457164187,
       "overflow_count": 0,
-      "p50": 3.635,
-      "p95": 5.897,
-      "p99": 7.309,
-      "peak_active_bullets": 15,
+      "p50": 3.702,
+      "p95": 5.312,
+      "p99": 7.544,
+      "peak_active_bullets": 57,
       "percentile_method": "nearest_rank",
       "pool_capacity": 24000
     },
@@ -598,12 +985,12 @@
       "gate_fps": 55.0,
       "gate_passed": true,
       "hard_error_count": 0,
-      "one_percent_low_fps": 106.80945904569307,
+      "one_percent_low_fps": 112.82606733459697,
       "overflow_count": 0,
-      "p50": 4.177,
-      "p95": 6.604,
-      "p99": 8.624,
-      "peak_active_bullets": 13,
+      "p50": 4.614,
+      "p95": 6.693,
+      "p99": 7.925,
+      "peak_active_bullets": 49,
       "percentile_method": "nearest_rank",
       "pool_capacity": 24000
     }
@@ -611,29 +998,51 @@
   "schema_version": 1,
   "score": {
     "hard": {
+      "accepted_live_rebound_graze_uids": [
+        "stage2_hard_2026071602:s2_b13:s2_b13_blue_booth_master:b13_blue_anchor:0:0",
+        "stage2_hard_2026071602:s2_b13:s2_b13_blue_booth_master:b13_blue_anchor:3:0",
+        "stage2_hard_2026071602:s2_b16:s2_b16_abacus_keeper:b16_abacus_anchor:0:0"
+      ],
       "group_multipliers": [
         1.25,
         1.5,
         1.75
       ],
-      "live_reference_input_route_state": "expired",
+      "live_reference_input_route_state": "complete",
       "night_festival_seal_count": 1,
       "phase_score_drop_capture_ledgers": [
         {
           "capture_count": 0,
           "drop_count": 0,
           "end_tick": 239,
+          "last_capture_result": {},
           "phase_id": "stage_2_midboss_nonspell_1",
-          "score_delta": 20,
+          "record_type": "phase_ledger",
+          "resolution_kind": "deterministic_reference_assisted_gate",
+          "score_delta": 50,
+          "spell_attempt_delta": 1,
           "start_tick": 0,
           "time_to_clear_ms": 4000.0
         },
         {
-          "capture_count": 0,
+          "capture_count": 1,
           "drop_count": 0,
           "end_tick": 479,
+          "last_capture_result": {
+            "base_value": 100000,
+            "bonus": 78947,
+            "captured": true,
+            "card_id": "stage_2_midboss_spell_1",
+            "multiplier": 1.0,
+            "reason": "capture",
+            "remaining_frames": 900.0,
+            "total_frames": 1140.0
+          },
           "phase_id": "stage_2_midboss_spell_1",
-          "score_delta": 78947,
+          "record_type": "phase_ledger",
+          "resolution_kind": "deterministic_reference_assisted_gate",
+          "score_delta": 78967,
+          "spell_attempt_delta": 0,
           "start_tick": 240,
           "time_to_clear_ms": 4000.0
         },
@@ -641,35 +1050,87 @@
           "capture_count": 0,
           "drop_count": 0,
           "end_tick": 719,
+          "last_capture_result": {
+            "base_value": 100000,
+            "bonus": 78947,
+            "captured": true,
+            "card_id": "stage_2_midboss_spell_1",
+            "multiplier": 1.0,
+            "reason": "capture",
+            "remaining_frames": 900.0,
+            "total_frames": 1140.0
+          },
           "phase_id": "stage_2_boss_nonspell_1",
-          "score_delta": 0,
+          "record_type": "phase_ledger",
+          "resolution_kind": "deterministic_reference_assisted_gate",
+          "score_delta": 10,
+          "spell_attempt_delta": 1,
           "start_tick": 480,
           "time_to_clear_ms": 4000.0
         },
         {
-          "capture_count": 0,
+          "capture_count": 1,
           "drop_count": 0,
           "end_tick": 959,
+          "last_capture_result": {
+            "base_value": 100000,
+            "bonus": 153125,
+            "captured": true,
+            "card_id": "stage_2_boss_spell_1",
+            "multiplier": 1.75,
+            "reason": "capture",
+            "remaining_frames": 1680.0,
+            "total_frames": 1920.0
+          },
           "phase_id": "stage_2_boss_spell_1",
-          "score_delta": 87500,
+          "record_type": "phase_ledger",
+          "resolution_kind": "deterministic_reference_assisted_gate",
+          "score_delta": 153135,
+          "spell_attempt_delta": 1,
           "start_tick": 720,
           "time_to_clear_ms": 4000.0
         },
         {
-          "capture_count": 0,
+          "capture_count": 1,
           "drop_count": 0,
           "end_tick": 1199,
+          "last_capture_result": {
+            "base_value": 100000,
+            "bonus": 151666,
+            "captured": true,
+            "card_id": "stage_2_boss_spell_2",
+            "multiplier": 1.75,
+            "reason": "capture",
+            "remaining_frames": 1560.0,
+            "total_frames": 1800.0
+          },
           "phase_id": "stage_2_boss_spell_2",
-          "score_delta": 86666,
+          "record_type": "phase_ledger",
+          "resolution_kind": "deterministic_reference_assisted_gate",
+          "score_delta": 151686,
+          "spell_attempt_delta": 1,
           "start_tick": 960,
           "time_to_clear_ms": 4000.0
         },
         {
-          "capture_count": 0,
+          "capture_count": 1,
           "drop_count": 0,
           "end_tick": 1439,
+          "last_capture_result": {
+            "base_value": 100000,
+            "bonus": 147000,
+            "captured": true,
+            "card_id": "stage_2_boss_spell_3",
+            "multiplier": 1.75,
+            "reason": "capture",
+            "remaining_frames": 1260.0,
+            "total_frames": 1500.0
+          },
           "phase_id": "stage_2_boss_spell_3",
-          "score_delta": 84020,
+          "record_type": "phase_ledger",
+          "resolution_kind": "deterministic_reference_assisted_gate",
+          "score_delta": 147050,
+          "spell_attempt_delta": 0,
           "start_tick": 1200,
           "time_to_clear_ms": 4000.0
         }
@@ -679,34 +1140,34 @@
       "settlements": [
         {
           "difficulty": "hard",
-          "event_sequence": 6,
+          "event_sequence": 27,
           "group_index": 1,
           "point_item_additive_delta": 0.25,
           "point_value_multiplier_after": 1.25,
           "point_value_multiplier_before": 1.0,
           "seal_item_id": "night_festival_seal",
           "seal_spawn_count": 0,
-          "stage_run_uid": "m2-evidence-hard",
-          "stage_tick": 1802,
+          "stage_run_uid": "stage2_hard_2026071602",
+          "stage_tick": 1912,
           "transition": "group_1_settlement"
         },
         {
           "difficulty": "hard",
-          "event_sequence": 9,
+          "event_sequence": 1247,
           "group_index": 2,
           "point_item_additive_delta": 0.25,
           "point_value_multiplier_after": 1.5,
           "point_value_multiplier_before": 1.25,
           "seal_item_id": "night_festival_seal",
           "seal_spawn_count": 0,
-          "stage_run_uid": "m2-evidence-hard",
-          "stage_tick": 1952,
+          "stage_run_uid": "stage2_hard_2026071602",
+          "stage_tick": 2094,
           "transition": "group_2_settlement"
         },
         {
           "boss_gate_open_tick": 2550,
           "difficulty": "hard",
-          "event_sequence": 17,
+          "event_sequence": 1491,
           "final_lane_cross_lane_id": "lane_right",
           "final_lane_cross_tick": 2550,
           "group_index": 3,
@@ -715,7 +1176,7 @@
           "point_value_multiplier_before": 1.5,
           "seal_item_id": "night_festival_seal",
           "seal_spawn_count": 1,
-          "stage_run_uid": "m2-evidence-hard",
+          "stage_run_uid": "stage2_hard_2026071602",
           "stage_tick": 2550,
           "transition": "group_3_settlement"
         }
@@ -723,29 +1184,51 @@
       "sole_seal_group": 3
     },
     "normal": {
+      "accepted_live_rebound_graze_uids": [
+        "stage2_normal_2026071602:s2_b13:s2_b13_blue_booth_master:b13_blue_anchor:0:0",
+        "stage2_normal_2026071602:s2_b13:s2_b13_blue_booth_master:b13_blue_anchor:3:0",
+        "stage2_normal_2026071602:s2_b16:s2_b16_abacus_keeper:b16_abacus_anchor:0:0"
+      ],
       "group_multipliers": [
         1.25,
         1.5,
         1.75
       ],
-      "live_reference_input_route_state": "expired",
+      "live_reference_input_route_state": "complete",
       "night_festival_seal_count": 1,
       "phase_score_drop_capture_ledgers": [
         {
           "capture_count": 0,
           "drop_count": 0,
           "end_tick": 239,
+          "last_capture_result": {},
           "phase_id": "stage_2_midboss_nonspell_1",
+          "record_type": "phase_ledger",
+          "resolution_kind": "deterministic_reference_assisted_gate",
           "score_delta": 30,
+          "spell_attempt_delta": 1,
           "start_tick": 0,
           "time_to_clear_ms": 4000.0
         },
         {
-          "capture_count": 0,
+          "capture_count": 1,
           "drop_count": 0,
           "end_tick": 479,
+          "last_capture_result": {
+            "base_value": 100000,
+            "bonus": 78947,
+            "captured": true,
+            "card_id": "stage_2_midboss_spell_1",
+            "multiplier": 1.0,
+            "reason": "capture",
+            "remaining_frames": 900.0,
+            "total_frames": 1140.0
+          },
           "phase_id": "stage_2_midboss_spell_1",
-          "score_delta": 78947,
+          "record_type": "phase_ledger",
+          "resolution_kind": "deterministic_reference_assisted_gate",
+          "score_delta": 78977,
+          "spell_attempt_delta": 0,
           "start_tick": 240,
           "time_to_clear_ms": 4000.0
         },
@@ -753,35 +1236,87 @@
           "capture_count": 0,
           "drop_count": 0,
           "end_tick": 719,
+          "last_capture_result": {
+            "base_value": 100000,
+            "bonus": 78947,
+            "captured": true,
+            "card_id": "stage_2_midboss_spell_1",
+            "multiplier": 1.0,
+            "reason": "capture",
+            "remaining_frames": 900.0,
+            "total_frames": 1140.0
+          },
           "phase_id": "stage_2_boss_nonspell_1",
-          "score_delta": 0,
+          "record_type": "phase_ledger",
+          "resolution_kind": "deterministic_reference_assisted_gate",
+          "score_delta": 10,
+          "spell_attempt_delta": 1,
           "start_tick": 480,
           "time_to_clear_ms": 4000.0
         },
         {
-          "capture_count": 0,
+          "capture_count": 1,
           "drop_count": 0,
           "end_tick": 959,
+          "last_capture_result": {
+            "base_value": 100000,
+            "bonus": 153125,
+            "captured": true,
+            "card_id": "stage_2_boss_spell_1",
+            "multiplier": 1.75,
+            "reason": "capture",
+            "remaining_frames": 1680.0,
+            "total_frames": 1920.0
+          },
           "phase_id": "stage_2_boss_spell_1",
-          "score_delta": 87500,
+          "record_type": "phase_ledger",
+          "resolution_kind": "deterministic_reference_assisted_gate",
+          "score_delta": 153135,
+          "spell_attempt_delta": 1,
           "start_tick": 720,
           "time_to_clear_ms": 4000.0
         },
         {
-          "capture_count": 0,
+          "capture_count": 1,
           "drop_count": 0,
           "end_tick": 1199,
+          "last_capture_result": {
+            "base_value": 100000,
+            "bonus": 151666,
+            "captured": true,
+            "card_id": "stage_2_boss_spell_2",
+            "multiplier": 1.75,
+            "reason": "capture",
+            "remaining_frames": 1560.0,
+            "total_frames": 1800.0
+          },
           "phase_id": "stage_2_boss_spell_2",
-          "score_delta": 86666,
+          "record_type": "phase_ledger",
+          "resolution_kind": "deterministic_reference_assisted_gate",
+          "score_delta": 151686,
+          "spell_attempt_delta": 1,
           "start_tick": 960,
           "time_to_clear_ms": 4000.0
         },
         {
-          "capture_count": 0,
+          "capture_count": 1,
           "drop_count": 0,
           "end_tick": 1439,
+          "last_capture_result": {
+            "base_value": 100000,
+            "bonus": 147000,
+            "captured": true,
+            "card_id": "stage_2_boss_spell_3",
+            "multiplier": 1.75,
+            "reason": "capture",
+            "remaining_frames": 1260.0,
+            "total_frames": 1500.0
+          },
           "phase_id": "stage_2_boss_spell_3",
-          "score_delta": 84000,
+          "record_type": "phase_ledger",
+          "resolution_kind": "deterministic_reference_assisted_gate",
+          "score_delta": 147030,
+          "spell_attempt_delta": 0,
           "start_tick": 1200,
           "time_to_clear_ms": 4000.0
         }
@@ -791,34 +1326,34 @@
       "settlements": [
         {
           "difficulty": "normal",
-          "event_sequence": 6,
+          "event_sequence": 27,
           "group_index": 1,
           "point_item_additive_delta": 0.25,
           "point_value_multiplier_after": 1.25,
           "point_value_multiplier_before": 1.0,
           "seal_item_id": "night_festival_seal",
           "seal_spawn_count": 0,
-          "stage_run_uid": "m2-evidence-normal",
-          "stage_tick": 1802,
+          "stage_run_uid": "stage2_normal_2026071602",
+          "stage_tick": 1912,
           "transition": "group_1_settlement"
         },
         {
           "difficulty": "normal",
-          "event_sequence": 9,
+          "event_sequence": 1289,
           "group_index": 2,
           "point_item_additive_delta": 0.25,
           "point_value_multiplier_after": 1.5,
           "point_value_multiplier_before": 1.25,
           "seal_item_id": "night_festival_seal",
           "seal_spawn_count": 0,
-          "stage_run_uid": "m2-evidence-normal",
-          "stage_tick": 1952,
+          "stage_run_uid": "stage2_normal_2026071602",
+          "stage_tick": 2074,
           "transition": "group_2_settlement"
         },
         {
           "boss_gate_open_tick": 2550,
           "difficulty": "normal",
-          "event_sequence": 17,
+          "event_sequence": 1539,
           "final_lane_cross_lane_id": "lane_right",
           "final_lane_cross_tick": 2550,
           "group_index": 3,
@@ -827,7 +1362,7 @@
           "point_value_multiplier_before": 1.5,
           "seal_item_id": "night_festival_seal",
           "seal_spawn_count": 1,
-          "stage_run_uid": "m2-evidence-normal",
+          "stage_run_uid": "stage2_normal_2026071602",
           "stage_tick": 2550,
           "transition": "group_3_settlement"
         }
@@ -886,11 +1421,11 @@
   "video": {
     "average_frame_rate": "20/1",
     "codec": "h264",
-    "duration_seconds": 6.0,
+    "duration_seconds": 24.0,
     "height": 1038,
     "path": "stage2-evidence.mp4",
     "performance_timing_source": "separate window-present intervals; screenshot encoding excluded",
-    "size_bytes": 184218,
+    "size_bytes": 1116080,
     "source": "live Godot window viewport frames from Normal capture",
     "width": 720
   }
