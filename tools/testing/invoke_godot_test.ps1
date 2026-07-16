@@ -18,6 +18,13 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $script:Codes=@{Success=0;ProcessFailure=1;Timeout=2;FatalOutput=3;LockContention=4;PreexistingHeadlessProcess=5;InvalidInput=6;CleanupFailure=7;LaunchFailure=8}
 $script:MaxFrame=16384; $script:MaxInput=65536; $script:MaxArguments=256; $script:MaxCapture=262144; $script:MaxDiagnostics=262144; $script:MaxWindowsCommand=30000
+# This is the sole accepted Windows certificate-store diagnostic.  It is not a
+# general warning exemption: it is tolerated only with root exit 0 plus an
+# explicit structured PASS and no other fatal/FAIL output.
+$script:KnownWindowsRootCertificateStoreWarnings=@(
+    'ERROR: Failed to read the root certificate store.',
+    'WARNING: Failed to load system root certificates from the Windows certificate store.'
+)
 
 function Get-Sha256([string]$Text) { ([BitConverter]::ToString(([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($Text))))).Replace('-','') }
 function ConvertTo-B64Url([string]$Text) { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Text)).TrimEnd('=').Replace('+','-').Replace('/','_') }
@@ -88,6 +95,19 @@ function Test-ExactProperties([object]$Value,[string[]]$Expected,[string]$Name) 
     if($null -eq $Value){throw "invalid $Name contract"}
     $actual=@($Value.PSObject.Properties.Name|Sort-Object);$wanted=@($Expected|Sort-Object)
     if($actual.Count -ne $wanted.Count -or (@(Compare-Object $actual $wanted).Count -ne 0)){throw "invalid $Name contract"}
+}
+function Test-FatalGodotCapture([string]$Capture,[int]$ProcessExitCode) {
+    $withoutKnownWarning=$Capture
+    $hasKnownWarning=$false
+    foreach($knownWarning in $script:KnownWindowsRootCertificateStoreWarnings){
+        if($Capture.Contains($knownWarning)){$hasKnownWarning=$true}
+        $withoutKnownWarning=$withoutKnownWarning.Replace($knownWarning,'')
+    }
+    $structuredPass=$Capture -match '(?im)^PASS\b'
+    $fatal=$withoutKnownWarning -match '(?im)CrashHandlerException|Program crashed|signal\s+11|C\+\+ backtrace|SCRIPT ERROR|Parser Error|Parse Error|Unhandled exception|Invalid call|^ERROR:'
+    $failed=$withoutKnownWarning -match '(?im)^FAIL\b'
+    if($hasKnownWarning -and $ProcessExitCode -eq 0 -and $structuredPass -and -not $fatal -and -not $failed){return $false}
+    return $fatal -or $failed
 }
 # S2 bootstrap: this is deliberately framework-only.  BeginRead/ReadAsync keeps
 # both redirected streams draining without compiling a helper in the supervisor.
@@ -355,12 +375,10 @@ function Invoke-Worker {
         if($existing.Count){[Console]::Out.WriteLine((New-Frame 'CLEANUP_BEGIN' $Nonce @{count=if($WorkerFault -eq 'fractional-cleanup'){1.5}else{$existing.Count}}));[Console]::Out.Flush();$cleanupBegan=$true;if($WorkerFault -eq 'fractional-cleanup'){return};$category='CleanupFailure';if($WorkerFault -eq 'cleanup-trailing-partial'){[Console]::Out.Write('GTR1 CLEANUP_BEGIN');[Console]::Out.Flush();[Console]::Out.Close();return};[Gtr.Native]::VerifySupervisorWatch($watch);$cleaned=@([Gtr.Native]::Cleanup($existing,$WorkerFault,$DeadlineTicks));[Gtr.Native]::VerifySupervisorWatch($watch);$again=@([Gtr.Native]::Inventory($exeIdentity,$projectIdentity,''));if($again.Count){throw 'cleanup verification failed'};$category='InvalidInput'}elseif($WorkerFault -eq 'retained-identity'){$category='CleanupFailure';throw 'retained identity changed'}
         $remaining=Get-Remaining $DeadlineTicks;if($remaining -le 0){$category='Timeout';throw 'deadline'};$reserve=[Math]::Min(2000,[Math]::Max(250,[int][Math]::Ceiling(($TimeoutSeconds*1000)/10.0)));$engineDeadline=$DeadlineTicks-[int64]($reserve*[Diagnostics.Stopwatch]::Frequency/1000);if((Get-Remaining $engineDeadline) -le 0){$category='Timeout';throw 'deadline'}
         $engine=@($args)+@('--headless','--path',$project,'--log-file',$log); $line=(($engine|ForEach-Object{Quote-WindowsArgument $_}) -join ' ');if((Quote-WindowsArgument $exeIdentity.DiagnosticPath).Length+1+$line.Length -gt $script:MaxWindowsCommand){throw 'engine command exceeds cap'}
-        $category='CleanupFailure';$r=[Gtr.Native]::Run($exeIdentity,$line,$projectIdentity,"$log.stdout","$log.stderr",$watch,$engineDeadline,$DeadlineTicks,$PollMilliseconds,$WorkerFault);$category='InvalidInput'
-        $exit=[int]$r.ExitCode
-        if(-not $r.Empty){$category='CleanupFailure';throw 'job did not empty'}
-        if($r.TimedOut){$category='Timeout';throw 'engine deadline'}
-        $capture=[string]$r.Stdout+[string]$r.Stderr
-        if($capture -match '(?im)CrashHandlerException|Program crashed|signal\s+11|C\+\+ backtrace|SCRIPT ERROR|Parser Error|Parse Error|Unhandled exception|Invalid call|^ERROR:'){$category='FatalOutput';throw 'fatal output'}
+        $r=$null
+        if($WorkerFault -eq 'certificate-warning-pass'){$capture=$script:KnownWindowsRootCertificateStoreWarnings[0]+"`nPASS synthetic certificate exception";$exit=0}else{$category='CleanupFailure';$r=[Gtr.Native]::Run($exeIdentity,$line,$projectIdentity,"$log.stdout","$log.stderr",$watch,$engineDeadline,$DeadlineTicks,$PollMilliseconds,$WorkerFault);$category='InvalidInput';$exit=[int]$r.ExitCode;if(-not $r.Empty){$category='CleanupFailure';throw 'job did not empty'};$capture=[string]$r.Stdout+[string]$r.Stderr}
+        if($null -ne $r -and $r.TimedOut){$category='Timeout';throw 'engine deadline'}
+        if(Test-FatalGodotCapture $capture $exit){$category='FatalOutput';throw 'fatal output'}
         if($exit -ne 0){$category='ProcessFailure';throw 'engine nonzero'};$status='passed';$category='Success'
     } catch {
         [Console]::Error.WriteLine("worker failure: $($_.Exception.Message)")

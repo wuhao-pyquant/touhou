@@ -324,6 +324,12 @@ class InvokeGodotTestTests(unittest.TestCase):
         self.assertEqual(summary["status"], "passed")
         self.assert_category(3, "FatalOutput", "--mode", "fatal-nonzero")
 
+    # 18a: the exact Windows root-certificate-store warning is an environment
+    # warning only with exit 0 and structured PASS; no general ERROR is waived.
+    def test_18a_certificate_warning_with_structured_pass_is_not_fatal(self) -> None:
+        summary = self.assert_category(0, "Success", fault="certificate-warning-pass")
+        self.assertEqual(summary["processExitCode"], 0)
+
     # 19: watcher initialization is synchronous and cannot authorize inventory or resume.
     def test_19_supervisor_watch_failure_fails_closed(self) -> None:
         self.assert_category(7, "CleanupFailure", fault="watcher-failure")

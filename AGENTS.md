@@ -4,6 +4,11 @@
 
 ## Agent 调度
 
+- 从 INFRA-M2.5 起，所有新 M2 证据/审查票和 M3-M8 票在创建前必须通过一次 session admission preflight：已解析的 Codex/Godot 路径与版本、项目/worktree/temp 可写根、磁盘空间、无本项目残留 Codex/Godot、Godot admission mutex、profile bridge/native 兼容性以及最小 Codex `final.json` 探针。相同 fingerprint 可复用同一批次缓存；环境不一致必须重新检查。
+- 新 ticket 必须使用 `execution_contract_version=2` 和结构化 `execution_checks`（`git_diff_check`、`python_unittest`、`godot_test`）；禁止任意 PowerShell `acceptance_commands`。已快照的旧 ticket 仅为原 session/worktree 的续跑而保留读取兼容性。
+- bridge summary 必须标注 `TASK_FAILURE`、`ENVIRONMENT_FAILURE` 或 `TRANSPORT_FAILURE`。只有 TASK_FAILURE 消耗 repair round 或 profile escalation；环境/传输失败只允许一次同身份、同 session/worktree/round 的有界重试。
+- 同一 `root_run_id + repair_round` 只能有一个 resume。桥接器必须先确认原 CLI/session 不存活，并在 `final.json` grace 后再续跑；不得为已完成的 review gate 创建 report-normalization Agent。
+
 - 需要指定模型或推理强度的任务只能通过 `tools/agents/invoke_agent.ps1` 调用独立 Codex CLI。
 - `.codex/agents/*.toml` 是 Agent 模型、推理强度、沙箱和职责的唯一来源。
 - 被调度 Agent 是叶子工作者：不得生成子 Agent、创建额外计划或自动合并分支。

@@ -13,12 +13,18 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+
+try:
+    from tools.agents import preflight
+except ModuleNotFoundError:  # Direct script execution and importlib test loading.
+    import preflight
 
 
 TICKET_REQUIRED = {
@@ -31,6 +37,11 @@ TICKET_REQUIRED = {
     "acceptance_commands": list,
     "output_requirements": list,
     "max_repair_rounds": int,
+}
+V2_TICKET_REQUIRED = {
+    **{key: value for key, value in TICKET_REQUIRED.items() if key != "acceptance_commands"},
+    "execution_contract_version": int,
+    "execution_checks": list,
 }
 REPORT_REQUIRED = {
     "status": str,
@@ -53,6 +64,12 @@ PROFILE_REQUIRED = {
 
 class BridgeError(RuntimeError):
     pass
+
+
+TASK_FAILURE = "TASK_FAILURE"
+ENVIRONMENT_FAILURE = "ENVIRONMENT_FAILURE"
+TRANSPORT_FAILURE = "TRANSPORT_FAILURE"
+FINAL_JSON_GRACE_SECONDS = 2.0
 
 
 def _run(
@@ -213,8 +230,64 @@ def _validate_required(
             )
 
 
-def _validate_ticket(ticket: dict[str, Any]) -> None:
-    _validate_required(ticket, TICKET_REQUIRED, "ticket")
+def _resolve_contract_path(repo: Path, value: str, label: str) -> str:
+    path = Path(value)
+    resolved = path.resolve() if path.is_absolute() else (repo / path).resolve()
+    try:
+        resolved.relative_to(repo.resolve())
+    except ValueError as exc:
+        raise BridgeError(f"{label} must resolve within repository: {value!r}") from exc
+    return str(resolved)
+
+
+def _validate_execution_checks(ticket: dict[str, Any], repo: Path | None) -> None:
+    checks = ticket["execution_checks"]
+    if not checks:
+        raise BridgeError("ticket.execution_checks must not be empty")
+    allowed = {"git_diff_check", "python_unittest", "godot_test"}
+    for index, check in enumerate(checks):
+        label = f"ticket.execution_checks[{index}]"
+        if not isinstance(check, dict) or not isinstance(check.get("kind"), str):
+            raise BridgeError(f"{label} must be a structured check object")
+        kind = check["kind"]
+        if kind not in allowed:
+            raise BridgeError(f"{label}.kind is unsupported")
+        expected = {
+            "git_diff_check": {"kind"},
+            "python_unittest": {"kind", "modules"},
+            "godot_test": {"kind", "godot_path", "project_path", "arguments", "timeout_seconds"},
+        }[kind]
+        if set(check) != expected:
+            raise BridgeError(f"{label} must contain {', '.join(sorted(expected))} only")
+        if kind == "python_unittest":
+            modules = check["modules"]
+            if not isinstance(modules, list) or not modules or not all(isinstance(item, str) and item for item in modules):
+                raise BridgeError(f"{label}.modules must be a nonempty string array")
+        if kind == "godot_test":
+            if not isinstance(check["arguments"], list) or not all(isinstance(item, str) for item in check["arguments"]):
+                raise BridgeError(f"{label}.arguments must be a string array")
+            if not isinstance(check["timeout_seconds"], int) or isinstance(check["timeout_seconds"], bool) or not 1 <= check["timeout_seconds"] <= 86400:
+                raise BridgeError(f"{label}.timeout_seconds must be between 1 and 86400")
+            if repo is not None:
+                for field in ("godot_path", "project_path"):
+                    if not isinstance(check[field], str) or not check[field]:
+                        raise BridgeError(f"{label}.{field} must be a path string")
+                    check[field] = _resolve_contract_path(repo, check[field], f"{label}.{field}")
+
+
+def _validate_ticket(
+    ticket: dict[str, Any], *, repo: Path | None = None, legacy_snapshot: bool = False
+) -> None:
+    version = ticket.get("execution_contract_version")
+    if version == 2:
+        _validate_required(ticket, V2_TICKET_REQUIRED, "ticket")
+        if "acceptance_commands" in ticket:
+            raise BridgeError("version-2 tickets reject arbitrary acceptance_commands")
+        _validate_execution_checks(ticket, repo)
+    elif legacy_snapshot:
+        _validate_required(ticket, TICKET_REQUIRED, "ticket")
+    else:
+        raise BridgeError("new tickets require execution_contract_version=2 structured checks")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", ticket["id"]):
         raise BridgeError("ticket.id contains unsupported characters")
     if ticket["mode"] not in {"read_only", "write"}:
@@ -232,6 +305,25 @@ def _validate_ticket(ticket: dict[str, Any]) -> None:
     ):
         if key in ticket and not all(isinstance(item, str) for item in ticket[key]):
             raise BridgeError(f"ticket.{key} must contain only strings")
+
+
+def _classify_failure(
+    *,
+    exit_code: int | None,
+    report: dict[str, Any] | None,
+    report_problems: list[str],
+    identity_problems: list[str],
+    stderr_text: str = "",
+    preflight_failure: bool = False,
+) -> str | None:
+    """Classify only terminal failure evidence; successful runs have no class."""
+    if report is not None and not report_problems and report.get("status") == "completed" and not identity_problems and exit_code == 0:
+        return None
+    if preflight_failure or re.search(r"\b(environment|mutex|disk|certificate store)\b", stderr_text, re.IGNORECASE):
+        return ENVIRONMENT_FAILURE
+    if report is not None and not report_problems and report.get("status") in {"failed", "blocked"}:
+        return TASK_FAILURE
+    return TRANSPORT_FAILURE
 
 
 def _validate_report(report: dict[str, Any]) -> list[str]:
@@ -457,6 +549,26 @@ Your final response must be a single JSON object matching report.schema.json.
 {ticket_json}
 </ticket>
 """
+
+
+def _structured_check_commands(ticket: dict[str, Any]) -> list[list[str]]:
+    """Render v2 checks for evidence; never accepts shell text from a ticket."""
+    if ticket.get("execution_contract_version") != 2:
+        return []
+    commands: list[list[str]] = []
+    for check in ticket["execution_checks"]:
+        if check["kind"] == "git_diff_check":
+            commands.append(["git", "diff", "--check"])
+        elif check["kind"] == "python_unittest":
+            commands.append([sys.executable, "-m", "unittest", *check["modules"]])
+        else:
+            commands.append([
+                "powershell", "-NoProfile", "-File", "tools/testing/invoke_godot_test.ps1",
+                "-GodotPath", check["godot_path"], "-ProjectPath", check["project_path"],
+                "-GodotArgumentJson", json.dumps(check["arguments"]),
+                "-TimeoutSeconds", str(check["timeout_seconds"]),
+            ])
+    return commands
 
 
 def _load_optional_report(run_dir: Path) -> dict[str, Any] | None:
@@ -790,7 +902,7 @@ def _load_ticket_snapshot(
     for path in candidates:
         if path.exists():
             ticket = _load_json(path)
-            _validate_ticket(ticket)
+            _validate_ticket(ticket, repo=repo, legacy_snapshot=True)
             return ticket, str(path), _canonical_json_sha256(ticket)
 
     ticket_path_value = invocation.get("ticket_path")
@@ -812,7 +924,7 @@ def _load_ticket_snapshot(
             "refusing to resume a mutable contract"
         )
     ticket = _load_json(ticket_path)
-    _validate_ticket(ticket)
+    _validate_ticket(ticket, repo=repo, legacy_snapshot=True)
     return ticket, str(ticket_path), _canonical_json_sha256(ticket)
 
 
@@ -854,6 +966,90 @@ def _root_continuations(
             continue
         matches.append(invocation_path.parent.name)
     return sorted(matches)
+
+
+def _continuation_lock_path(repo: Path, root_run_id: str, repair_round: int) -> Path:
+    if repair_round < 0:
+        raise BridgeError("repair_round cannot be negative")
+    return repo / ".agent-runs" / f".single-flight-{_safe_segment(root_run_id, 96)}-r{repair_round}.lock"
+
+
+def _acquire_continuation_lock(repo: Path, root_run_id: str, repair_round: int) -> Path:
+    path = _continuation_lock_path(repo, root_run_id, repair_round)
+    try:
+        path.mkdir(parents=False)
+    except FileExistsError as exc:
+        raise BridgeError(
+            f"continuation single-flight is active for {root_run_id!r} round {repair_round}"
+        ) from exc
+    return path
+
+
+def _release_continuation_lock(path: Path | None) -> None:
+    if path is None:
+        return
+    try:
+        path.rmdir()
+    except OSError:
+        pass
+
+
+def _pid_is_alive(pid: Any) -> bool:
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return False
+    if os.name == "nt":
+        result = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        return result.returncode == 0 and str(pid) in result.stdout
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _wait_for_parent_final_json(parent_dir: Path, *, grace_seconds: float = FINAL_JSON_GRACE_SECONDS) -> None:
+    active_path = parent_dir / "active.json"
+    if active_path.exists():
+        active = _load_json(active_path)
+        if _pid_is_alive(active.get("pid")):
+            raise BridgeError("original Codex CLI process is still live; refusing duplicate resume")
+    final_path = parent_dir / "final.json"
+    deadline = time.monotonic() + max(0.0, grace_seconds)
+    while not final_path.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+
+def _validate_non_task_retry(
+    *,
+    failure_class: str | None,
+    parent_continuation_kind: str | None,
+    report_exists: bool,
+    changed_paths: list[str],
+    policy_violations: list[str],
+    identity_problems: list[str],
+) -> None:
+    """Admit exactly one same-identity retry for environment/transport faults."""
+    if failure_class == TASK_FAILURE:
+        raise BridgeError("TASK_FAILURE must use a repair escalation, not a retry")
+    if failure_class not in {None, ENVIRONMENT_FAILURE, TRANSPORT_FAILURE}:
+        raise BridgeError("prior run has an invalid failure_class")
+    if parent_continuation_kind == "transport_retry":
+        raise BridgeError(
+            "the bounded non-task retry was already used; stop and report an "
+            "infrastructure blocker"
+        )
+    if failure_class != ENVIRONMENT_FAILURE and report_exists:
+        raise BridgeError(
+            "Transport retry is only allowed when the prior run wrote no report"
+        )
+    if failure_class != ENVIRONMENT_FAILURE and changed_paths:
+        raise BridgeError(
+            "Transport retry is forbidden after workspace changes; use a repair round"
+        )
+    if policy_violations or identity_problems:
+        raise BridgeError(
+            "Non-task retry is forbidden after policy or identity failure"
+        )
 
 
 def _load_validation_retry_authorization(
@@ -1095,6 +1291,8 @@ def _build_fresh_command(
     return [
         codex,
         "exec",
+        "--disable",
+        "use_agent_identity",
         "--strict-config",
         "-C",
         str(worktree),
@@ -1125,6 +1323,8 @@ def _build_resume_command(
         codex,
         "exec",
         "resume",
+        "--disable",
+        "use_agent_identity",
         "--strict-config",
         "-m",
         identity["model"],
@@ -1143,6 +1343,27 @@ def _build_resume_command(
 def _codex_version(codex: str, repo: Path) -> str:
     result = _run([codex, "--version"], cwd=repo)
     return result.stdout.strip()
+
+
+def _minimal_codex_final_probe(codex: Path, temp_root: Path) -> None:
+    """Prove the installed CLI can emit a schema-conforming final.json."""
+    probe_dir = Path(tempfile.mkdtemp(prefix="codex-preflight-", dir=temp_root))
+    try:
+        schema = probe_dir / "probe.schema.json"
+        final = probe_dir / "final.json"
+        schema.write_text('{"type":"object","required":["status"],"properties":{"status":{"const":"completed"}}}\n', encoding="utf-8")
+        result = _run([
+            str(codex), "exec", "--disable", "use_agent_identity", "--strict-config",
+            "--json", "--output-schema", str(schema), "-o", str(final),
+            "Return exactly one JSON object with status set to completed.",
+        ], cwd=probe_dir, check=False)
+        if result.returncode != 0 or not final.exists():
+            raise preflight.PreflightError("minimal Codex final.json probe failed")
+        payload = _load_json(final)
+        if payload.get("status") != "completed":
+            raise preflight.PreflightError("minimal Codex final.json probe has invalid final.json")
+    finally:
+        shutil.rmtree(probe_dir, ignore_errors=True)
 
 
 def _write_json(path: Path, value: Any) -> None:
@@ -1195,7 +1416,9 @@ def _load_resume_context(
     parent_dir = _resolve_run_dir(repo, resume_run)
     invocation = _load_json(parent_dir / "invocation.json")
     summary = _load_json(parent_dir / "run-summary.json")
+    _wait_for_parent_final_json(parent_dir)
     parent_status = summary.get("status")
+    failure_class = summary.get("failure_class")
     if validation_retry:
         if parent_status != "completed":
             raise BridgeError(
@@ -1311,18 +1534,14 @@ def _load_resume_context(
         requested_identity = validation_authorization["requested_identity"]
         repair_round = validation_authorization["repair_round"]
     elif transport_retry:
-        if _load_optional_report(parent_dir) is not None:
-            raise BridgeError(
-                "Transport retry is only allowed when the prior run wrote no report"
-            )
-        if summary.get("changed_paths"):
-            raise BridgeError(
-                "Transport retry is forbidden after workspace changes; use a repair round"
-            )
-        if summary.get("policy_violations") or summary.get("identity_problems"):
-            raise BridgeError(
-                "Transport retry is forbidden after policy or identity failure"
-            )
+        _validate_non_task_retry(
+            failure_class=failure_class,
+            parent_continuation_kind=invocation.get("continuation_kind"),
+            report_exists=_load_optional_report(parent_dir) is not None,
+            changed_paths=summary.get("changed_paths") or [],
+            policy_violations=summary.get("policy_violations") or [],
+            identity_problems=summary.get("identity_problems") or [],
+        )
         requested_identity = _profile_identity(profile, prior_round)
         prior_requested = {
             "model": invocation.get("requested_model"),
@@ -1539,7 +1758,7 @@ def main() -> int:
         if not ticket_path.is_absolute():
             ticket_path = (repo / ticket_path).resolve()
         ticket = _load_json(ticket_path)
-        _validate_ticket(ticket)
+        _validate_ticket(ticket, repo=repo)
         ticket_source = str(ticket_path)
         ticket_sha256 = _canonical_json_sha256(ticket)
         base_commit = _git(
@@ -1570,9 +1789,16 @@ def main() -> int:
 
     worktree: Path | None = None
     branch: str | None = None
+    single_flight_lock: Path | None = None
+    preflight_evidence: dict[str, Any] | None = None
 
     try:
         if resume_context is not None:
+            single_flight_lock = _acquire_continuation_lock(
+                repo, root_run_id, repair_round
+            )
+            if _non_dry_run_children(repo, parent_run_id):
+                raise BridgeError("a continuation was created while acquiring the single-flight lock")
             worktree = resume_context["worktree"]
             branch = resume_context["branch"]
             if resume_context["continuation_kind"] == "transport_retry":
@@ -1604,6 +1830,13 @@ def main() -> int:
                     repair_instruction=args.repair_instruction,
                 )
         else:
+            if not args.dry_run:
+                try:
+                    preflight_evidence = preflight.run_session_preflight(
+                        repo, codex_probe=_minimal_codex_final_probe
+                    )
+                except preflight.PreflightError as exc:
+                    raise BridgeError(f"ENVIRONMENT_FAILURE: {exc}") from exc
             prompt = _build_prompt(profile, ticket)
             if args.dry_run:
                 worktree = repo / ".worktrees" / (
@@ -1689,11 +1922,15 @@ def main() -> int:
             "sandbox": sandbox,
             "codex_cli": codex,
             "codex_cli_version": _codex_version(codex, repo),
+            "session_preflight": preflight_evidence,
+            "leaf_profile_loader": "--disable use_agent_identity",
             "command": command[:-1] + ["<prompt-from-stdin>"],
             "prompt_sha256": _sha256_text(prompt),
             "dry_run": args.dry_run,
         }
         _write_json(run_dir / "invocation.json", invocation)
+        _release_continuation_lock(single_flight_lock)
+        single_flight_lock = None
 
         if args.dry_run:
             _write_json(
@@ -1731,7 +1968,9 @@ def main() -> int:
                 encoding="utf-8",
                 errors="replace",
             )
+            _write_json(run_dir / "active.json", {"pid": process.pid, "started_at": _utc_now()})
             process.communicate(prompt)
+        (run_dir / "active.json").unlink(missing_ok=True)
         exit_code = process.returncode
 
         event_thread_id = _event_thread_id(events_path)
@@ -1810,6 +2049,13 @@ def main() -> int:
             or report is None
             or report.get("status") != "completed"
         )
+        failure_class = _classify_failure(
+            exit_code=exit_code,
+            report=report,
+            report_problems=report_problems,
+            identity_problems=identity_problems,
+            stderr_text=stderr_path.read_text(encoding="utf-8", errors="replace"),
+        )
         summary = {
             "status": "failed" if failed else "completed",
             "run_id": run_id,
@@ -1822,6 +2068,7 @@ def main() -> int:
             "parent_run_id": parent_run_id,
             "root_run_id": root_run_id,
             "repair_round": repair_round,
+            "failure_class": failure_class,
             "review_failure_run_id": (
                 resume_context["review_failure_run_id"]
                 if resume_context is not None
@@ -1860,6 +2107,7 @@ def main() -> int:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 1 if failed else 0
     except Exception:
+        _release_continuation_lock(single_flight_lock)
         failure = {
             "status": "bridge_error",
             "run_id": run_id,
@@ -1869,6 +2117,7 @@ def main() -> int:
             "parent_run_id": parent_run_id,
             "root_run_id": root_run_id,
             "repair_round": repair_round,
+            "failure_class": ENVIRONMENT_FAILURE if "ENVIRONMENT_FAILURE:" in str(sys.exc_info()[1]) else TRANSPORT_FAILURE,
         }
         _write_json(run_dir / "run-summary.json", failure)
         raise

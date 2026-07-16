@@ -6,6 +6,12 @@
 
 ## 1. 执行目标
 
+### INFRA-M2.5 admission gate
+
+在任何新 M2 证据/审查票和 M3-M8 票之前，release lead 必须通过一次缓存的 session admission gate。它验证 Codex/Godot 可执行文件及版本、项目/worktree/temp 根与写权限、磁盘空间、profile bridge/native 兼容性、残留项目进程、Godot mutex 和最小 Codex `final.json` 探针。fingerprint 不变时同一批次复用；任一输入改变必须重跑。
+
+新票一律使用 `execution_contract_version=2` 的结构化 `execution_checks`，只能声明 `git_diff_check`、Python unittest 或受控 Godot test。不得携带任意 shell/PowerShell acceptance command；已快照旧票只允许原 run 的读取和续跑。bridge 将失败分为 TASK_FAILURE、ENVIRONMENT_FAILURE、TRANSPORT_FAILURE；仅前者使用 repair escalation，后两者保留原 model、reasoning、session、worktree 和 round，且最多一次有界重试。相同 `root_run_id + repair_round` 采用 single-flight；原 CLI 存活或 final.json grace 未结束时拒绝重复 resume。`status=completed` 的 `GATE: REPAIR`/`GATE: REPAIR_AUTHORIZED` 是已完成审查证据，不触发 normalization Agent。
+
 - 以可运行闭环和验收证据为调度单位，不以文件、字段、提交或报告数量为单位。
 - 复用已有候选提交、worktree 和证据；已覆盖的内容不得重新拆票实现。
 - 不再创建泛化 gap review。缺口只能写入当前里程碑的单一验收矩阵，并分配给现有闭环。

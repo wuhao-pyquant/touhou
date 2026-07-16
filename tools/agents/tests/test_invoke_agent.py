@@ -164,7 +164,7 @@ model_reasoning_effort = "high"
             "output_requirements": ["Report version."],
             "max_repair_rounds": 0,
         }
-        BRIDGE._validate_ticket(ticket)
+        BRIDGE._validate_ticket(ticket, legacy_snapshot=True)
 
     def test_write_ticket_requires_allowed_paths(self) -> None:
         ticket = {
@@ -179,7 +179,80 @@ model_reasoning_effort = "high"
             "max_repair_rounds": 0,
         }
         with self.assertRaises(BRIDGE.BridgeError):
-            BRIDGE._validate_ticket(ticket)
+            BRIDGE._validate_ticket(ticket, legacy_snapshot=True)
+
+    def test_v2_ticket_rejects_arbitrary_shell_and_resolves_paths(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="ticket space ") as temporary:
+            repo = Path(temporary)
+            ticket = {
+                "id": "v2-probe", "objective": "structured", "mode": "read_only",
+                "allowed_paths": [], "forbidden_paths": [], "dependency_commit": "HEAD",
+                "execution_contract_version": 2,
+                "execution_checks": [
+                    {"kind": "python_unittest", "modules": ["tools.agents.tests.test_invoke_agent"]},
+                    {"kind": "godot_test", "godot_path": "bin/godot.exe", "project_path": "project with spaces", "arguments": ["--headless"], "timeout_seconds": 5},
+                ], "output_requirements": [], "max_repair_rounds": 0,
+            }
+            BRIDGE._validate_ticket(ticket, repo=repo)
+            godot = ticket["execution_checks"][1]
+            self.assertTrue(Path(godot["godot_path"]).is_absolute())
+            self.assertIn("project with spaces", godot["project_path"])
+            with self.assertRaisesRegex(BRIDGE.BridgeError, "acceptance_commands"):
+                BRIDGE._validate_ticket({**ticket, "acceptance_commands": ["Write-Host unsafe"]}, repo=repo)
+
+    def test_bom_ticket_is_read_as_v2_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "ticket.json"
+            path.write_text('\ufeff{"id":"bom","execution_contract_version":2}', encoding="utf-8")
+            self.assertEqual(BRIDGE._load_json(path)["id"], "bom")
+
+    def test_failure_classes_keep_non_task_identity_and_round(self) -> None:
+        identity = {"model": "gpt-5.6-terra", "model_reasoning_effort": "high"}
+        self.assertEqual(BRIDGE._classify_failure(exit_code=1, report=None, report_problems=["missing"], identity_problems=[]), BRIDGE.TRANSPORT_FAILURE)
+        self.assertEqual(BRIDGE._classify_failure(exit_code=1, report=None, report_problems=["missing"], identity_problems=[], stderr_text="disk environment unavailable"), BRIDGE.ENVIRONMENT_FAILURE)
+        self.assertEqual(BRIDGE._profile_identity({"model": identity["model"], "model_reasoning_effort": identity["model_reasoning_effort"]}, 0), identity)
+        BRIDGE._validate_non_task_retry(
+            failure_class=BRIDGE.ENVIRONMENT_FAILURE,
+            parent_continuation_kind=None,
+            report_exists=True,
+            changed_paths=["scripts/main.gd"],
+            policy_violations=[],
+            identity_problems=[],
+        )
+        with self.assertRaisesRegex(BRIDGE.BridgeError, "already used"):
+            BRIDGE._validate_non_task_retry(
+                failure_class=BRIDGE.ENVIRONMENT_FAILURE,
+                parent_continuation_kind="transport_retry",
+                report_exists=True,
+                changed_paths=["scripts/main.gd"],
+                policy_violations=[],
+                identity_problems=[],
+            )
+
+    def test_single_flight_lock_and_delayed_final_prevent_duplicate_resume(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / ".agent-runs").mkdir()
+            lock = BRIDGE._acquire_continuation_lock(repo, "root", 1)
+            with self.assertRaisesRegex(BRIDGE.BridgeError, "single-flight"):
+                BRIDGE._acquire_continuation_lock(repo, "root", 1)
+            BRIDGE._release_continuation_lock(lock)
+            parent = repo / ".agent-runs" / "parent"
+            parent.mkdir()
+            BRIDGE._write_json(parent / "active.json", {"pid": 99999999})
+            started = __import__("time").monotonic()
+            with mock.patch.object(BRIDGE, "_pid_is_alive", return_value=False):
+                BRIDGE._wait_for_parent_final_json(parent, grace_seconds=0.05)
+            self.assertLess(__import__("time").monotonic() - started, 0.3)
+
+    def test_completed_review_gate_is_completion_not_normalization_work(self) -> None:
+        report = {"status": "completed", "summary": "GATE: REPAIR", "changed_files": [], "commands": [], "tests": [], "failures": ["bounded"], "residual_risks": []}
+        self.assertEqual(BRIDGE._validate_review_repair_report(report, reviewer_agent="bounded_reviewer"), "review_repair")
+
+    def test_leaf_cli_disables_native_agent_identity_loader(self) -> None:
+        command = BRIDGE._build_fresh_command("codex", worktree=Path("worktree"), identity={"model": "gpt-5.6-terra", "model_reasoning_effort": "high"}, sandbox="workspace-write", report_schema=Path("report.json"), final_path=Path("final.json"))
+        self.assertIn("--disable", command)
+        self.assertIn("use_agent_identity", command)
 
     def test_policy_checks_allowed_and_forbidden_globs(self) -> None:
         ticket = {
