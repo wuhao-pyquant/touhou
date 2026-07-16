@@ -184,6 +184,8 @@ model_reasoning_effort = "high"
     def test_v2_ticket_rejects_arbitrary_shell_and_resolves_paths(self) -> None:
         with tempfile.TemporaryDirectory(prefix="ticket space ") as temporary:
             repo = Path(temporary)
+            (repo / "bin").mkdir()
+            (repo / "bin" / "godot.exe").write_bytes(b"")
             ticket = {
                 "id": "v2-probe", "objective": "structured", "mode": "read_only",
                 "allowed_paths": [], "forbidden_paths": [], "dependency_commit": "HEAD",
