@@ -1,0 +1,46 @@
+{
+  "id": "M2-closeout-D-single-blind-playtest-v2",
+  "objective": "Perform the one and only M2 blind content review using only the frozen Stage 2 evidence package. Do not inspect source code, tickets, Agent reports, commit history, or implementation notes. Review evidence/m2-stage2/stage2-evidence.mp4, the Normal/Hard whole-stage and per-phase heatmaps/active-bullet curves, analyzer summaries, deterministic reference replay metadata, score ledger, six-shot balance, and performance data. Score exactly five 0-5 categories: youkai-market identity/distinctiveness, moment-to-moment readability, six-phase escalation curve, fairness/telegraphing, and replay/score-route value. Cite concrete video timestamps and artifact observations. M2 passes only if the arithmetic mean is >=4.0 and no category is below 3.0. Do not reward file count or bullet count, do not launch Godot, do not edit files, and do not propose a second review. If the evidence is insufficient to support a category, score that insufficiency honestly rather than inferring hidden quality.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "evidence/m2-stage2/**"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "docs/**",
+    "project.godot",
+    "autoload/**",
+    "content/**",
+    "scenes/**",
+    "scripts/**",
+    "tests/**",
+    "tools/**"
+  ],
+  "dependency_commit": "beac4c88f21663b3e292e018186c8850cf26ee30",
+  "execution_contract_version": 2,
+  "execution_checks": [
+    {"kind": "git_diff_check"}
+  ],
+  "output_requirements": [
+    "Return exactly five named 0-5 scores, their arithmetic mean, and explicit threshold result",
+    "Cite timestamped video observations plus corroborating Normal/Hard heatmap, curve, replay, score, and shot evidence",
+    "State GATE: APPROVE only if mean >=4.0 and every category >=3.0; otherwise GATE: REPAIR with one bounded content correction",
+    "Report actual model, reasoning effort, CLI version, zero changed files, and zero scope violations"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "This is the single M2 playtest_critic pass authorized after the playable implementation and complete evidence package exist. No earlier content score may be reused.",
+    "The deterministic reference replays are evidence controls, not human-play claims. Judge what is visibly and measurably present.",
+    "Performance gates have passed: Normal 1%-low 106.809 FPS, Hard 122.454 FPS, zero deaths/overflows/hard errors; six-shot clear-time deviation is 2.909%. These values establish technical stability but do not substitute for content quality.",
+    "If GATE: REPAIR, only one directed revision is allowed before deep_reviewer disposition; do not generate a broad redesign plan."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}

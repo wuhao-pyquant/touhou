@@ -35,5 +35,5 @@
     {"tick": 14, "move_x": -16384, "move_y": 0, "shoot": false, "focus": true, "bomb": false, "pause": false},
     {"tick": 15, "move_x": 0, "move_y": -8192, "shoot": true, "focus": false, "bomb": false, "pause": false}
   ],
-  "expected_runtime_hash": "0bfbc0e89b64ba03eb711413bc433c8dcbbf02ce26ba2d420cef3bff6e6fb9dd"
+  "expected_runtime_hash": "2cbfedffdb3dc7cddb64a74b143f11891c6e4eca043647a49f3bad379ce1a78d"
 }

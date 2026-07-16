@@ -1,0 +1,69 @@
+{
+  "id": "M2-closeout-C-performance-hotpath-fix-v2",
+  "objective": "Implement the single bounded M2 performance repair authorized by deep_reviewer run 20260716T073546Z-M2-closeout-C-performance-deep-review-v2-deep_reviewer-d44dff31. Remove repeated immutable canonical serialization/SHA work and duplicate telemetry sampling from the active Stage 2 production fixed-tick path without changing gameplay, authored content, snapshot schemas, digest values, post-advance phase-tick semantics, replay determinism, bullets, scoring, or the 55 FPS gate. Cache only configuration-derived immutable digests in DanmakuPatternRuntime and StageEncounterRuntime; add/use a scalar direct phase-tick accessor; in Stage2EncounterController and Main reuse one already-produced controller/output/telemetry view per tick instead of repeatedly rebuilding it. Add only focused regression assertions for digest/schema/tick equivalence. After focused tests pass, run exactly one fresh admitted Normal/Hard windowed capture pair, regenerate the analyzer/evidence package, and require package_m2_stage2.py to exit 0 with both 1%-low values >=55. Do not reduce patterns, bullet counts, visual work, phase duration, or evidence validation.",
+  "mode": "write",
+  "allowed_paths": [
+    "scripts/runtime/danmaku_pattern_runtime.gd",
+    "scripts/runtime/stage_encounter_runtime.gd",
+    "scripts/runtime/stage2_encounter_controller.gd",
+    "scripts/main.gd",
+    "tests/assert_m2_pattern_runtime.gd",
+    "tests/assert_m2_stage2_main_flow.gd",
+    "tests/assert_m2_stage2_runtime_capture.gd",
+    "evidence/m2-stage2/**"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "docs/**",
+    "project.godot",
+    "autoload/**",
+    "content/**",
+    "scenes/**",
+    "tools/**",
+    "scripts/data/**",
+    "scripts/ui/**"
+  ],
+  "dependency_commit": "fafdf4299946b94b45637b14ea044caea0a661bb",
+  "execution_contract_version": 2,
+  "execution_checks": [
+    {"kind": "git_diff_check"},
+    {
+      "kind": "godot_test",
+      "godot_path": "C:/Users/e/AppData/Local/Microsoft/WinGet/Packages/GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe/Godot_v4.7-stable_win64_console.exe",
+      "project_path": ".",
+      "arguments": ["--script", "res://tests/assert_m2_pattern_runtime.gd"],
+      "timeout_seconds": 300
+    },
+    {
+      "kind": "godot_test",
+      "godot_path": "C:/Users/e/AppData/Local/Microsoft/WinGet/Packages/GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe/Godot_v4.7-stable_win64_console.exe",
+      "project_path": ".",
+      "arguments": ["--script", "res://tests/assert_m2_stage2_main_flow.gd"],
+      "timeout_seconds": 300
+    }
+  ],
+  "output_requirements": [
+    "List the removed telemetry/digest recomputations and prove signature bytes, snapshot schema, and post-advance tick semantics are unchanged",
+    "Report exact focused Godot test commands and results",
+    "Report the single post-fix Normal/Hard capture/analyzer/package command chain and both resulting p50/p95/p99 and 1%-low FPS values",
+    "Confirm both 1%-low values are >=55, package_m2_stage2.py exits 0, six-shot deviation remains <=15%, and deaths/overflows/hard errors remain zero",
+    "Report actual model, reasoning effort, CLI version, changed paths, zero scope violations, and zero residual Godot processes"
+  ],
+  "max_repair_rounds": 1,
+  "context": [
+    "The deep reviewer traced each active Stage 2 tick to nine DanmakuPatternRuntime.telemetry_snapshot calls and two StageEncounterRuntime.telemetry_snapshot calls, each recomputing immutable canonical digests inside _advance_gameplay_clock.",
+    "Present-only recomputation remained 43.754 FPS Normal and 48.288 FPS Hard; evidence bookkeeping averaged only 0.024/0.020 ms and Hard captured no PNGs, so this is TASK_FAILURE and the production hot path is the repair target.",
+    "Cache only digests from deep-copied immutable configure-time data. Never cache mutable telemetry dictionaries or return aliased mutable state.",
+    "Preserve the distinction between pre-increment phase-runtime output and the controller's published post-advance active phase tick.",
+    "This is the only implementation ticket for this blocker. Run focused tests while editing, then one final performance recapture; do not add another gap review or broad matrix."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": true
+}

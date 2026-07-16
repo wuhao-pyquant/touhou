@@ -21,8 +21,6 @@ const LEGACY_SNAPSHOT_KEYS := [
 	"current_stage_local", "stage_timer", "stage_controller", "player", "boss_alive", "boss", "bullets",
 	"enemies", "items", "combat_effects", "replay",
 ]
-const DEPENDENCY_LEGACY_REPLAY_HASH := "2cbfedffdb3dc7cddb64a74b143f11891c6e4eca043647a49f3bad379ce1a78d"
-
 class LegacyReplayStageDirector:
 	extends RefCounted
 
@@ -340,7 +338,7 @@ func _assert_legacy_snapshot_and_replay_hash() -> void:
 	_check_equal(_sorted_snapshot_keys(replay_snapshot), _expected_legacy_snapshot_keys(), "Committed replay snapshot field shape changed.")
 	var committed_hash: String = String(fixture.get("expected_runtime_hash", ""))
 	_check(not committed_hash.is_empty() and committed_hash != "PENDING", "Committed legacy replay hash evidence is unavailable.")
-	_check_equal(replay_main.simulation_state_hash(), DEPENDENCY_LEGACY_REPLAY_HASH, "Dependency production replay hash changed.")
+	_check_equal(replay_main.simulation_state_hash(), committed_hash, "Committed production replay hash changed.")
 	_free_main(replay_main)
 
 func _assert_main_binding() -> void:

@@ -1,0 +1,48 @@
+{
+  "id": "M2-closeout-C-performance-deep-review-v2",
+  "objective": "Perform one narrow read-only root-cause review of the repeated M2 runtime-evidence performance failure. Normal measured 43.680 FPS and Hard 48.217 FPS at the 1%-low gate while peak active bullets were only 13/15, both analyzer captures were accepted, six-shot balance passed at 2.909% maximum deviation, and there were zero deaths, overflows, or hard errors. Decide whether the red gate represents production runtime cost, evidence-harness/instrumentation cost, invalid frame sampling, or a combination. Trace the exact frame-time producer and capture path. Return one minimum safe correction boundary, the specific files/functions an implementation ticket should own, and one focused verification command. Do not redesign gameplay, rerun Godot, edit files, create a plan, or propose multiple speculative reviews.",
+  "mode": "read_only",
+  "allowed_paths": [
+    "evidence/m2-stage2/**",
+    "tests/assert_m2_stage2_runtime_capture.gd",
+    "tools/evidence/**",
+    "tools/content/m1_content_tool.py",
+    "tools/testing/invoke_godot_test.ps1",
+    "scripts/**",
+    "scenes/**",
+    "project.godot"
+  ],
+  "forbidden_paths": [
+    "audio/**",
+    "assets/**",
+    ".codex/**",
+    ".agent-runs/**",
+    ".worktrees/**",
+    "tickets/**",
+    "AGENTS.md",
+    "HANDOVER.md",
+    "docs/**"
+  ],
+  "dependency_commit": "fafdf4299946b94b45637b14ea044caea0a661bb",
+  "execution_contract_version": 2,
+  "execution_checks": [
+    {"kind": "git_diff_check"}
+  ],
+  "output_requirements": [
+    "State one primary root cause and cite concrete functions/fields and evidence values",
+    "Distinguish measurement overhead from production-frame overhead and state whether the current 55 FPS result is valid",
+    "Define the minimum implementation ownership and exactly one focused verification path",
+    "Return GATE: REPAIR with a bounded correction, or GATE: BLOCK only if no safe correction is possible without changing frozen scope",
+    "Report actual model, reasoning effort, CLI version, zero changed files, and zero scope violations"
+  ],
+  "max_repair_rounds": 0,
+  "context": [
+    "This is the single deep review allowed after the original test_performance ticket failed once and its Sol/high same-session repair still produced a genuine red performance gate.",
+    "The evidence ticket's outer wrapper timed out after the Codex process exited without final.json; that transport defect does not consume another repair round. The analyzer-accepted evidence itself is the task-failure source of truth.",
+    "Do not treat the frozen 55 FPS threshold as negotiable and do not reduce bullet/content values merely to pass it.",
+    "The runtime capture records 1434 render frames for each difficulty and writes extensive per-tick evidence. Check whether timing is sampled around diagnostic serialization or screenshot/capture work rather than assuming BulletWorld is slow.",
+    "No additional gap review or report-normalization task will be created after this review."
+  ],
+  "require_runtime_identity": true,
+  "keep_worktree": false
+}
