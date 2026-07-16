@@ -1355,11 +1355,16 @@ def _minimal_codex_final_probe(codex: Path, temp_root: Path) -> None:
         result = _run([
             str(codex), "exec", "--disable", "use_agent_identity", "--strict-config",
             "-m", "gpt-5.6-luna", "-c", 'model_reasoning_effort="medium"',
+            "--ephemeral", "--skip-git-repo-check", "-s", "read-only",
             "--json", "--output-schema", str(schema), "-o", str(final),
             "Return exactly one JSON object with status set to completed.",
         ], cwd=probe_dir, check=False)
         if result.returncode != 0 or not final.exists():
-            raise preflight.PreflightError("minimal Codex final.json probe failed")
+            detail = (result.stderr or result.stdout).strip()[-1000:]
+            raise preflight.PreflightError(
+                "minimal Codex final.json probe failed"
+                + (f": {detail}" if detail else "")
+            )
         payload = _load_json(final)
         if payload.get("status") != "completed":
             raise preflight.PreflightError("minimal Codex final.json probe has invalid final.json")
