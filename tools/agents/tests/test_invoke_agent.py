@@ -580,6 +580,47 @@ model_reasoning_effort = "high"
                         ticket={"mode": "write", "allowed_paths": ["**"], "forbidden_paths": []},
                     )
 
+    def test_review_repair_accepts_patch_equivalent_agent_candidate(self) -> None:
+        repo = Path("repo")
+        worktree = Path("repo/.worktrees/candidate")
+        base = "a" * 40
+        reviewed = "b" * 40
+        agent_head = "c" * 40
+
+        def fake_git(_repo: Path, *args: str, check: bool = True) -> str:
+            del check
+            if args == ("rev-parse", "HEAD"):
+                return agent_head
+            if args[:3] == ("diff", "--binary", "--no-ext-diff"):
+                return "identical scoped patch"
+            raise AssertionError(f"Unexpected git args: {args}")
+
+        completed = mock.Mock(returncode=0)
+        with (
+            mock.patch.object(BRIDGE, "_git", side_effect=fake_git),
+            mock.patch.object(BRIDGE, "_run", return_value=completed),
+        ):
+            self.assertEqual(
+                BRIDGE._equivalent_scoped_candidate_head(
+                    repo,
+                    worktree,
+                    base_commit=base,
+                    reviewed_candidate=reviewed,
+                    ticket={"allowed_paths": ["scripts/main.gd"]},
+                ),
+                agent_head,
+            )
+            self.assertEqual(
+                BRIDGE._equivalent_scoped_candidate_head(
+                    repo,
+                    worktree,
+                    base_commit=base,
+                    reviewed_candidate=reviewed,
+                    ticket={"allowed_paths": ["scripts/**"]},
+                ),
+                reviewed,
+            )
+
     def test_resume_identity_is_read_from_only_the_appended_turn(self) -> None:
         thread_id = "019f0000-0000-7000-8000-000000000001"
         with tempfile.TemporaryDirectory() as temporary:

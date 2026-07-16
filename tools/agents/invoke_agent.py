@@ -1033,6 +1033,56 @@ def _validate_resume_worktree(
     return changed
 
 
+def _equivalent_scoped_candidate_head(
+    repo: Path,
+    worktree: Path,
+    *,
+    base_commit: str,
+    reviewed_candidate: str,
+    ticket: dict[str, Any],
+) -> str:
+    """Keep the original worktree head when release-lead cherry-pick is equivalent.
+
+    Review often runs against the release-lead cherry-pick while the resumable
+    Agent branch intentionally retains its own candidate commit. Only exact-file
+    tickets qualify, and their complete binary diffs from the same base must be
+    byte-for-byte identical. Changes outside the ticket scope are ignored here
+    but remain subject to the normal worktree policy validation.
+    """
+    actual_head = _git(worktree, "rev-parse", "HEAD")
+    if actual_head == reviewed_candidate:
+        return reviewed_candidate
+    allowed = ticket.get("allowed_paths", [])
+    if not allowed or any(
+        any(character in pattern for character in "*?[")
+        or pattern.endswith("/")
+        for pattern in allowed
+    ):
+        return reviewed_candidate
+    ancestry = _run(
+        ["git", "merge-base", "--is-ancestor", base_commit, actual_head],
+        cwd=repo,
+        check=False,
+    )
+    if ancestry.returncode != 0:
+        return reviewed_candidate
+    diff_args = (
+        "diff",
+        "--binary",
+        "--no-ext-diff",
+        f"{base_commit}..{{head}}",
+        "--",
+        *allowed,
+    )
+    actual_diff = _git(
+        repo, *(argument.format(head=actual_head) for argument in diff_args)
+    )
+    reviewed_diff = _git(
+        repo, *(argument.format(head=reviewed_candidate) for argument in diff_args)
+    )
+    return actual_head if actual_diff == reviewed_diff else reviewed_candidate
+
+
 def _build_fresh_command(
     codex: str,
     *,
@@ -1249,7 +1299,13 @@ def _load_resume_context(
             review_run=review_failure_run,
             implementation_base=base_commit,
         )
-        expected_head = review_failure["candidate_commit"]
+        expected_head = _equivalent_scoped_candidate_head(
+            repo,
+            worktree,
+            base_commit=base_commit,
+            reviewed_candidate=review_failure["candidate_commit"],
+            ticket=ticket,
+        )
     if validation_retry:
         assert validation_authorization is not None
         requested_identity = validation_authorization["requested_identity"]
