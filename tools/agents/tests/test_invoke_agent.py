@@ -325,6 +325,29 @@ model_reasoning_effort = "high"
             ),
             "deep_review_repair",
         )
+        self.assertEqual(
+            BRIDGE._validate_review_repair_report(
+                {
+                    **deep_report,
+                    "summary": (
+                        "GATE: REPAIR. Authorize exactly one round-2 continuation "
+                        "using -EscalationLevel 2."
+                    ),
+                },
+                reviewer_agent="deep_reviewer",
+            ),
+            "deep_review_repair",
+        )
+        self.assertEqual(
+            BRIDGE._validate_review_repair_report(
+                {
+                    **deep_report,
+                    "summary": "GATE: REPAIR. Inspect another ordinary repair.",
+                },
+                reviewer_agent="deep_reviewer",
+            ),
+            "review_repair",
+        )
         with self.assertRaisesRegex(BRIDGE.BridgeError, "Only deep_reviewer"):
             BRIDGE._validate_review_repair_report(
                 deep_report, reviewer_agent="danmaku_director"

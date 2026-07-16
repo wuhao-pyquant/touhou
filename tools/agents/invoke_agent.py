@@ -541,7 +541,24 @@ def _validate_review_repair_report(
             )
         authorization_kind = "deep_review_repair"
     elif gate == "REPAIR":
-        authorization_kind = "review_repair"
+        # A deep reviewer may spell out the round-2 authorization in the report
+        # body while retaining the generic repair gate. Accept that wording only
+        # when both the bounded continuation and exact escalation level are
+        # explicit; ordinary reviewers and generic repair reports remain unable
+        # to raise a ticket's repair-round ceiling.
+        explicit_round_two = (
+            reviewer_agent == "deep_reviewer"
+            and re.search(
+                r"\bauthorize exactly one round-2 continuation\b",
+                summary,
+                flags=re.IGNORECASE,
+            )
+            is not None
+            and "-EscalationLevel 2" in summary
+        )
+        authorization_kind = (
+            "deep_review_repair" if explicit_round_two else "review_repair"
+        )
     else:
         raise BridgeError(
             "Review failure evidence must contain exactly one standalone "
