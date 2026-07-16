@@ -135,7 +135,12 @@ def run_session_preflight(
     worktrees = _writable_root(repo / ".worktrees", "worktree", create=True)
     temp = _writable_root(temp_root or Path(tempfile.gettempdir()), "temporary")
     codex = _resolve_executable(codex_cli or os.environ.get("CODEX_CLI", "codex"), "Codex")
-    godot_name = godot_cli or os.environ.get("GODOT_CLI") or os.environ.get("GODOT_PATH")
+    godot_name = (
+        godot_cli
+        or os.environ.get("GODOT_CLI")
+        or os.environ.get("GODOT_PATH")
+        or "Godot_v4.7-stable_win64_console.exe"
+    )
     godot = _resolve_executable(godot_name, "Godot")
     codex_version = version_runner([str(codex), "--version"], repo)
     godot_version = version_runner([str(godot), "--version"], repo)

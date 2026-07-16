@@ -1351,9 +1351,10 @@ def _minimal_codex_final_probe(codex: Path, temp_root: Path) -> None:
     try:
         schema = probe_dir / "probe.schema.json"
         final = probe_dir / "final.json"
-        schema.write_text('{"type":"object","required":["status"],"properties":{"status":{"const":"completed"}}}\n', encoding="utf-8")
+        schema.write_text('{"type":"object","additionalProperties":false,"required":["status"],"properties":{"status":{"const":"completed"}}}\n', encoding="utf-8")
         result = _run([
             str(codex), "exec", "--disable", "use_agent_identity", "--strict-config",
+            "-m", "gpt-5.6-luna", "-c", 'model_reasoning_effort="medium"',
             "--json", "--output-schema", str(schema), "-o", str(final),
             "Return exactly one JSON object with status set to completed.",
         ], cwd=probe_dir, check=False)
