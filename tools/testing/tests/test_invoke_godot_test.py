@@ -40,7 +40,7 @@ RUN_EXPRESSION = (
     "& $env:GTR_RUNNER -GodotPath $env:GTR_ENGINE -ProjectPath $env:GTR_PROJECT "
     "-GodotArgumentJson $env:GTR_ARGS -TimeoutSeconds ([int]$env:GTR_TIMEOUT) "
     "-PollMilliseconds 25 -LogFile $env:GTR_LOG -WorkerFault $env:GTR_FAULT "
-    "-CleanupExisting:([bool]::Parse($env:GTR_CLEANUP)); exit $LASTEXITCODE"
+    "-Windowed:([bool]::Parse($env:GTR_WINDOWED)) -CleanupExisting:([bool]::Parse($env:GTR_CLEANUP)); exit $LASTEXITCODE"
 )
 
 
@@ -93,6 +93,7 @@ class InvokeGodotTestTests(unittest.TestCase):
         timeout: int = 5,
         fault: str = "",
         cleanup: bool = False,
+        windowed: bool = False,
         powershell: str = POWERSHELL,
         engine: Path | None = None,
         project: Path | None = None,
@@ -109,6 +110,7 @@ class InvokeGodotTestTests(unittest.TestCase):
             GTR_LOG=str(log),
             GTR_FAULT=fault,
             GTR_CLEANUP=str(cleanup),
+            GTR_WINDOWED=str(windowed),
         )
         return [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", RUN_EXPRESSION], env
 
