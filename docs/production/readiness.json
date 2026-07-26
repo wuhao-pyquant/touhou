@@ -59,7 +59,17 @@
           "5": "pending_M4",
           "6": "pending_M5"
         },
-        "acceptance": "one_no-continue_human-input_stage-practice_clear_per_stage_then_one_full_six-stage_hard_1cc",
+        "acceptance": {
+          "minimum_clear": "one_no-continue_human-input_stage-practice_clear_per_stage_then_one_full_six-stage_hard_1cc",
+          "design_gate": "recognizable_enemy_entry-telegraph-fire-release_phrases_with_stable_bullet_roles_three_speed_bands_visible_sources_and_one_primary_motif_per_wave_or_phase",
+          "stage2_evidence": "one_60fps_clip_each_for_opening_30s_midboss_representative_phase_and_final_boss_spell_then_one_full_stage_clear",
+          "not_sufficient": [
+            "load_or_parse_success",
+            "automated_or_invincible_clear",
+            "heatmap_or_performance_pass",
+            "more_bullets_or_longer_bullet_lifetime"
+          ]
+        },
         "review": "release_lead_direct_unless_public_runtime_or_specific_playability_dispute"
       }
     }
@@ -67,6 +77,7 @@
   "notes": [
     "Execution convergence v3.1 changes dispatch, review, and test frequency only; the v3 product scope and milestone order remain frozen.",
     "M2 engineering closeout artifacts remain available, but M2 returned to repair_required on 2026-07-26 because live play showed that the old automated evidence did not establish Stage 2 playability.",
+    "Stage 2 repair is a choreography and danmaku-grammar rewrite, not a damage or tolerance adjustment: the current runtime collapses distinct authored primitives into generic attacks, lacks complete enemy entry/fire/exit phrases, and mixes very slow persistent bullets with abrupt fast overlays without stable visual roles.",
     "The immediate product gate is miko/ofuda_trace on Hard. Stage 2 must first pass one normal-rules, actual-input, no-continue stage-practice clear; M3-M5 then build the same Hard reference route through all six stages before Normal and the remaining five shots receive broad balancing.",
     "Named-model agents must use the independent Codex CLI bridge.",
     "Existing audio import changes belong to the user and are outside B0 scope.",
