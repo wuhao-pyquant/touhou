@@ -1,8 +1,24 @@
 # 《百鬼夜祭异变》v3 执行收敛修订 v3.1
 
 生效日期：2026-07-16。
+产品优先级修订：2026-07-26。
 
-本修订只替换剩余 M2 与 M3–M8 的执行、模型路由、审查和测试方式。《Windows 1.0 成熟化计划 v3》的产品范围、里程碑顺序和质量门槛保持冻结；`docs/production/readiness.json` 仍是唯一进度账本。不得据此生成另一份总体计划。
+本修订替换剩余 M2 与 M3–M8 的执行、模型路由、审查和测试方式，并规定产品实现顺序。《Windows 1.0 成熟化计划 v3》的 Windows 1.0 最终范围保持不变；`docs/production/readiness.json` 仍是唯一进度账本。不得据此生成另一份总体计划。
+
+## 0. 先建立 Hard 参考路线
+
+当前唯一优先级是先让 `miko / ofuda_trace（巫女 A）+ hard` 成为六关真实可玩的参考路线。Normal 和其余五机体仍属于 Windows 1.0 最终范围，但在参考路线六关贯通前不得消耗主要实现、审查或全量测试资源。
+
+- “可加载”“控制器无 hard error”“无敌脚本跑完”“热力图生成成功”都不是可玩性证据。
+- 每关先在关卡练习中完成一次真人或真人录制输入的 Hard 通关：允许 Miss 和 Bomb，不允许 Continue、无敌、传送、跳阶段、自动避弹或专为证明通过而修改判定。
+- 六关分别通过后，只运行一次从第一关到结局的连续 Hard 1CC 参考捕获。失败只修复实际失败关及相邻接缝，不重新捕获已经通过的独立关卡。
+- 自动回放、固定路线机器人和性能采样只用于确定性、崩溃、弹量和性能诊断，不得代替上述人工可玩证据。
+- 参考路线优先校准躲避空间、预告、阶段时长、Boss HP、资源供给和输入手感。追分路线不能妨碍普通生存路线。
+- 取消“六机体 Boss 击破时间差必须在 ±15%”这一产品硬门槛。后续机体只要求机制真实、可通关、没有明显失效或极端拖时；允许因风险、射程、追踪和清杂能力产生有意义的击破时间差。
+- 第二关旧 M2 证据只保留为工程与性能诊断。2026-07-26 的实际运行核对已经证明它不能支持“第二关可玩”的结论，因此 M2 回到 `repair_required`。
+- M3–M5 先生产 Hard 参考路线；第六关和一次六关连续 1CC 通过后，才在 M5 内完成 Normal 与其余五机体的广度收口，然后进入 M6。
+
+Godot 编辑器、运行态树、属性、输入、截图、错误和场景操作优先使用项目已安装的 Godot MCP/CLI。已有受控测试包装器仍用于确定性断言、超时/进程树管理和发布验收；MCP 的 `sent: true` 只代表已发送，必须以状态读取或截图确认实际效果。存在结构化命令时不得优先使用 `runtime eval`。
 
 ## 1. 三轮执行修订合并摘要
 
@@ -31,27 +47,23 @@
 - 每个里程碑的最后一次机械门禁检查 `master` 已包含 readiness 更新，并且该里程碑没有已关闭的 Agent worktree/branch；这一检查不调用 Agent、不追加回归测试。
 - 本地进入 `master` 与远程发布分离。只有用户明确要求或 M8 发布授权时才推送 `origin/master`、创建 Windows 1.0 标签或发布包。
 
-## 2. M2 立即进入收口模式
+## 2. M2 第二关可玩性修复
 
-本节状态基于主分支 `d1b2fc3`。后续只更新 readiness 中三个闭环的状态，不再派 gap-review Agent。
+旧 A/B/C 闭环的代码、练习/回放和自动证据交付视为已完成的工程输入，不重新审计。当前只增加一个 `Hard 参考路线可玩性` 闭环，不再派 gap-review、报告修复或六机体平衡 Agent。
 
-| 闭环 | 已有输入 | 唯一剩余交付 | 执行身份 | 验收与审查 |
-|---|---|---|---|---|
-| A. 玩法运行时 | 场地拓扑已合并；得分路线契约已合并；`7e21cf0` 是被最终门禁阻塞的候选，只作参考，不得直接合并 | 修正已知快照 B1/B2 问题，把确定性掉落、路线结算和真实 `main.gd` 回调一次接通 | `gameplay_systems / Sol high` 负责得分语义；只有确需改公共运行时接缝时，才串行追加 `core_simulation / Sol xhigh` 子票 | 在可写 worktree 运行得分路线聚焦断言与 Stage 2 主流程断言；触及主场景才加一次启动烟雾。A 全部完成后只做一次 `bounded_reviewer / Terra high` 审查链 |
-| B. 练习与回放 | `d177ff0` 的六阶段练习契约是候选输入 | 实际第二关/六阶段入口、最小可用菜单、回放中的关卡/阶段身份与兼容拒绝 | `profile_replay_ui / Terra high`；只有确认存在公共快照接口缺口时才请求 `core_simulation`，不得预先升级 | 运行练习契约、回放身份和入口聚焦测试；因涉及持久身份，完成后做一次 `bounded_reviewer / Terra high` 审查链 |
-| C. 运行证据包 | `f458c5a` 的证据分析器是候选输入 | 基于 A、B 合并后的真实运行生成 Normal/Hard 轨迹、热力图、弹量曲线、六机体击破时间、得分账本、帧时间和录像 | `test_performance / Terra high` 生成可重复指标；只有脚本无法采集真实操作录像时才追加 `qa_operator / Terra medium` | 此闭环不再做代码静态复审；完成后执行 M2 唯一一次全量性能基准，再由 `playtest_critic / Sol high` 对完整证据包盲评一次 |
+| 闭环 | 唯一交付 | 默认执行身份 | 聚焦验收 |
+|---|---|---|---|
+| R2. 第二关 Hard 参考路线 | 修复 `miko / ofuda_trace / hard` 从第二关开始到 Boss 结束的实际游玩；优先调整编舞、预告、躲避空间、阶段时长、Boss HP 和资源，只有证据指向公共运行时缺陷时才改架构 | 数据与关卡实现用 `content_runtime / Terra high`；跨得分/资源语义才用 `gameplay_systems / Sol high`；公共固定时钟、碰撞或快照缺陷才串行使用 `core_simulation / Sol xhigh` | 一次入口烟雾、受影响阶段的小型 probe、一次真人/真人录制输入的 Hard 关卡练习通关；不跑 Normal、不跑六机体 TTK、不先做全量性能 |
 
-旧 `M2-stage2-score-route-runtime` 修复链已经耗尽并得到阻塞结论，不再继续为旧候选创建复审或 normalization 票。闭环 A 应从当前主分支建立一张后继交付票，把旧候选、最终阻塞报告和两个已知缺陷作为输入；这张票的目标是完成真实主流程闭环，不是重新审计旧实现。若文件所有权要求拆成 gameplay/core 两张串行子票，它们共享一个 A 闭环门禁，中间不各自派审查 Agent。
+若编舞需要裁决，`danmaku_director / Sol xhigh` 只读取失败录像和现有阶段卡，给出一次定向修改意见；不重新设计整关。实现完成后默认由 `release_lead` 直接核对聚焦证据并合并；只有修改公共碰撞/确定性接口或可玩结论存在具体争议时才启用一条 `bounded_reviewer` 审查链。
 
-### M2 最终门禁
+### M2 修复门禁
 
-1. A、B 的静态检查和小型 probe 全部通过并合并后，才创建 C 的最终 capture ticket。
-2. 最终 capture ticket 只能写 `evidence/m2-stage2/**`，禁止修改源码、测试脚本和证据工具；Normal/Hard 最终捕获各运行一次。
-3. A、B、C 全部完成并合并后，`release_lead` 运行一次 M2 里程碑回归。
-4. M2 性能基准只运行一次；若失败，只复测失败项及直接相邻场景。
-5. 录像、热力图、曲线、账本和可玩构建齐全后，`playtest_critic` 才运行一次，且只能读取已整理的证据包。
-6. 盲评失败只允许一次定向修订；复核使用同一 reviewer profile 和原证据包，只看修订片段与更新证据，不重新盲评整包。
-7. 所有门禁通过后直接把 readiness 的 M2 改为 `completed`；不得再创建“最终差距审查”。
+1. capture 前先完成静态解析、入口烟雾和受影响阶段小型 probe。
+2. 最终 capture ticket 只能写 `evidence/m2-stage2/playability-hard-miko-a/**`，禁止修改源码、测试和工具。
+3. 捕获必须使用正常判定和实际输入；允许 Bomb 和 Miss，但必须无 Continue 完成整关，且记录死亡原因、Bomb 使用、阶段时长和主观阻塞点。
+4. 捕获成功后只运行受影响的 M2 聚焦回归；旧性能基准不重复，除非修复显著提高峰值弹量或产生可见卡顿。
+5. 通过后把 M2 改回 `completed` 并进入 M3；不得追加 Normal、其余机体或泛化盲评来拖延晋升。
 
 ## 3. 默认闭环流程
 
@@ -93,7 +105,7 @@
 | 性能 | 只验证局部上限或采样工具可用 | 仅 M2、M5、M8 运行全量基准 | 不在每个 Agent/提交运行全量基准 |
 | Release 候选 | 无额外开发期全矩阵 | M8 每个候选只跑一次完整矩阵 | 修复后只复测失败项与邻接范围 |
 
-Godot 验证必须经 `tools/testing/invoke_godot_test.ps1` 受控执行，串行占用项目引擎槽位，并把超时、非零退出、C++ backtrace、`CrashHandlerException` 和 Windows 应用程序错误视为失败。静态检查用于解释运行结果，不能替代可执行证据。
+确定性断言、批处理和发布验收必须经 `tools/testing/invoke_godot_test.ps1` 受控执行，串行占用项目引擎槽位，并把超时、非零退出、C++ backtrace、`CrashHandlerException` 和 Windows 应用程序错误视为失败。编辑器与实际游戏的场景、输入、截图、运行树和错误诊断优先使用 Godot MCP/CLI。静态检查用于解释运行结果，不能替代可执行证据。
 
 实现票最多允许两次定向 `edit → focused test` 循环；第二次仍失败即返回。最终捕获前可运行静态检查和小型 probe，但最终 Normal/Hard 捕获本身只能各运行一次，且捕获票不得修改源码。盲评只消费整理后的证据包，不承担捕获、修复或源码探索。
 
@@ -121,14 +133,14 @@ Godot 验证必须经 `tools/testing/invoke_godot_test.ps1` 受控执行，串�
 
 | 里程碑 | 交付组织 | 默认调度 | 唯一批次门禁 |
 |---|---|---|---|
-| M3：第一、三关 | 先冻结一个双关设计包，再按不冲突文件并行实现两关 | `danmaku_director xhigh` 一次；`content_runtime Terra high` 两个关卡实现；需要公共接口时才串行 `core_simulation` | 一次双关回归、一个含两关分项的盲评证据包；不逐波次或逐符卡复审 |
-| M4：第四、五关 | 与 M3 相同，节奏固定拍点接口先冻结 | `danmaku_director xhigh` 一次；`content_runtime Terra high` 两关；节奏运行时确有公共缺口才用 `core_simulation` | 一次双关回归和一次批次盲评；不对每个拍点派审查 |
-| M5：第六关、最终 Boss、对话结局 | 一个完整终局闭环，不拆成阶段字段票 | `danmaku_director xhigh` 冻结变形语法；`content_runtime Terra high` 实现；`gameplay_systems Sol high` 仅处理跨系统结算 | 一次 M5 回归、一次全量性能基准、一次终局盲评 |
+| M3：第一、三关 | 先只落地 `miko / ofuda_trace / hard` 双关参考路线 | `danmaku_director xhigh` 一次冻结；`content_runtime Terra high` 两关实现；需要公共接口时才串行 `core_simulation` | 每关一次 Hard 关卡练习通关证据，再做一次双关聚焦回归；不跑 Normal、其他机体或逐波次复审 |
+| M4：第四、五关 | 与 M3 相同，第五关固定拍点先服务 Hard 参考路线 | `danmaku_director xhigh` 一次；`content_runtime Terra high` 两关；确有公共节奏接口缺口才用 `core_simulation` | 每关一次 Hard 关卡练习通关证据和一次双关聚焦回归；不对每个拍点派审查 |
+| M5：第六关、最终 Boss、对话结局及广度收口 | 先完成第六关参考路线，再进行一次六关连续 Hard 1CC；通过后才补 Normal 与其余五机体 | `danmaku_director xhigh` 冻结变形语法；`content_runtime Terra high` 实现；`gameplay_systems Sol high` 仅处理跨系统结算和后续机体可行性 | 一次六关 Hard 参考捕获；随后用最小矩阵证明 Normal 和其余机体可通关且机制有效，不要求 ±15% TTK；最后一次 M5 回归、全量性能基准和终局盲评 |
 | M6：完整游戏模式 | 服务层与菜单层最多两个闭环；共享存档/回放 schema 先冻结 | `profile_replay_ui Terra high` 为默认；`gameplay_systems Sol high` 只负责 Continue/1CC 等规则 | 一次持久化/回放审查链和一次 M6 回归，不逐菜单复审 |
 | M7：视听整合 | 按“弹幕可读性、Boss 演出、背景/UI”资源组交付 | `art_runtime Terra high`；仅明确位图缺口使用 imagegen | 每个发生变化的资源组一次运行截图检查；玩法未变时不重跑盲评或全量性能 |
 | M8：Windows 1.0 | 构建、包操作和发布裁决三个闭环 | `build_release Terra medium`、`qa_operator Terra medium`、`release_lead Sol high` | 每个 RC 一次完整矩阵；修复后只复测失败项；`deep_reviewer max` 最多一次最终裁决 |
 
-M3–M5 的一份批次盲评必须分别给每关打分，因此仍覆盖每关质量，但只启动一个 `playtest_critic` 会话。只有完整证据包不齐或自动门禁失败时才延后盲评，不得用静态源码猜测“好玩程度”。
+M3、M4 不再启动批次盲评 Agent；每关真实 Hard 通关证据和简短人工游玩记录就是阶段质量门禁。M5 在六关参考路线和广度收口完成后只启动一次 `playtest_critic`，分别给每关打分。不得用静态源码、无敌回放、弹量或机体 TTK 接近程度猜测“好玩程度”。
 
 ## 7. 防止流程再次膨胀
 

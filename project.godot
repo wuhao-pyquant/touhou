@@ -21,6 +21,8 @@ GameManager="*res://autoload/game_manager.gd"
 AudioManager="*res://autoload/audio_manager.gd"
 AssetRegistry="*res://autoload/asset_registry.gd"
 PerformanceMonitor="*res://autoload/performance_monitor.gd"
+MCPGameInspector="*res://addons/godot_mcp/services/game_inspector.gd"
+MCPGameInput="*res://addons/godot_mcp/services/game_input.gd"
 
 [display]
 
@@ -30,6 +32,10 @@ window/size/window_width_override=720
 window/size/window_height_override=1038
 window/stretch/mode="canvas_items"
 window/stretch/aspect="keep"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_mcp/plugin.cfg")
 
 [input]
 

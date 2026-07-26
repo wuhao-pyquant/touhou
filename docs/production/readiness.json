@@ -2,12 +2,12 @@
   "plan": "Hyakki Night Festival Incident Windows 1.0 Maturation v3",
   "plan_status": "frozen",
   "execution_policy": "docs/production/execution-convergence-v3.1.md",
-  "current_milestone": "M3",
+  "current_milestone": "M2",
   "milestones": {
     "B0": "completed",
     "M0": "completed",
     "M1": "completed",
-    "M2": "completed",
+    "M2": "repair_required",
     "M3": "pending",
     "M4": "pending",
     "M5": "pending",
@@ -17,8 +17,8 @@
   },
   "active_closeout": {
     "milestone": "M2",
-    "mode": "closeout",
-    "status": "completed",
+    "mode": "hard_reference_playability_repair",
+    "status": "repair_required",
     "allow_new_gap_reviews": false,
     "workstreams": {
       "gameplay_runtime": {
@@ -42,13 +42,32 @@
           "test_performance",
           "qa_operator_if_manual_capture_is_required"
         ],
-        "review": "one_complete_evidence_playtest"
+        "review": "engineering_diagnostics_only"
+      },
+      "hard_reference_playability": {
+        "status": "repair_required",
+        "reference_route": {
+          "protagonist": "miko",
+          "shot": "ofuda_trace",
+          "difficulty": "hard"
+        },
+        "stage_status": {
+          "1": "legacy_unverified",
+          "2": "unplayable_repair_required",
+          "3": "pending_M3",
+          "4": "pending_M4",
+          "5": "pending_M4",
+          "6": "pending_M5"
+        },
+        "acceptance": "one_no-continue_human-input_stage-practice_clear_per_stage_then_one_full_six-stage_hard_1cc",
+        "review": "release_lead_direct_unless_public_runtime_or_specific_playability_dispute"
       }
     }
   },
   "notes": [
     "Execution convergence v3.1 changes dispatch, review, and test frequency only; the v3 product scope and milestone order remain frozen.",
-    "M2 is in closeout mode with three workstreams and no further generic gap reviews.",
+    "M2 engineering closeout artifacts remain available, but M2 returned to repair_required on 2026-07-26 because live play showed that the old automated evidence did not establish Stage 2 playability.",
+    "The immediate product gate is miko/ofuda_trace on Hard. Stage 2 must first pass one normal-rules, actual-input, no-continue stage-practice clear; M3-M5 then build the same Hard reference route through all six stages before Normal and the remaining five shots receive broad balancing.",
     "Named-model agents must use the independent Codex CLI bridge.",
     "Existing audio import changes belong to the user and are outside B0 scope.",
     "B0 verified actual Sol/high, Terra/medium, and Luna/medium runtime identities on Codex CLI 0.144.4.",
@@ -56,7 +75,8 @@
     "M0 merged as 6f43bbcd181abbaf1480d0f4779808e357ed4323 after deep architecture review, bounded fixture migration, and focused deterministic replay/runtime verification.",
     "M1 completed with the approved six-stage/108-beat/40-phase design freeze, six distinct shot behaviors and deterministic score/drop contracts, additive content runtime contracts, and trace-driven sandbox/seek/heatmap/fingerprint tooling.",
     "M1 executable evidence includes guarded content-contract Success at candidate 5477a67 with exit 0, zero residual Godot processes and zero native/leak markers; tooling implementation run 20260715T080753Z-M1-content-evidence-tooling-test_performance-a9a219e2 used Terra/high, independent review run 20260715T082030Z-M1-content-evidence-tooling-static-review-mechanical_auditor-c083c75a used Luna/medium and returned GATE: APPROVE, and the merged 4-test tooling regression passed.",
-    "M2 completed at evidence commit 74ea6c1: the Normal and Hard live score routes both completed with three settled groups, six-shot boss TTK spread was 2.91%, peak bullet counts were 49/57, and measured 1% low was 112.83/121.72 FPS with no deaths, pool overflows, native crashes, or residual Godot processes.",
-    "M2 final blind review run 20260716T105907Z-M2-closeout-D-final-blind-rereview-v2-playtest_critic-dd761cad used Sol/high and approved the organized evidence package at 20/25 (4.0 mean, no category below 3); the single missing-workstream practice/replay regression and the 45-entry evidence manifest check also passed."
+    "Historical M2 engineering evidence at commit 74ea6c1 reported Normal/Hard route completion, 2.91% six-shot boss TTK spread, 49/57 peak bullets and 112.83/121.72 FPS 1% low. These remain diagnostic results only; six-shot TTK parity is no longer a product gate and the automated route cannot prove human playability.",
+    "Historical blind review run 20260716T105907Z-M2-closeout-D-final-blind-rereview-v2-playtest_critic-dd761cad approved the organized evidence package at 20/25. That approval is superseded for the playability gate because it reviewed prepared automated evidence rather than a normal-rules actual-input clear.",
+    "Godot MCP/CLI 0.4.0 and the project addon were installed on 2026-07-26. Editor/runtime scene, input, screenshot and error diagnosis should prefer MCP; deterministic batch and release checks continue to use the controlled Godot wrapper."
   ]
 }
